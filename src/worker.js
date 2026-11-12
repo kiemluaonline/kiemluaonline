@@ -196,11 +196,11 @@ async function registeredEmail(env,email){
  const rows=await env.DB.prepare("SELECT id,email FROM users WHERE lower(email) LIKE '%@gmail.com' OR lower(email) LIKE '%@googlemail.com'").all();
  return rows.results.find(user=>canonicalEmail(user.email)===canonical)||null;
 }
-async function signupRateLimit(env,req){
+async function signupRateLimit(env,req,email=''){
  const ip=clientIP(req);
  const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE joined_ip=? AND created_at>=datetime('now','-1 day')").bind(ip).first();
  if(recent.n>=3){await event(env,req,'signup_rate_limited',null,'IP: 3 tài khoản/24h');fail(429,'Mạng này đã tạo quá nhiều tài khoản trong 24 giờ.');}
- if(browserDeviceId(req)){
+ if(browserDeviceId(req)&&gmailDomain(normEmail(email).split('@')[1])){
   const code=await deviceCode(req,env);
   const result=await env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM risk_events WHERE event_type='signup_completed' AND device_code=? AND created_at>=datetime('now','-1 day')").bind(code).first();
   if(result.n>=2){await event(env,req,'signup_device_limit',null,'mã trình duyệt');fail(429,'Trình duyệt này đã tạo quá nhiều tài khoản trong 24 giờ.');}
@@ -505,7 +505,7 @@ async function handler(req, env) {
       fail(400,'Gmail mới phải đăng ký bằng Google để xác minh địa chỉ. Tài khoản cũ vẫn đăng nhập bằng mật khẩu.');
     if(name.length<2)fail(400,'Họ tên cần ít nhất 2 ký tự.');
     const ip=clientIP(req);
-    await signupRateLimit(env,req);
+    await signupRateLimit(env,req,email);
     if(await registeredEmail(env,email))fail(409,'Email đã được đăng ký hoặc trùng biến thể Gmail.');
     const ref = str(b.referral_code, 30).toUpperCase();
     const refUser = ref ? await env.DB.prepare('SELECT id FROM users WHERE referral_code=? AND status=\'active\'').bind(ref).first() : null;
@@ -593,7 +593,7 @@ async function handler(req, env) {
         if(settings.signup_enabled!=='1')fail(403,'Hệ thống đã tắt đăng ký.',{auth_code:'signup_closed'});
         if(await registeredEmail(env,identity.email))
           fail(409,'Email đã có tài khoản. Hãy đăng nhập mật khẩu và liên kết Google.',{auth_code:'email_exists'});
-        await signupRateLimit(env,req);
+        await signupRateLimit(env,req,identity.email);
         let referredBy=null;
         if(flow.ref){
           const inviter=await env.DB.prepare("SELECT id FROM users WHERE referral_code=? AND status='active'").bind(flow.ref).first();
