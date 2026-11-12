@@ -1,11 +1,27 @@
-import os, secrets, sqlite3, hmac
+import os, secrets, sqlite3, hmac, time, hashlib
+from datetime import timedelta
 from pathlib import Path
 from functools import wraps
 from flask import Flask, g, session, request, redirect, url_for, render_template, flash, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app=Flask(__name__)
-app.config.update(SECRET_KEY=os.getenv("SECRET_KEY",secrets.token_hex(32)),SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE="Lax",SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE")=="1")
+production=os.getenv("APP_ENV")=="production"
+secret=os.getenv("SECRET_KEY")
+if production and (not secret or len(secret)<32 or os.getenv("COOKIE_SECURE")!="1"):
+ raise RuntimeError("Production requires SECRET_KEY >= 32 chars and COOKIE_SECURE=1 over HTTPS")
+app.config.update(SECRET_KEY=secret or secrets.token_hex(32),SESSION_COOKIE_HTTPONLY=True,
+ SESSION_COOKIE_SAMESITE="Lax",SESSION_COOKIE_SECURE=os.getenv("COOKIE_SECURE")=="1",
+ PERMANENT_SESSION_LIFETIME=timedelta(hours=12),MAX_CONTENT_LENGTH=32*1024)
+@app.after_request
+def security_headers(response):
+ response.headers["X-Content-Type-Options"]="nosniff"
+ response.headers["X-Frame-Options"]="DENY"
+ response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
+ response.headers["Content-Security-Policy"]="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
+ response.headers["Cache-Control"]="no-store"
+ if request.is_secure:response.headers["Strict-Transport-Security"]="max-age=31536000"
+ return response
 DB=Path(os.getenv("DATABASE_PATH",str(Path(__file__).with_name("platform.db"))))
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,username TEXT UNIQUE COLLATE NOCASE NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user');
@@ -26,7 +42,7 @@ def close(_):
  if "db" in g:g.db.close()
 @app.cli.command("init-db")
 def init_db():
- db().executescript(SCHEMA);ensure_audit_table();ensure_adjustments_table();print("Database initialized")
+ db().executescript(SCHEMA);ensure_audit_table();ensure_adjustments_table();ensure_login_attempts();print("Database initialized")
 @app.cli.command("create-admin")
 def create_admin():
  import getpass
@@ -75,9 +91,23 @@ def register():
 @app.route("/login",methods=["GET","POST"])
 def login():
  if request.method=="POST":
+  ensure_login_attempts()
+  # Keyed by username and source IP; only a hash is stored.
+  login_key=hashlib.sha256((request.form.get("username","").casefold()+"|"+(request.remote_addr or "")).encode()).hexdigest()
+  now=int(time.time())
+  c=db()
+  row=c.execute("SELECT attempts,window_start FROM login_attempts WHERE key=?",(login_key,)).fetchone()
+  if row and now-row["window_start"]<900 and row["attempts"]>=5:
+   flash("Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.")
+   return render_template("auth.html",register=False),429
   u=db().execute("SELECT * FROM users WHERE username=?",(request.form.get("username",""),)).fetchone()
   if u and check_password_hash(u["password_hash"],request.form.get("password","")):
-   session.clear();session["user_id"]=u["id"];session["csrf"]=secrets.token_hex(32);return redirect(url_for("home"))
+   c.execute("DELETE FROM login_attempts WHERE key=?",(login_key,))
+   session.clear();session.permanent=True;session["user_id"]=u["id"];session["csrf"]=secrets.token_hex(32);return redirect(url_for("home"))
+  if row and now-row["window_start"]<900:
+   c.execute("UPDATE login_attempts SET attempts=attempts+1 WHERE key=?",(login_key,))
+  else:
+   c.execute("INSERT INTO login_attempts(key,attempts,window_start) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=1,window_start=excluded.window_start",(login_key,now))
   flash("Thông tin đăng nhập không đúng.")
  return render_template("auth.html",register=False)
 @app.post("/logout")
@@ -323,6 +353,10 @@ def admin_save_task(task_id):
  flash("Đã cập nhật nhiệm vụ.")
  return redirect(url_for("admin_home")+"#tasks")
 
+
+def ensure_login_attempts():
+ db().execute("""CREATE TABLE IF NOT EXISTS login_attempts(
+ key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,window_start INTEGER NOT NULL)""")
 
 # V4: paginated management and append-only administration log.
 def ensure_audit_table():
