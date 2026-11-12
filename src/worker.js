@@ -8,7 +8,8 @@ const DEFAULTS = {
   site_name: 'Trạm Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
   withdrawals_enabled: '0', announcement: '',
-  quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6'
+  quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6',
+  quota_link_tasks_ip_24h: '2', quota_link_ip_exclusive: '1'
 };
 const HEADERS = {
   'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
@@ -182,7 +183,46 @@ const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
    AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)
  AND (?=0 OR
   (SELECT COUNT(DISTINCT user_id) FROM task_completions WHERE device_code=? AND user_id<>?
-   AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)`;
+   AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)
+ AND (?=0 OR
+   (SELECT COUNT(*) FROM task_completions c JOIN tasks t ON t.id=c.task_id
+    WHERE c.ip=? AND t.category='link' AND c.status IN ('pending','approved')
+      AND c.created_at>=datetime('now','-24 hours'))<?)
+ AND (?=0 OR NOT EXISTS
+   (SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
+    WHERE c.ip=? AND c.user_id<>? AND t.category='link'
+     AND c.status IN ('pending','approved')
+     AND c.created_at>=datetime('now','-24 hours')))`;
+
+/* IP Cloudflare, không dùng IPv4 người dùng tự dán. Cửa sổ đúng 24 giờ gần nhất.
+ Pending giữ chỗ cho tới khi được duyệt/từ chối, rejected không giữ quota. */
+async function linkIPUsage(env,ip,userId){
+ if(!ip||ip==='unknown'||ip==='local')return {total:0,other:0};
+ const row=await env.DB.prepare(
+  "SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN c.user_id<>? THEN 1 ELSE 0 END),0) other "+
+  "FROM task_completions c JOIN tasks t ON t.id=c.task_id "+
+  "WHERE t.category='link' AND c.ip=? AND c.status IN ('pending','approved') "+
+  "AND c.created_at>=datetime('now','-24 hours')"
+ ).bind(userId,ip).first();
+ return {total:Number(row?.total||0),other:Number(row?.other||0)};
+}
+async function linkIPQuota(env,req,userId,task,settings){
+ if(task.category!=='link')return {enabled:0,owner:0,limit:0,ip:''};
+ const ip=clientIP(req);
+ if(ip==='unknown'||ip==='local')fail(429,'Không xác minh được IP mạng cho nhiệm vụ link. Vui lòng thử lại.',{quota_scope:'link_missing_ip'});
+ const limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
+ const exclusive=settings.quota_link_ip_exclusive!=='0';
+ const used=await linkIPUsage(env,ip,userId);
+ const denied=exclusive&&used.other>0?'link_owner':limit>0&&used.total>=limit?'link_limit':null;
+ if(denied){
+  await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id);
+  fail(429,denied==='link_owner'
+   ?'IP này đã thực hiện nhiệm vụ link bằng tài khoản khác trong 24 giờ qua. Vui lòng chờ đủ 24 giờ hoặc liên hệ Admin.'
+   :'IP này đã đủ lượt nhiệm vụ link trong 24 giờ qua. Vui lòng chờ các lượt cũ hết hạn.',
+   {quota_scope:denied});
+ }
+ return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip};
+}
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
   const title = str(b.title, 120), description = str(b.description, 1200), category = str(b.category, 20);
@@ -288,7 +328,13 @@ async function handler(req, env) {
       LEFT JOIN task_completions c ON c.task_id=t.id AND c.user_id=?
       AND c.period_key=CASE WHEN t.repeat_policy='daily' THEN ? ELSE '*' END
       WHERE t.is_active=1 ORDER BY t.created_at DESC LIMIT 100`).bind(me.id, vnDay()).all();
-    return json({ tasks: results.results });
+    const settings=await getSettings(env),ip=clientIP(req);
+    const used=await linkIPUsage(env,ip,me.id),limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
+    const denied=settings.quota_link_ip_exclusive!=='0'&&used.other>0?'link_owner':
+      limit>0&&used.total>=limit?'link_limit':null;
+    return json({tasks:results.results.map(t=>({...t,link_blocked:t.category==='link'?denied:null})),
+      link_quota:{limit,used:used.total,blocked:denied,
+        exclusive:settings.quota_link_ip_exclusive!=='0',rolling_hours:24}});
   }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
@@ -311,7 +357,9 @@ async function handler(req, env) {
     if (!task) fail(404, 'Nhiệm vụ không còn hoạt động.');
     const existing = await env.DB.prepare('SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND period_key=?').bind(me.id, task.id, period(task)).first();
     if (existing) fail(409, 'Bạn đã nhận hoặc gửi yêu cầu cho nhiệm vụ này trong kỳ.');
-    await taskQuota(env,req,me.id,await getSettings(env));
+    const settings=await getSettings(env);
+    await taskQuota(env,req,me.id,settings);
+    await linkIPQuota(env,req,me.id,task,settings);
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
     const a = rand(), b = rand(), attempt = id(), available = now() + task.min_seconds * 1000;
@@ -337,7 +385,11 @@ async function handler(req, env) {
     }
     const evidence = str(body.evidence, 2000);
     if (task.review_mode === 'manual' && evidence.length < 12) fail(400, 'Nhiệm vụ này cần bằng chứng ít nhất 12 ký tự.');
-    const quota=await taskQuota(env,req,me.id,await getSettings(env));
+    if(task.category==='link'&&attempt.ip!==clientIP(req))
+      fail(409,'IP mạng thay đổi trong lúc thực hiện link. Hãy mở nhiệm vụ lại trên mạng hiện tại.');
+    const settings=await getSettings(env);
+    const quota=await taskQuota(env,req,me.id,settings);
+    const link=await linkIPQuota(env,req,me.id,task,settings);
     const completionId = id();
     const status = task.review_mode === 'manual' ? 'pending' : 'approved';
     const batch = await env.DB.batch([
@@ -345,7 +397,9 @@ async function handler(req, env) {
         .bind(completionId, attempt.id, me.id, now(), now(),
           quota.maxUser,me.id,quota.day,quota.maxUser,
           quota.maxIP,quota.ip,me.id,quota.day,quota.maxIP,
-          quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice),
+          quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice,
+          link.enabled,link.ip,link.limit,
+          link.owner,link.ip,me.id),
       env.DB.prepare(`INSERT OR IGNORE INTO task_completions
         (id,user_id,task_id,period_key,status,reward,evidence,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? FROM task_attempts
@@ -545,7 +599,8 @@ async function handler(req, env) {
         if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
-        if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily'].includes(key)
+        if(key==='quota_link_ip_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn IP.');
+        if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h'].includes(key)
             && (!/^\d+$/.test(value) || Number(value)>100)) fail(400, `${key}: chỉ số nguyên từ 0 đến 100; 0 để tắt.`);
         if (key === 'site_name' && value.length < 2) fail(400, 'Tên website quá ngắn.');
         entries.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, value));
