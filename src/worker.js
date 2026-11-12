@@ -9,7 +9,8 @@ const DEFAULTS = {
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
   withdrawals_enabled: '0', announcement: '',
   quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6',
-  quota_link_tasks_ip_24h: '2', quota_link_ip_exclusive: '1'
+  quota_link_tasks_ip_24h: '2', quota_link_ip_exclusive: '1',
+  quota_link_tasks_device_24h: '2', quota_link_device_exclusive: '1'
 };
 const HEADERS = {
   'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
@@ -195,7 +196,16 @@ const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
      AND c.created_at>=datetime('now','-24 hours')))
  AND (?=0 OR
   (SELECT COUNT(*) FROM task_completions WHERE user_id=? AND task_id=?
-    AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours'))<?)`;
+    AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours'))<?)
+ AND (?=0 OR
+  (SELECT COUNT(*) FROM task_completions c JOIN tasks t ON t.id=c.task_id
+   WHERE t.category='link' AND c.device_code=? AND c.status IN ('pending','approved')
+   AND c.created_at>=datetime('now','-24 hours'))<?)
+ AND (?=0 OR NOT EXISTS
+  (SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
+   WHERE t.category='link' AND c.device_code=? AND c.user_id<>?
+   AND c.status IN ('pending','approved')
+   AND c.created_at>=datetime('now','-24 hours')))`;
 
 /* IP Cloudflare, không dùng IPv4 người dùng tự dán. Cửa sổ đúng 24 giờ gần nhất.
  Pending giữ chỗ cho tới khi được duyệt/từ chối, rejected không giữ quota. */
@@ -248,6 +258,39 @@ async function linkIPQuota(env,req,userId,task,settings){
    {quota_scope:denied});
  }
  return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip:linkNetworkPattern(ip),perTask:perTaskLimit>1?perTaskLimit:0};
+}
+
+/* Lượt link theo mã trình duyệt giả danh; không đổi quota khi chỉ thay IP/VPN/4G.
+ Mã này KHÔNG PHẢI ID phần cứng: xóa dữ liệu, trình duyệt mới hoặc giả mạo mã có thể qua mặt. */
+async function linkBrowserUsage(env,code,userId){
+ if(!code)return {total:0,other:0};
+ const row=await env.DB.prepare(
+  "SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN c.user_id<>? THEN 1 ELSE 0 END),0) AS other "+
+  "FROM task_completions c JOIN tasks t ON t.id=c.task_id "+
+  "WHERE t.category='link' AND c.device_code=? AND c.status IN ('pending','approved') "+
+  "AND c.created_at>=datetime('now','-24 hours')"
+ ).bind(userId,code).first();
+ return {total:Number(row?.total||0),other:Number(row?.other||0)};
+}
+async function linkBrowserQuota(env,req,userId,task,settings){
+ if(task.category!=='link')return {enabled:0,owner:0,limit:0,code:''};
+ if(!browserDeviceId(req)){
+  await event(env,req,'link_browser_missing',userId,'Missing browser ID for link task');
+  fail(429,'Chưa nhận diện được trình duyệt để làm nhiệm vụ link. Hãy tải lại trang bằng trình duyệt thông thường.',{quota_scope:'link_browser_missing'});
+ }
+ const code=await deviceCode(req,env);
+ const used=await linkBrowserUsage(env,code,userId);
+ const limit=quotaNumber(settings,'quota_link_tasks_device_24h');
+ const exclusive=settings.quota_link_device_exclusive!=='0';
+ const denied=exclusive&&used.other>0?'link_browser_owner':limit>0&&used.total>=limit?'link_browser_limit':null;
+ if(denied){
+  await event(env,req,'link_browser_quota_denied',userId,denied+':'+task.id);
+  fail(429,denied==='link_browser_owner'
+   ?'Trình duyệt này đã làm nhiệm vụ link bằng tài khoản khác trong 24 giờ qua. Đổi IP hoặc VPN không đặt lại lượt.'
+   :'Trình duyệt này đã hết lượt nhiệm vụ link trong 24 giờ qua. Đổi Wi-Fi, VPN hay 4G không đặt lại lượt.',
+   {quota_scope:denied});
+ }
+ return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,code};
 }
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
@@ -358,6 +401,12 @@ async function handler(req, env) {
       WHERE t.is_active=1 ORDER BY t.created_at DESC LIMIT 100`).bind(me.id, vnDay()).all();
     const settings=await getSettings(env),ip=clientIP(req);
     const used=await linkIPUsage(env,ip,me.id),limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
+    const browserCode=browserDeviceId(req)?await deviceCode(req,env):'';
+    const browserUsed=await linkBrowserUsage(env,browserCode,me.id);
+    const browserLimit=quotaNumber(settings,'quota_link_tasks_device_24h');
+    const browserDenied=!browserCode?'link_browser_missing':
+      settings.quota_link_device_exclusive!=='0'&&browserUsed.other>0?'link_browser_owner':
+      browserLimit>0&&browserUsed.total>=browserLimit?'link_browser_limit':null;
     const denied=settings.quota_link_ip_exclusive!=='0'&&used.other>0?'link_owner':
       limit>0&&used.total>=limit?'link_limit':null;
     const [overrides,counts]=await Promise.all([
@@ -369,12 +418,14 @@ async function handler(req, env) {
     const tasks=results.results.map(t=>{
       const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
       const entry=done.get(t.id)||{n:0,pending:0},used=entry.n;
-      const blocked=t.category==='link'?(denied||(max>1&&used>=max?'link_task_limit':null)):null;
+      const blocked=t.category==='link'?(max>1&&used>=max?'link_task_limit':(browserDenied||denied)):null;
       return {...t,link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
-      exclusive:settings.quota_link_ip_exclusive!=='0',rolling_hours:24}});
+      exclusive:settings.quota_link_ip_exclusive!=='0',rolling_hours:24},
+      browser_quota:{limit:browserLimit,used:browserUsed.total,blocked:browserDenied,
+        exclusive:settings.quota_link_device_exclusive!=='0',rolling_hours:24}});
   }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
@@ -403,6 +454,7 @@ async function handler(req, env) {
     const settings=await getSettings(env);
     await taskQuota(env,req,me.id,settings);
     await linkIPQuota(env,req,me.id,task,settings);
+    await linkBrowserQuota(env,req,me.id,task,settings);
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
     const a = rand(), b = rand(), attempt = id(), available = now() + task.min_seconds * 1000;
@@ -432,7 +484,10 @@ async function handler(req, env) {
       fail(409,'IP mạng thay đổi trong lúc thực hiện link. Hãy mở nhiệm vụ lại trên mạng hiện tại.');
     const settings=await getSettings(env);
     const quota=await taskQuota(env,req,me.id,settings);
+    if(task.category==='link'&&attempt.device_code!==await deviceCode(req,env))
+      fail(409,'Mã trình duyệt thay đổi trong lúc làm nhiệm vụ link. Vui lòng mở lại trên cùng trình duyệt.');
     const link=await linkIPQuota(env,req,me.id,task,settings);
+    const browserLink=await linkBrowserQuota(env,req,me.id,task,settings);
     const completionId = id();
     const status = task.review_mode === 'manual' ? 'pending' : 'approved';
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
@@ -444,7 +499,9 @@ async function handler(req, env) {
           quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice,
           link.enabled,link.ip,link.limit,
           link.owner,link.ip,me.id,
-          link.perTask,me.id,task.id,link.perTask),
+          link.perTask,me.id,task.id,link.perTask,
+          browserLink.enabled,browserLink.code,browserLink.limit,
+          browserLink.owner,browserLink.code,me.id),
       env.DB.prepare(`INSERT OR IGNORE INTO task_completions
         (id,user_id,task_id,period_key,status,reward,evidence,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? FROM task_attempts
@@ -458,7 +515,10 @@ async function handler(req, env) {
         .bind(id(), me.id, task.reward, `Nhiệm vụ: ${task.title}`, completionId, completionId)
     ]);
     if ((batch[0].meta?.changes || 0) < 1 || (batch[1].meta?.changes || 0) < 1) {
-      if(task.category==='link')await linkIPQuota(env,req,me.id,task,settings);
+      if(task.category==='link'){
+        await linkIPQuota(env,req,me.id,task,settings);
+        await linkBrowserQuota(env,req,me.id,task,settings);
+      }
       fail(409,'Nhiệm vụ đã được gửi hoặc nhận thưởng trước đó.');
     }
     if (status === 'approved') await giveReferral(env, me.id, await getSettings(env));
@@ -659,7 +719,8 @@ async function handler(req, env) {
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
         if(key==='quota_link_ip_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn IP.');
-        if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h'].includes(key)
+        if(key==='quota_link_device_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn trình duyệt.');
+        if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h','quota_link_tasks_device_24h'].includes(key)
             && (!/^\d+$/.test(value) || Number(value)>100)) fail(400, `${key}: chỉ số nguyên từ 0 đến 100; 0 để tắt.`);
         if (key === 'site_name' && value.length < 2) fail(400, 'Tên website quá ngắn.');
         entries.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, value));
