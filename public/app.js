@@ -294,9 +294,12 @@ async function adminSecurity(){
  const d=await api('/api/admin/risk-events');
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
  <div class="callout">Dữ liệu IP/mã trình duyệt chỉ hỗ trợ đánh giá rủi ro; người dùng chung mạng hoặc thay đổi IP có thể trùng/đổi mã. Không nên tự động quy kết gian lận chỉ dựa trên IP.</div>
- <section class="grid two section"><article class="card"><h3>IP xuất hiện ở nhiều tài khoản</h3>
- ${table(['IP','Tài khoản'],d.repeated_ips.map(r=>`<tr><td><code>${esc(r.joined_ip)}</code></td><td>${r.n}</td></tr>`))}</article>
- <article class="card"><h3>Nhật ký sự kiện gần đây</h3>${table(['Thời gian','Sự kiện','IP / Mã'],d.events.map(r=>`<tr><td>${dt(r.created_at)}</td><td>${esc(r.event_type)}<div class="small muted">${esc(r.detail)}</div></td><td><code>${esc(r.ip)}</code><div class="small muted">${esc(r.device_code)}</div></td></tr>`))}</article></section>`;
+ <section class="grid two section"><article class="card"><h3>IP dùng bởi nhiều tài khoản trong 30 ngày</h3>
+ ${table(['IP','Tài khoản'],d.repeated_ips.map(r=>`<tr><td><code>${esc(r.ip)}</code></td><td>${r.n}</td></tr>`))}</article>
+ <article class="card"><h3>Mã trình duyệt dùng bởi nhiều tài khoản (30 ngày)</h3>
+  ${table(['Mã nhận diện','Tài khoản'],(d.repeated_devices||[]).map(r=>`<tr><td><code>${esc(r.device_code)}</code></td><td>${r.n}</td></tr>`))}
+  <p class="note">Mã nhận diện có thể bị thay đổi; chỉ dùng để đánh giá rủi ro, không tự khóa tài khoản.</p></article>
+  <article class="card"><h3>Nhật ký sự kiện gần đây</h3>${table(['Thời gian','Sự kiện','IP / Mã'],d.events.map(r=>`<tr><td>${dt(r.created_at)}</td><td>${esc(r.event_type)}<div class="small muted">${esc(r.detail)}</div></td><td><code>${esc(r.ip)}</code><div class="small muted">${esc(r.device_code)}</div></td></tr>`))}</article></section>`;
 }
 async function adminSettings(){
  const d=await api('/api/admin/settings'),s=d.settings;
