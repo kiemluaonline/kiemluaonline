@@ -48,3 +48,16 @@ label{display:block;color:#344362;font-size:.82rem;font-weight:750;margin:18px 0
 .pager>div{display:flex;gap:8px}
 @media(max-width:1000px){.financial-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:580px){.financial-stats{gap:9px}.finance-tile{padding:13px}.finance-tile strong{font-size:1.15rem}.filter-form{display:grid;grid-template-columns:1fr 1fr;padding:13px;align-items:center}.filter-form label{grid-column:1/-1}.filter-form input{grid-column:1/-1;max-width:none;width:100%}.filter-form select{min-width:0;max-width:none;width:100%}.filter-form button{width:100%}.filter-form:has(input) select{grid-column:1/-1}.filter-form:has(input) button{grid-column:1/-1}.pager{flex-direction:column;align-items:stretch}.pager>div{justify-content:flex-end}.admin-shortcuts{grid-template-columns:1fr 1fr}}
+
+
+/* Fraud review V8 */
+.fraud-case-list{display:grid;gap:0}
+.fraud-case{padding:20px;border-bottom:1px solid var(--border)}
+.fraud-case:last-child{border-bottom:0}
+.fraud-case-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fraud-case-head strong,.fraud-case-head small{display:block;overflow-wrap:anywhere}
+.fraud-case-head small{margin-top:5px;color:var(--muted)}
+.fraud-case p{font-size:.87rem;overflow-wrap:anywhere}
+.fraud-case textarea{min-height:85px}
+.fraud-case .action-buttons{gap:10px;flex-wrap:wrap}
+@media(max-width:520px){.fraud-case{padding:16px}.fraud-case-head{align-items:flex-start}.fraud-case .action-buttons{flex-direction:column;align-items:stretch}.fraud-case .action-buttons button{width:100%}}
