@@ -218,6 +218,77 @@ async function registerUser(env, params) {
   return userId;
 }
 
+
+const OAUTH_WINDOW_MS=10*60*1000;
+const googleReady=env=>Boolean(env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET);
+const googleCallbackUri=env=>String(env.GOOGLE_REDIRECT_URI||'https://nhiemvu.click/api/auth/google/callback');
+function googleCookie(req,value,maxAge=600){
+ const name=isLocal(req)?'tl_google_state':'__Host-tl_google_state';
+ return name+'='+value+'; Path=/; HttpOnly; SameSite=Lax; '+(isLocal(req)?'':'Secure; ')+'Max-Age='+maxAge;
+}
+function googleReturn(req,error='',session=''){
+ const headers=new Headers({...HEADERS,Location:error?'/?google_error='+encodeURIComponent(error):'/'});
+ headers.append('Set-Cookie',googleCookie(req,'',0));
+ if(session)headers.append('Set-Cookie',session);
+ return new Response(null,{status:303,headers});
+}
+function base64urlBytes(input){
+ if(!/^[A-Za-z0-9_-]+$/.test(input)||input.length>18000)fail(401,'Token Google không hợp lệ.');
+ const s=input.replace(/-/g,'+').replace(/_/g,'/');
+ const bytes=atob(s+'='.repeat((4-s.length%4)%4));
+ return Uint8Array.from(bytes,c=>c.charCodeAt(0));
+}
+async function verifyGoogleIdToken(idToken,env,nonce){
+ const parts=String(idToken||'').split('.');
+ if(parts.length!==3)fail(401,'Token Google không hợp lệ.');
+ let header,claims;
+ try{
+  header=JSON.parse(new TextDecoder().decode(base64urlBytes(parts[0])));
+  claims=JSON.parse(new TextDecoder().decode(base64urlBytes(parts[1])));
+ }catch{fail(401,'Token Google không hợp lệ.');}
+ if(header.alg!=='RS256'||!header.kid)fail(401,'Thuật toán token Google không hợp lệ.');
+ const response=await fetch('https://www.googleapis.com/oauth2/v3/certs');
+ if(!response.ok)fail(502,'Không thể lấy khóa xác minh chữ ký Google.');
+ const jwks=await response.json();
+ const jwk=jwks.keys?.find(k=>k.kid===header.kid&&k.kty==='RSA'&&k.use==='sig'&&(!k.alg||k.alg==='RS256'));
+ if(!jwk)fail(401,'Không tìm thấy khóa chữ ký Google.');
+ const key=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+ const valid=await crypto.subtle.verify({name:'RSASSA-PKCS1-v1_5'},key,base64urlBytes(parts[2]),encoder.encode(parts[0]+'.'+parts[1]));
+ if(!valid)fail(401,'Chữ ký token Google không hợp lệ.');
+ const seconds=Math.floor(now()/1000);
+ if(!['accounts.google.com','https://accounts.google.com'].includes(claims.iss)
+  ||claims.aud!==env.GOOGLE_CLIENT_ID||!Number.isFinite(claims.exp)||claims.exp<=seconds
+  ||!Number.isFinite(claims.iat)||claims.iat>seconds+300||claims.nonce!==nonce
+  ||claims.email_verified!==true||typeof claims.email!=='string'
+  ||!(/^[A-Za-z0-9_-]{5,255}$/.test(String(claims.sub||''))))
+   fail(401,'Tài khoản Google chưa được xác minh hợp lệ.');
+ return {sub:claims.sub,email:normEmail(claims.email),name:str(claims.name||claims.email.split('@')[0],70)};
+}
+const googleIdentity=(env,sub)=>env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('google_sub:'+sub).first();
+const googleForUser=(env,userId)=>env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('google_user:'+userId).first();
+async function connectGoogleIdentity(env,sub,userId){
+ const current=await googleIdentity(env,sub), linked=await googleForUser(env,userId);
+ if(current&&current.value!==userId)fail(409,'Google này đã liên kết tài khoản Trạm Lúa khác.');
+ if(linked&&linked.value!==sub)fail(409,'Tài khoản Trạm Lúa đã liên kết Google khác.');
+ const changes=[];
+ if(!current)changes.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_sub:'+sub,userId));
+ if(!linked)changes.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_user:'+userId,sub));
+ if(changes.length)await env.DB.batch(changes);
+}
+async function registerGoogleMember(env,req,identity,referredBy){
+ const salt=bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
+ const password=newToken()+newToken(),uid=id();
+ await env.DB.batch([
+  env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at) VALUES(?,?,?,?,?,'member',?,?,?,?,?)")
+   .bind(uid,identity.email,identity.name.length>=2?identity.name:'Thành viên Google',
+    await passwordDigest(password,salt),salt,referralCode(),referredBy||null,clientIP(req),new Date().toISOString()),
+  env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_sub:'+identity.sub,uid),
+  env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_user:'+uid,identity.sub)
+ ]);
+ await event(env,req,'signup_completed',uid,'google');
+ return uid;
+}
+
 // Quota được đếm theo ngày Việt Nam trên D1, không dựa vào số liệu trình duyệt.
 // Mã trình duyệt do phía người dùng tự tạo: chỉ hỗ trợ hạn chế lạm dụng phổ thông.
 const quotaNumber=(s,k)=>Math.max(0,Math.min(100,int(s[k],int(DEFAULTS[k]))));
