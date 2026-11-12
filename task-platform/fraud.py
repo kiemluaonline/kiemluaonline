@@ -57,7 +57,7 @@ def record_signal(c,user_id,kind,target_id,digest,alert_kind,details,severity):
 def has_open_high_alert(c,user_id,withdrawal_id):
  # A user-level high alert must also be checked, not only the withdrawal.
  row=c.execute("""SELECT id FROM fraud_alerts
- WHERE user_id=? AND status='open' AND severity>=60
+ WHERE user_id=? AND status<>'cleared' AND severity>=60
  AND ((target_type='withdrawal' AND target_id=?) OR target_type='submission')
  LIMIT 1""",(user_id,withdrawal_id)).fetchone()
  return bool(row)
