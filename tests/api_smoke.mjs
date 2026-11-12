@@ -127,7 +127,8 @@ assert.equal(defaultQuota.data.settings.quota_ip_accounts_daily,'6');
 assert.equal((await call('/api/admin/settings','PUT',{quota_ip_accounts_daily:'200'},admCookie)).status,400);
 // Các test quota cũ kiểm tra riêng quy tắc thiết bị và IP theo ngày.
 assert.equal((await call('/api/admin/settings','PUT',{
- quota_link_ip_exclusive:'0',quota_link_tasks_ip_24h:'0'
+ quota_link_ip_exclusive:'0',quota_link_tasks_ip_24h:'0',
+  quota_link_device_exclusive:'0',quota_link_tasks_device_24h:'0'
 },admCookie)).status,200);
 const otherIP='203.0.113.10';
 const browserID='11111111-2222-4333-8444-555555555555';
