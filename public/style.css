@@ -41,3 +41,21 @@
  .mobile-nav{display:none}
 }
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}}
+
+/* Thẻ dashboard trong mục Nhiệm vụ, không dùng số liệu giả. */
+.task-dashboard{display:flex;flex-direction:column;gap:16px;margin:12px 0 26px}
+.task-payment{background:#f0fbf4;border:1px solid #99e5bf;padding:22px}
+.task-payment strong{font-size:17px;color:#086746}.task-payment p{color:#195f44;font-weight:750;margin:10px 0}.task-payment small{color:#517564;font-size:12px;line-height:1.6}
+.task-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.task-stat{padding:20px;min-height:110px}
+.task-stat span{display:block;color:#627586;font-size:12px;font-weight:800}
+.task-stat strong{display:block;font-size:clamp(18px,2.6vw,29px);color:#113e32;margin-top:10px;overflow-wrap:anywhere}
+.task-stat #taskResetCountdown{color:#ed315e;font-variant-numeric:tabular-nums}
+.task-device-card h3{margin:0 0 17px;color:#1c6148}
+.task-device-card p:not(.note){margin:0;color:#6a7d71}
+.task-ip-value{font-size:clamp(19px,3vw,29px);font-weight:850;overflow-wrap:anywhere;color:#183b31;margin:12px 0 18px}
+.task-device-status{background:#f2f7f3;color:#275841;border-radius:13px;padding:14px;font-weight:750}
+.task-device-code{color:#6a8075;margin-top:9px;font-size:13px;letter-spacing:1px;overflow-wrap:anywhere;font-weight:500}
+.task-list-heading{margin:25px 0 16px;font-size:21px}
+@media(max-width:730px){.task-stats{gap:10px}.task-stat{padding:15px 12px;min-height:99px}
+.task-stat span{font-size:10px}.task-stat strong{font-size:18px}.task-payment{padding:17px}}

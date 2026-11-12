@@ -23,9 +23,21 @@ const empty = (title,body='') => `<div class="empty"><div class="big">☘</div><
 const table = (heads, rows) => rows.length ? `<div class="table-wrap"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` : empty('Chưa có dữ liệu thực tế', 'Các bản ghi sẽ xuất hiện sau khi người dùng thực hiện thao tác.');
 const formData = form => Object.fromEntries(new FormData(form).entries());
 let toastTimer;
+const DEVICE_STORAGE_KEY='tram-lua.browser-device.v1';
+function browserDeviceId(){
+ try {
+  let value=localStorage.getItem(DEVICE_STORAGE_KEY)||'';
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)){
+   value=crypto.randomUUID();localStorage.setItem(DEVICE_STORAGE_KEY,value);
+  }
+  return value;
+ }catch{return '';}
+}
 function toast(msg,bad=false){ const t=document.getElementById('toast');t.textContent=msg;t.className='visible'+(bad?' bad':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',4500); }
 async function api(path, method='GET', body=null){
-  const r=await fetch(path,{method,headers:body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'},body:body===null?undefined:JSON.stringify(body),credentials:'same-origin'});
+  const device=browserDeviceId();
+  const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
+  const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin'});
   const data=await r.json().catch(()=>({error:'Không nhận được phản hồi máy chủ.'}));
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;throw error; }
   return data;
@@ -131,11 +143,45 @@ async function overview(){
  <div class="card"><div class="metric-label">Nhiệm vụ chưa làm</div><div class="metric">${available}</div><div class="metric-caption">Đang mở thực tế</div></div>
  <div class="card"><div class="metric-label">Người được giới thiệu</div><div class="metric">${fmt(m.referral_count)}</div><div class="metric-caption">Tài khoản đã đăng ký</div></div></section>
  <section class="grid two section"><article class="card"><h3>📢 Thông báo hệ thống</h3><p>${esc(state.meta.announcement||'Chào mừng đến với nền tảng. Theo dõi thông báo từ quản trị viên tại đây.')}</p></article>
- <article class="card"><h3>🛡️ Kiểm tra chống gian lận</h3><div class="field-hint">IP đang truy cập</div><div class="field-output">${esc(m.ip)}</div><div class="field-hint" style="margin-top:10px">Mã trình duyệt nhận diện</div><div class="field-output">${esc(m.device_code)}</div><p class="note">Đây là dấu hiệu IP và trình duyệt gần đúng, không phải số IMEI hay định danh chắc chắn của thiết bị.</p></article></section>`;
+ <article class="card"><h3>🛡️ Kiểm tra chống gian lận</h3><div class="field-hint">IP đang truy cập</div><div class="field-output">${esc(m.ip)}</div><div class="field-hint" style="margin-top:10px">Mã nhận diện trình duyệt</div><div class="field-output">${esc(m.device_code)}</div><p class="note">Mã do website lưu trên trình duyệt nếu được cho phép. Đây không phải IMEI và có thể bị xóa hoặc thay đổi.</p></article></section>`;
+}
+
+function taskDashboardCard(d){
+ const p=d.latest_payment;
+ const payment=p
+ ?`<strong>✓ ADMIN XÁC NHẬN ĐÃ CHUYỂN</strong><p>TK ${esc(p.masked_account)} • ${fmt(p.vnd_amount)} ₫</p><small>Ghi nhận ${dt(p.at)}. Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.</small>`
+ :`<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p><small>Không sử dụng giao dịch minh họa.</small>`;
+ return `<div class="task-dashboard">
+  <section class="card task-payment">${payment}</section>
+  <div class="task-stats">
+    <div class="card task-stat"><span>🌾 LÚA HÔM NAY</span><strong>+${fmt(d.today_lua)} Lúa</strong></div>
+    <div class="card task-stat"><span>☑ TỔNG LÚA LINK ĐÃ DUYỆT</span><strong>${fmt(d.link_lua)} Lúa</strong></div>
+    <div class="card task-stat"><span>✓ NHIỆM VỤ ĐÃ GỬI HÔM NAY</span><strong>${fmt(d.submitted_today)}</strong></div>
+    <div class="card task-stat"><span>↻ ĐỔI NGÀY SAU</span><strong id="taskResetCountdown" data-reset-at="${Number(d.next_reset_at)}">--:--:--</strong></div>
+  </div>
+  <section class="card task-device-card"><h3>🛡️ Hệ thống chống gian lận</h3>
+   <p>IP công khai hiện tại (Cloudflare nhận được)</p><div class="task-ip-value">${esc(d.ip||'Chưa xác định')}</div>
+   <div class="task-device-status">▣ ${d.device_registered?'Đã lưu mã nhận diện cho trình duyệt này':'Mã tạm: trình duyệt chưa lưu nhận diện'}<div class="task-device-code">${esc(d.device_code||'—')}</div></div>
+   <p class="note">Mã do website tạo riêng cho trình duyệt, không phải IMEI hoặc mã phần cứng. Mã có thể thay đổi nếu xóa dữ liệu duyệt web hoặc dùng ẩn danh. IP có thể thay đổi khi đổi mạng/VPN; trùng IP không tự động là gian lận.</p>
+  </section>
+ </div>`;
+}
+function startTaskResetTimer(){
+ const el=document.getElementById('taskResetCountdown');
+ if(!el)return;
+ const update=()=>{
+  const seconds=Math.max(0,Math.ceil((Number(el.dataset.resetAt)-Date.now())/1000));
+  const h=String(Math.floor(seconds/3600)).padStart(2,'0'),m=String(Math.floor(seconds%3600/60)).padStart(2,'0'),s=String(seconds%60).padStart(2,'0');
+  el.textContent=h+':'+m+':'+s;
+ };
+ update();
+ const timer=setInterval(()=>{if(el.isConnected)update();else clearInterval(timer);},1000);
 }
 async function tasks(){
- const data=await api('/api/tasks');
- return `${heading('Danh sách nhiệm vụ','Admin tự tạo, cập nhật, bật hoặc tắt nhiệm vụ. Thưởng được kiểm tra trên máy chủ.')}
+ const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
+ setTimeout(startTaskResetTimer,0);
+ return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
+ ${taskDashboardCard(stats)}<h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
  <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
  <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
