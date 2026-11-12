@@ -40,6 +40,12 @@ assert.equal(setup.status,201,JSON.stringify(setup));
  assert.equal(gmail1.status,201,JSON.stringify(gmail1));
  const gmailAlias=await call('/api/auth/register','POST',{name:'Bản sao Gmail',email:'firstlast+tag@googlemail.com',password:'test-password-2026',accept_terms:'yes'},'','192.0.2.103','a2222222-2222-4333-8444-555555555555');
  assert.equal(gmailAlias.status,409,JSON.stringify(gmailAlias));
+ const legacyPassword=await call('/api/auth/register','POST',{
+  name:'Thành viên Gmail cũ',email:'old.customer@gmail.com',password:'test-password-2026',accept_terms:'yes'
+ },'','192.0.2.104','a3333333-2222-4333-8444-555555555555');
+ assert.equal(legacyPassword.status,201,JSON.stringify(legacyPassword));
+ const oldAccount=sqlite.prepare("SELECT id,referral_code FROM users WHERE email='old.customer@gmail.com'").get();
+ assert.ok(oldAccount?.id);
  const gmailCode=sqlite.prepare("SELECT value FROM settings WHERE key LIKE 'gmail_claim:%' LIMIT 1").get();
  assert.ok(gmailCode,'Email Gmail gốc có khóa chống trùng.');
 
@@ -89,7 +95,22 @@ assert.equal(setup.status,201,JSON.stringify(setup));
  assert.equal((await call('/api/meta')).data.google_auth_enabled,true);
  const gmailPasswordDenied=await call('/api/auth/register','POST',{name:'Gmail mới',email:'brand.new@gmail.com',password:'test-password-2026',accept_terms:'yes'},'','192.0.2.105');
  assert.equal(gmailPasswordDenied.status,400);
- const createdGoogle=await googleFlow('register','google.member@gmail.com','google-id-123456789','','192.0.2.150');
+ // Đã đăng ký bằng mật khẩu: chọn đúng Gmail Google thì tự đăng nhập, giữ ID và mã giới thiệu.
+ const quickGoogle=await googleFlow('login','old.customer@gmail.com','google-old-customer-id','','192.0.2.104');
+ assert.equal(quickGoogle.redirect,'/','Google Gmail phải đăng nhập được tài khoản mật khẩu đã có.');
+ const quickCookie=quickGoogle.cookies.find(x=>x.startsWith('kl_session='));
+ assert.ok(quickCookie);
+ const quickMe=await call('/api/me','GET',undefined,quickCookie.split(';')[0],'192.0.2.104');
+ assert.equal(quickMe.data.user.id,oldAccount.id);
+ assert.equal(quickMe.data.user.referral_code,oldAccount.referral_code);
+ assert.equal(quickMe.data.user.role,'member');
+ assert.equal(quickMe.data.google_linked,true);
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM users WHERE email='old.customer@gmail.com'").get().n,1);
+ const retryQuick=await googleFlow('login','old.customer@gmail.com','google-old-customer-id','','192.0.2.104');
+ assert.equal(retryQuick.redirect,'/');
+ const differentGoogle=await googleFlow('login','old.customer@gmail.com','google-different-identity','','192.0.2.104');
+ assert.equal(differentGoogle.redirect,'/?google_error=email_exists','Không được thay Google đã gắn bằng sub khác.');
+  const createdGoogle=await googleFlow('register','google.member@gmail.com','google-id-123456789','','192.0.2.150');
  assert.equal(createdGoogle.response.status,303);
  assert.equal(createdGoogle.redirect,'/');
  const googleSession=createdGoogle.cookies.find(x=>x.startsWith('kl_session='));
