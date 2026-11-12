@@ -295,5 +295,40 @@ assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).statu
 const newLogin=await call('/api/auth/login','POST',{email:'user@example.com',password:'My-new-2026-password'},'','203.0.113.10');
 assert.equal(newLogin.status,200);
 assert.ok(newLogin.cookie);
+
+ // Nhiệm vụ App dùng schema cũ, bắt buộc ảnh và Admin duyệt.
+ const appBad=await call('/api/admin/tasks','POST',{title:'App thử tự động',category:'app',url:'https://example.com/app',app_referral_code:'REF123',reward:30,min_seconds:5,review_mode:'auto',repeat_policy:'once',is_active:true},admCookie);
+ assert.equal(appBad.status,400);
+ const appTask=await call('/api/admin/tasks','POST',{title:'App nhập mã',category:'app',url:'https://example.com/app',app_referral_code:'REF123',reward:30,min_seconds:5,review_mode:'manual',repeat_policy:'once',is_active:true},admCookie);
+ assert.equal(appTask.status,201,JSON.stringify(appTask));
+ const appTaskID=appTask.data.id, appIP='198.51.100.251';
+ assert.equal(sqlite.prepare('SELECT category FROM tasks WHERE id=?').get(appTaskID).category,'other');
+ const appList=await call('/api/tasks','GET',undefined,user2.cookie,appIP,user2Device);
+ assert.equal(appList.data.tasks.find(t=>t.id===appTaskID).category,'app');
+ assert.equal(appList.data.tasks.find(t=>t.id===appTaskID).app_referral_code,'REF123');
+ const appStart=await call('/api/tasks/'+appTaskID+'/start','POST',{},user2.cookie,appIP,user2Device);
+ assert.equal(appStart.status,200,JSON.stringify(appStart));
+ assert.equal(appStart.data.category,'app');
+ sqlite.prepare('UPDATE task_attempts SET available_at=? WHERE id=?').run(Date.now()-1,appStart.data.attempt_id);
+ const missingPhoto=await call('/api/tasks/'+appTaskID+'/submit','POST',{attempt_id:appStart.data.attempt_id,answer:appStart.data.a+appStart.data.b},user2.cookie,appIP,user2Device);
+ assert.equal(missingPhoto.status,400);
+ const jpg=Buffer.concat([Buffer.from([255,216,255,224]),Buffer.alloc(1300)]).toString('base64');
+ const submitted=await call('/api/tasks/'+appTaskID+'/submit','POST',{attempt_id:appStart.data.attempt_id,answer:appStart.data.a+appStart.data.b,evidence:'Đã nhập mã REF123',photo:'data:image/jpeg;base64,'+jpg},user2.cookie,appIP,user2Device);
+ assert.equal(submitted.status,200,JSON.stringify(submitted));
+ assert.equal(submitted.data.status,'pending');
+ const proofId=sqlite.prepare('SELECT id FROM task_completions WHERE task_id=?').get(appTaskID).id;
+ const reviewList=await call('/api/admin/reviews','GET',undefined,admCookie);
+ const proof=reviewList.data.reviews.find(r=>r.id===proofId);
+ assert.equal(proof.has_photo,1);
+ assert.equal(proof.evidence,'Đã nhập mã REF123');
+ assert.ok(!JSON.stringify(reviewList.data).includes(jpg));
+ assert.equal((await call('/api/admin/reviews/'+proofId+'/photo','GET',undefined,admCookie)).status,200);
+ assert.equal((await call('/api/admin/reviews/'+proofId+'/photo','GET',undefined,user2.cookie)).status,403);
+ assert.ok(!JSON.stringify((await call('/api/history','GET',undefined,user2.cookie)).data).includes(jpg));
+ assert.equal((await call('/api/admin/reviews/'+proofId,'POST',{status:'approved'},admCookie)).status,200);
+ assert.equal((await call('/api/admin/reviews/'+proofId,'POST',{status:'approved'},admCookie)).status,409);
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_id=? AND reference_type='task'").get(proofId).n,1);
+ assert.equal((await call('/api/tasks/'+appTaskID+'/start','POST',{},user2.cookie,appIP,user2Device)).status,409);
+
 await worker.scheduled({},env); // Xác nhận tác vụ dọn dẹp hoạt động trong mô phỏng.
 console.log('PASS: link IP độc quyền 24h, giới hạn 2 lượt/IP, 2 lượt/nhiệm vụ, mở lại sau 24h, quota chống nhiều tài khoản/IP/trình duyệt, Admin cấu hình, tài khoản không bị khóa, admin setup một lần, thành viên, giới thiệu, CAPTCHA đổi câu hỏi, chờ thời gian, cộng Lúa một lần, điểm danh, giữ/hoàn Lúa, duyệt bằng chứng, chống duyệt trùng, phân quyền, lịch sử.');
