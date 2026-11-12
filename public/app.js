@@ -249,7 +249,7 @@ const adminIP = ip => {
  return value.includes(':')?`<details class="risk-ip-details"><summary><code title="${esc(value)}">${esc(compactIP(value))}</code></summary><code>${esc(value)}</code><button type="button" data-action="copy-ip" data-value="${esc(value)}">Sao chép</button></details>`:`<code>${esc(value)}</code>`;
 };
 
-function taskDashboardCard(d){
+function taskDashboardCard(d,quotas={}){
  const p=d.latest_payment;
  const payment=p
  ?`<strong>✓ ADMIN XÁC NHẬN ĐÃ CHUYỂN</strong><p>TK ${esc(p.masked_account)} • ${fmt(p.vnd_amount)} ₫</p><small>Ghi nhận ${dt(p.at)}. Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.</small>`
@@ -262,33 +262,27 @@ function taskDashboardCard(d){
     <div class="card task-stat"><span>✓ NHIỆM VỤ ĐÃ GỬI HÔM NAY</span><strong>${fmt(d.submitted_today)}</strong></div>
     <div class="card task-stat"><span>↻ ĐỔI NGÀY SAU</span><strong id="taskResetCountdown" data-reset-at="${Number(d.next_reset_at)}">--:--:--</strong></div>
   </div>
-  <section class="card task-device-card" aria-label="IP mạng và nhận diện trình duyệt">
-   <div class="task-ip-heading">
-    <svg class="task-ip-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 4.2-5 13.8 0 18M12 3c5 4.2 5 13.8 0 18"/></svg><h3>IP hiện tại</h3>
-   </div>
-   <div class="task-ip-value" id="taskDisplayIP">${esc(compactIP(d.ip))}</div>
-   <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 • hiển thị rút gọn':'Chưa xác định IP'}</span>
-   ${String(d.ip||'').includes(':')?`<div class="task-ip-tools">
-  <button class="task-ip-btn" type="button" data-action="check-ipv4">Kiểm tra IPv4</button>
-  <button class="task-ip-btn" type="button" data-action="copy-ip" data-value="${esc(d.ip)}">Sao chép IPv6</button>
- </div>
- <details class="task-ip-full"><summary>Xem IPv6 đầy đủ</summary><code>${esc(d.ip)}</code></details>
- <a class="task-ip-direct" href="https://api.ipify.org?format=json" target="_blank" rel="noopener noreferrer">Mở địa chỉ IPv4 trực tiếp ↗</a>
- <details class="task-ip-manual">
-  <summary>Không tự nhận được? Dán IPv4 từ ipify</summary>
-  <p class="note">Sao chép kết quả tại ipify rồi dán vào ô bên dưới. Đây là IP do bạn cung cấp, không phải IP website tự xác minh.</p>
-  <div class="task-ip-manual-form">
-   <input id="taskIPv4ManualInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder='113.166.167.144 hoặc {"ip":"..."}' aria-label="IPv4 sao chép từ ipify">
-   <button type="button" class="task-ip-btn" data-action="use-manual-ipv4">Hiển thị IPv4</button>
-  </div>
- </details>
- <p class="task-ip-helper" id="taskIPv4Help">Website tự kiểm tra IPv4 bằng ipify và SeeIP. Nếu có IPv4 thật sẽ ưu tiên hiển thị. IPv6 Cloudflare vẫn được giữ để kiểm tra bảo mật.</p>
- <details class="task-ip-debug" id="taskIPv4Diagnostics" hidden><summary>Chi tiết lỗi IPv4 (bấm để xem)</summary><pre id="taskIPv4DebugInfo"></pre></details>`:''}
-   <div class="task-device-tag">
-    <svg class="task-phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M10.5 18.5h3"/></svg>
-    <div><strong>${d.device_registered?'Đã nhận diện trình duyệt':'Nhận diện tạm thời'}</strong><span>${esc(d.device_code||'—')}</span></div>
-   </div>
-   <p class="task-device-note">IP thật do Cloudflare ghi nhận vẫn được giữ trong hệ thống. Mã trình duyệt không phải IMEI và có thể đổi; không tự kết luận gian lận chỉ dựa vào một IP.</p>
+  <section class="card task-device-card task-security-compact" aria-label="Bảo vệ chống gian lận">
+   <h3 class="task-security-title">🛡️ Bảo vệ chống gian lận</h3>
+   <div class="task-security-ip"><span>IP hiện tại:</span> <strong id="taskDisplayIP">${esc(compactIP(d.ip))}</strong></div>
+   <p class="task-security-policy">Quota chặn theo mã thiết bị và địa chỉ IP — đổi IP/VPN/4G không giúp vượt giới hạn.</p>
+   <div class="task-security-id"><span>Mã định danh:</span> <code>${esc(d.device_code||'—')}</code></div>
+   <p class="task-security-description">Hệ thống kiểm tra IP và mã định danh thiết bị để giới hạn lượt làm và ngăn nhận thưởng trùng.</p>
+   ${(quotas.link_quota?.limit>0||quotas.link_quota?.exclusive||quotas.browser_quota?.limit>0||quotas.browser_quota?.exclusive)?`<div class="task-security-quotas" aria-label="Lượt link trong 24 giờ gần nhất">
+    <span>Link / 24 giờ:</span>
+    ${(quotas.link_quota?.limit>0||quotas.link_quota?.exclusive)?`<span>IP <b>${fmt(quotas.link_quota.used)}/${quotas.link_quota.limit>0?fmt(quotas.link_quota.limit):'∞'}</b></span>`:''}
+    ${(quotas.browser_quota?.limit>0||quotas.browser_quota?.exclusive)?`<span>Mã định danh <b>${fmt(quotas.browser_quota.used)}/${quotas.browser_quota.limit>0?fmt(quotas.browser_quota.limit):'∞'}</b></span>`:''}
+   </div>`:''}
+   <details class="task-security-details"><summary>Xem chi tiết</summary>
+    <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 • hiển thị rút gọn':'Chưa xác định IP'}</span>
+    <div class="task-ip-tools">
+     ${String(d.ip||'').includes(':')?'<button class="task-ip-btn" type="button" data-action="check-ipv4">Kiểm tra IPv4</button>':''}
+     <button class="task-ip-btn" type="button" data-action="copy-ip" data-value="${esc(d.ip)}">Sao chép IP</button>
+    </div>
+    <div class="task-security-full-ip">IP hệ thống ghi nhận: <code>${esc(d.ip)}</code></div>
+    <p class="task-ip-helper" id="taskIPv4Help">IP do Cloudflare ghi nhận được dùng cho kiểm tra bảo mật. IPv4 kiểm tra từ trình duyệt chỉ dùng để hiển thị.</p>
+    <p class="task-device-note">Mã định danh được lưu trên trình duyệt, không phải IMEI và có thể bị xóa hoặc thay đổi.</p>
+   </details>
   </section>
  </div>`;
 }
@@ -397,7 +391,7 @@ async function detectPublicIPv4(button,silent=false){
    const label=document.getElementById('taskIPLabel');
    if(label)label.textContent='IPv6 • chưa đọc được IPv4 trong trang web';
    const note=document.getElementById('taskIPv4Help');
-   if(note)note.textContent='Trình duyệt chưa cho website đọc IPv4 từ hai dịch vụ kiểm tra. Bạn có thể mở ipify trực tiếp; IPv6 Cloudflare vẫn được giữ cho việc kiểm tra an toàn.';
+   if(note)note.textContent='Trình duyệt chưa cho website đọc IPv4 từ hai dịch vụ kiểm tra. IPv6 Cloudflare vẫn được giữ cho việc kiểm tra an toàn.';
    if(!silent)toast('Trình duyệt chưa trả IPv4 cho website. IP mạng vẫn được ghi nhận bằng IPv6.',true);
   }
  }finally{
@@ -425,9 +419,7 @@ async function tasks(){
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
- ${taskDashboardCard(stats)}
- ${(data.link_quota?.limit>0||data.link_quota?.exclusive)?`<div class="task-link-quota-note">🔒 Nhiệm vụ link trên IP này: ${data.link_quota.used}/${data.link_quota.limit} lượt trong 24 giờ gần nhất. ${data.link_quota.exclusive?'Nếu đã có tài khoản gửi link từ IP này, tài khoản khác phải chờ hết 24 giờ.':''}</div>`:''}
- ${(data.browser_quota?.limit>0||data.browser_quota?.exclusive)?`<div class="task-link-quota-note">📱 Giới hạn trình duyệt: ${data.browser_quota.used}/${data.browser_quota.limit||'∞'} lượt link trong 24 giờ gần nhất. Đổi IP, VPN, Wi-Fi hay 4G không đặt lại số lượt của cùng mã trình duyệt. ${data.browser_quota.exclusive?'Tài khoản khác dùng chung mã trình duyệt cũng bị giới hạn.':''}</div>`:''}
+ ${taskDashboardCard(stats,data)}
  <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  <div class="task-filter-row">${[['all','Tất cả'],['app','📱 Nhiệm vụ App'],['link','🔗 Link'],['video','🎬 Video'],['other','Khác']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
  ${shownTasks.length?`<div class="grid">${shownTasks.map(t=>`<article class="card task-card">

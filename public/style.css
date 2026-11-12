@@ -191,3 +191,23 @@
 .google-auth-btn:focus-visible{outline:3px solid #e2c36a;outline-offset:2px}
 .google-g{font-family:Arial,sans-serif;font-weight:900;font-size:20px;color:#4285f4}
 .auth-google-disabled{margin-top:17px}
+
+/* One compact fraud-protection card; diagnostics stay off the member interface. */
+.task-security-compact.card{padding:16px 18px;border-radius:15px;margin-bottom:0}
+.task-security-compact .task-security-title{font-size:16px;font-weight:750;line-height:1.4;margin:0 0 10px;color:#245843}
+.task-security-ip,.task-security-id{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 7px;font-size:13px;line-height:1.5;color:#425e51}
+.task-security-ip strong{font-size:16px;color:#183b31;font-weight:750;overflow-wrap:anywhere;max-width:100%}
+.task-security-id code{font-size:12px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#365e4a;overflow-wrap:anywhere;max-width:100%}
+.task-security-compact p.task-security-policy,.task-security-compact p.task-security-description{font-size:12px;line-height:1.55;margin:8px 0;color:#63796c}
+.task-security-compact p.task-security-description{margin-bottom:0}
+.task-security-quotas{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;border-top:1px solid #e4eee7;margin-top:10px;padding-top:9px;color:#577563;font-size:11px;line-height:1.5}
+.task-security-quotas b{color:#245843}
+.task-security-details{margin-top:9px;color:#63796c;font-size:11px;line-height:1.5}
+.task-security-details>summary{cursor:pointer;width:fit-content;font-weight:650;padding:3px 0}
+.task-security-details[open]>summary{margin-bottom:8px}
+.task-security-details .task-ip-type{font-size:10px;margin-bottom:8px}
+.task-security-details .task-ip-btn{font-size:11px;padding:6px 9px;min-height:34px}
+.task-security-full-ip{overflow-wrap:anywhere;font-size:11px}
+.task-security-full-ip code{font-size:11px}
+.task-security-compact .task-device-note{font-size:11px;line-height:1.5;margin:7px 0 0}
+@media(max-width:730px){.task-security-compact.card{padding:14px 15px;border-radius:14px}.task-security-compact .task-security-title{font-size:15px}.task-security-ip strong{font-size:15px}}
