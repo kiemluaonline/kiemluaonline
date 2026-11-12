@@ -480,9 +480,9 @@ def admin_review_fraud(alert_id):
   c.execute("BEGIN IMMEDIATE")
   alert=c.execute("SELECT * FROM fraud_alerts WHERE id=?"+(" FOR UPDATE" if DATABASE_URL else ""),(alert_id,)).fetchone()
   if not alert:abort(404)
-  if alert["status"]!="open":
+  if alert["status"]=="cleared" or (alert["status"]=="confirmed" and decision!="cleared"):
    c.execute("ROLLBACK")
-   flash("Cảnh báo này đã được xử lý.")
+   flash("Cảnh báo đã xử lý. Chỉ có thể loại trừ lại hồ sơ đã xác nhận sau khi có bằng chứng bổ sung.")
    return redirect(url_for("admin_fraud"))
   c.execute("""UPDATE fraud_alerts
   SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP
