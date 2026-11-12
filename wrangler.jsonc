@@ -12,7 +12,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "tram-lua-db",
-    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+    "database_id": "08726420-2019-4438-ae06-76b43ad8f67a",
     "migrations_dir": "migrations"
   }]
 }
