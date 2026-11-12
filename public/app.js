@@ -76,8 +76,10 @@ function googleAuthPanel(active){
   (active==='register'?'<p class="note">Hãy tích đồng ý điều khoản phía trên trước khi đăng ký Google.</p>':'');
 }
 function googleProfilePanel(){
- if(!state.meta.google_auth_enabled)return '';
  const connected=Boolean(state.me.google_linked);
+ if(!state.meta.google_auth_enabled)return '<section class="card"><h3>Đăng nhập bằng Google</h3>'+
+  '<p>'+(connected?'Tài khoản đã liên kết Google, nhưng máy chủ hiện chưa bật đăng nhập Google.':'Tính năng liên kết Google tạm thời chưa khả dụng.')+'</p>'+
+  (state.me.user.role==='admin'?'<div class="callout">Quản trị viên: vào Cloudflare → Workers & Pages → tram-lua → Settings → Variables and Secrets. Kiểm tra GOOGLE_CLIENT_ID (Variable) và GOOGLE_CLIENT_SECRET (Secret) trong Production. Nếu thiếu GOOGLE_CLIENT_ID, hãy thêm lại Client ID lấy từ Google Cloud. Không chia sẻ Client Secret.</div>':'<p class="note">Vui lòng thử lại sau hoặc liên hệ quản trị viên.</p>')+'</section>';
  return '<section class="card"><h3>Đăng nhập bằng Google</h3><p>'+
   (connected?'Đã liên kết Google. Bạn có thể đăng nhập bằng Google.':'Liên kết Google cùng email để giữ nguyên Lúa và lịch sử.')+
   '</p>'+(connected?'<span class="chip approved">Đã liên kết</span>':'<button class="btn alt" data-action="google-link">Liên kết Google</button>')+'</section>';

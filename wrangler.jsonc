@@ -2,6 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "tram-lua",
   "main": "src/worker.js",
+  "keep_vars": true,
   "triggers": { "crons": ["0 2 * * *"] },
   "compatibility_date": "2026-11-12",
   "assets": {
