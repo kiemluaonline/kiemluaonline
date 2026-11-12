@@ -369,7 +369,7 @@ async function tasks(){
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
  ${taskDashboardCard(stats)}
- ${data.link_quota?.limit>0?`<div class="task-link-quota-note">🔒 Nhiệm vụ link trên IP này: ${data.link_quota.used}/${data.link_quota.limit} lượt trong 24 giờ gần nhất. ${data.link_quota.exclusive?'Nếu đã có tài khoản gửi link từ IP này, tài khoản khác phải chờ hết 24 giờ.':''}</div>`:''}
+ ${(data.link_quota?.limit>0||data.link_quota?.exclusive)?`<div class="task-link-quota-note">🔒 Nhiệm vụ link trên IP này: ${data.link_quota.used}/${data.link_quota.limit} lượt trong 24 giờ gần nhất. ${data.link_quota.exclusive?'Nếu đã có tài khoản gửi link từ IP này, tài khoản khác phải chờ hết 24 giờ.':''}</div>`:''}
  <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
  <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
