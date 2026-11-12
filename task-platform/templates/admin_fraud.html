@@ -47,6 +47,14 @@
    {% else %}
    <span class="status {{ 'status-approved' if alert.status=='cleared' else 'status-pending' }}">{{ 'Đã loại trừ' if alert.status=='cleared' else 'Đã xác nhận dấu hiệu' }}</span>
    <p><small>Lý do: {{ alert.review_reason or '—' }}</small></p>
+   {% if alert.status=='confirmed' %}
+   <form method="post" action="{{ url_for('admin_review_fraud',alert_id=alert.id) }}" onsubmit="return confirm('Bạn đã có thông tin mới để loại trừ cảnh báo này?')">
+    <input type="hidden" name="csrf" value="{{ csrf() }}">
+    <label for="reconsider-{{ alert.id }}">Lý do xem xét lại (bắt buộc)</label>
+    <textarea id="reconsider-{{ alert.id }}" name="reason" minlength="10" maxlength="500" required placeholder="Ghi bằng chứng mới để loại trừ cảnh báo..."></textarea>
+    <button class="button button-small button-subtle" name="decision" value="cleared">Xem xét lại và loại trừ</button>
+   </form>
+   {% endif %}
    {% endif %}
   </article>
   {% else %}<div class="table-empty">Chưa có cảnh báo phù hợp.</div>{% endfor %}
