@@ -161,8 +161,9 @@ def test_high_risk_withdrawal_cannot_be_paid_before_clearance(site):
  assert post(c,f"/admin/fraud/{alert['id']}/review",{"decision":"cleared","reason":"Đã có bằng chứng giải thích việc dùng chung tài khoản."}).status_code==302
  with mod.app.app_context():
   assert mod.db().execute("SELECT status FROM fraud_alerts WHERE id=?",(alert["id"],)).fetchone()["status"]=="cleared"
- # Admin may reject the withdrawal and return the held balance after investigation.
- assert post(c,f"/admin/payout/{second_withdraw}/rejected").status_code==302
+ # After clearance, the final recorded payout action is permitted.
+ # This only marks an external bank transfer; no bank API is called here.
+ assert post(c,f"/admin/payout/{second_withdraw}/paid").status_code==302
  with mod.app.app_context():
-  assert mod.db().execute("SELECT status FROM withdrawals WHERE id=?",(second_withdraw,)).fetchone()["status"]=="rejected"
-  assert mod.balance(3)==10000
+  assert mod.db().execute("SELECT status FROM withdrawals WHERE id=?",(second_withdraw,)).fetchone()["status"]=="paid"
+  assert mod.balance(3)==5000
