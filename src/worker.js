@@ -4,6 +4,15 @@ const SESSION_MS = 14 * DAY;
 // Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
 const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
+// Phân biệt lý do STK sai mà không phải đổi CHECK constraint của D1 đang hoạt động.
+const INVALID_BANK_ACCOUNT_PREFIX = '[TL_INVALID_BANK_ACCOUNT] ';
+const invalidBankAccountNote = 'Số tài khoản không đúng. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin ngân hàng chính xác.';
+function presentWithdrawal(w) {
+  if (w?.status === 'rejected' && String(w.admin_note || '').startsWith(INVALID_BANK_ACCOUNT_PREFIX)) {
+    return { ...w, status: 'invalid_account', admin_note: w.admin_note.slice(INVALID_BANK_ACCOUNT_PREFIX.length) };
+  }
+  return w;
+}
 const DEFAULTS = {
   site_name: 'Trạm Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
@@ -891,7 +900,7 @@ async function handler(req, env) {
       env.DB.prepare('SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all()
     ]);
     return json({ wallet_entries: walletEntries.results, completions: completionRows.results,
-      withdrawals: withdrawals.results });
+      withdrawals: withdrawals.results.map(presentWithdrawal) });
   }
   if (m === 'GET' && p === '/api/referrals') {
     const me = await auth(req, env);
@@ -1048,27 +1057,31 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/withdrawals') {
       const rows = await env.DB.prepare(`SELECT w.*,u.email,u.name FROM withdrawals w JOIN users u ON u.id=w.user_id
         ORDER BY CASE WHEN w.status='pending' THEN 0 ELSE 1 END,w.created_at DESC LIMIT 150`).all();
-      return json({ withdrawals: rows.results });
+      return json({ withdrawals: rows.results.map(presentWithdrawal) });
     }
     const wd = p.match(/^\/api\/admin\/withdrawals\/([^/]+)$/);
     if (m === 'POST' && wd) {
       const b = await readBody(req), status = str(b.status, 20), note = str(b.admin_note, 500);
-      if (!['paid', 'rejected'].includes(status)) fail(400, 'Chỉ chọn đã chuyển tiền hoặc từ chối.');
+      if (!['paid', 'rejected', 'invalid_account'].includes(status)) fail(400, 'Trạng thái rút tiền không hợp lệ.');
       if (status === 'rejected' && !note) fail(400, 'Cần lý do khi từ chối.');
+      // STK sai là một lý do từ chối riêng cho khách; vẫn lưu rejected để
+      // tương thích D1 hiện tại và đảm bảo hoàn Lúa đúng một lần.
+      const dbStatus = status === 'invalid_account' ? 'rejected' : status;
+      const dbNote = status === 'invalid_account' ? INVALID_BANK_ACCOUNT_PREFIX + invalidBankAccountNote : note;
       const w = await env.DB.prepare('SELECT * FROM withdrawals WHERE id=?').bind(wd[1]).first();
       if (!w || w.status !== 'pending') fail(409, 'Yêu cầu không còn chờ xử lý.');
       const results = await env.DB.batch([
         env.DB.prepare("UPDATE withdrawals SET status=?,admin_note=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
-          .bind(status, note, w.id),
+          .bind(dbStatus, dbNote, w.id),
         env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
           SELECT ?,?,?,'Hoàn Lúa do từ chối rút','withdraw_refund',? WHERE ?='rejected' AND EXISTS
           (SELECT 1 FROM withdrawals WHERE id=? AND status='rejected')
           ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
-          .bind(id(), w.user_id, w.amount, w.id, status, w.id)
+          .bind(id(), w.user_id, w.amount, w.id, dbStatus, w.id)
       ]);
       if (!results[0].meta?.changes) fail(409, 'Yêu cầu đã được xử lý.');
       await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:${status}`);
-      return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu chuyển tiền. Hãy đối chiếu giao dịch ngân hàng.' : 'Đã từ chối và hoàn Lúa.' });
+      return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu chuyển tiền. Hãy đối chiếu giao dịch ngân hàng.' : status === 'invalid_account' ? 'Đã báo số tài khoản không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
     }
     if (m === 'GET' && p === '/api/admin/risk-events') {
       const risks = await env.DB.prepare('SELECT r.*,u.email,u.name FROM risk_events r LEFT JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC LIMIT 150').all();
