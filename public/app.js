@@ -1,6 +1,6 @@
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
-const state = { meta: {}, me: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all' };
+const state = { meta: {}, me: null, googlePending: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all' };
 const NAV = [
   ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['referrals','♧','Tuyển Ref'],
   ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
@@ -47,7 +47,14 @@ async function boot(){
   catch(e){ app.innerHTML=`<div class="auth-page"><div class="auth-card"><h2>Chưa thể kết nối hệ thống</h2><p>${esc(e.message)}. Hãy kiểm tra D1 và migration.</p></div></div>`;return; }
   await loadMe();
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
-  else { if(state.meta.setup_required) state.authMode='setup'; renderAuth(); }
+  else {
+    if(state.meta.setup_required) state.authMode='setup';
+    if(state.meta.google_auth_enabled){
+      const pending=await api('/api/auth/google/pending').catch(()=>null);
+      state.googlePending=pending?.pending?pending:null;
+    }
+    renderAuth();
+  }
 const googleError=new URLSearchParams(location.search).get('google_error');
 if(googleError){
  const messages={
@@ -72,7 +79,7 @@ function googleAuthPanel(active){
  return '<div class="oauth-separator">hoặc</div>'+
   '<button class="google-auth-btn" type="button" data-action="google-'+active+'">'+
   '<span class="google-g" aria-hidden="true">G</span>'+
-  (active==='register'?'Đăng ký bằng Google':'Đăng nhập bằng Google')+'</button>'+
+  'Tiếp tục với Google'+'</button>'+
   (active==='register'?'<p class="note">Hãy tích đồng ý điều khoản phía trên trước khi đăng ký Google.</p>':'');
 }
 function googleProfilePanel(){
@@ -86,6 +93,18 @@ function googleProfilePanel(){
 }
 
 function renderAuth(){
+ if(state.googlePending){
+   app.className='';
+   app.innerHTML='<div class="auth-page"><div class="auth-brand"><div class="brand-mark">🌾</div><p class="eyebrow">TRẠM LÚA • TÀI KHOẢN THÀNH VIÊN</p>'+
+    '<h1>Chào mừng bạn đến Trạm Lúa.</h1><p>Đăng nhập Google an toàn và đơn giản.</p></div>'+
+    '<section class="auth-card"><h2>Hoàn tất đăng ký bằng Google</h2>'+
+    '<p>Gmail <strong>'+esc(state.googlePending.email)+'</strong> chưa có tài khoản. Bạn không cần tạo mật khẩu, chỉ cần đồng ý điều khoản để tạo tài khoản thành viên.</p>'+
+    '<form data-form="google-complete"><div class="field"><label><input type="checkbox" name="accept_terms" value="yes" required style="width:auto;margin-right:7px">'+
+    'Tôi đã đọc và đồng ý <a href="/terms.html" target="_blank" rel="noopener">Điều khoản</a> và <a href="/privacy.html" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.</label></div>'+
+    '<button class="btn" type="submit" style="width:100%">Đồng ý và tạo tài khoản</button></form>'+
+    '<button class="btn alt" type="button" data-action="google-cancel" style="width:100%;margin-top:12px">Hủy và trở lại</button></section></div>';
+   return;
+ }
  const mode=state.authMode;
  const ref=new URLSearchParams(location.search).get('ref')||'';
  const tabs=state.meta.setup_required? [['setup','Thiết lập Admin'],['login','Đăng nhập'],['register','Đăng ký']] : [['login','Đăng nhập'],['register','Đăng ký']];
@@ -650,7 +669,11 @@ app.addEventListener('click',async e=>{
  if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
-  if(act.startsWith('google-')){
+  if(act==='google-cancel'){
+   await api('/api/auth/google/cancel','POST',{});
+   state.googlePending=null;renderAuth();return;
+ }
+ if(act.startsWith('google-')){
  const intent=act.slice(7);
  if(!['login','register','link'].includes(intent))throw new Error('Thao tác Google không hợp lệ.');
  const body={intent};
@@ -706,7 +729,12 @@ app.addEventListener('submit',async e=>{
  e.preventDefault();const kind=form.dataset.form;const b=formData(form),button=form.querySelector('button[type="submit"]');
  if(button)button.disabled=true;
  try{
-  if(kind==='setup'){await api('/api/setup','POST',b);state.meta=await api('/api/meta');await loadMe();renderShell();await navigate('admin-overview');toast('Admin đã được tạo. Hãy xóa khóa thiết lập SETUP_KEY sau khi hoàn tất.');}
+  if(kind==='google-complete'){
+     await api('/api/auth/google/complete','POST',b);
+     state.googlePending=null;await loadMe();renderShell();await navigate('overview');
+     toast('Đăng ký Google thành công. Chào mừng thành viên mới!');
+   }
+   if(kind==='setup'){await api('/api/setup','POST',b);state.meta=await api('/api/meta');await loadMe();renderShell();await navigate('admin-overview');toast('Admin đã được tạo. Hãy xóa khóa thiết lập SETUP_KEY sau khi hoàn tất.');}
   if(kind==='login'||kind==='register'){
     await api('/api/auth/'+kind,'POST',b);await loadMe();renderShell();await navigate(state.me.user.role==='admin'?'admin-overview':'overview');toast(kind==='login'?'Đăng nhập thành công.':'Đăng ký thành công.');
   }
