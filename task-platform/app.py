@@ -388,4 +388,4 @@ def admin_audit():
  data=paged("""SELECT a.*,u.username FROM admin_audit a JOIN users u ON u.id=a.admin_id """+where+" ORDER BY a.id DESC",(action,) if action else ())
  return render_template("admin_audit.html",data=data,action=action,actions=allowed)
 
-if __name__=="__main__":app.run(debug=os.getenv("FLASK_DEBUG")=="1")
+if __name__=="__main__":app.run(debug=not production and os.getenv("FLASK_DEBUG")=="1")
