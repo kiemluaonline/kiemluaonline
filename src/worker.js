@@ -231,9 +231,29 @@ function googleCookie(req,value,maxAge=600){
  const name=isLocal(req)?'tl_google_state':'__Host-tl_google_state';
  return name+'='+value+'; Path=/; HttpOnly; SameSite=Lax; '+(isLocal(req)?'':'Secure; ')+'Max-Age='+maxAge;
 }
-function googleReturn(req,error='',session=''){
- const headers=new Headers({...HEADERS,Location:error?'/?google_error='+encodeURIComponent(error):'/'});
+function googlePendingCookie(req,value,maxAge=600){
+ const name=isLocal(req)?'tl_google_pending':'__Host-tl_google_pending';
+ return name+'='+value+'; Path=/; HttpOnly; SameSite=Lax; '+(isLocal(req)?'':'Secure; ')+'Max-Age='+maxAge;
+}
+function pendingGoogleToken(req){
+ const token=cookies(req)['__Host-tl_google_pending']||cookies(req).tl_google_pending||'';
+ return /^[a-f0-9]{64}$/.test(token)?token:'';
+}
+async function pendingGoogleSignup(req,env){
+ const token=pendingGoogleToken(req);
+ if(!token)return null;
+ const row=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('google_signup_pending:'+token).first();
+ if(!row)return null;
+ try{
+  const pending=JSON.parse(row.value);
+  return pending?.expires>now()&&pending.identity?.sub&&pending.identity?.email?{token,...pending}:null;
+ }catch{return null;}
+}
+function googleReturn(req,error='',session='',pending=''){
+ const destination=error?'/?google_error='+encodeURIComponent(error):(pending?'/?google_signup=1':'/');
+ const headers=new Headers({...HEADERS,Location:destination});
  headers.append('Set-Cookie',googleCookie(req,'',0));
+ headers.append('Set-Cookie',googlePendingCookie(req,pending,pending?600:0));
  if(session)headers.append('Set-Cookie',session);
  return new Response(null,{status:303,headers});
 }
@@ -515,6 +535,37 @@ async function handler(req, env) {
     return json({ ok: true, message: 'Đăng ký thành công.' }, 201, { 'Set-Cookie': await createSession(req, env, userId) });
   }
 
+  if(m==='GET' && p==='/api/auth/google/pending'){
+    const pending=await pendingGoogleSignup(req,env);
+    return json(pending?{pending:true,email:pending.identity.email,name:pending.identity.name}:{pending:false});
+  }
+  if(m==='POST' && p==='/api/auth/google/cancel'){
+    const token=pendingGoogleToken(req);
+    if(token)await env.DB.prepare('DELETE FROM settings WHERE key=?').bind('google_signup_pending:'+token).run();
+    return json({ok:true},200,{'Set-Cookie':googlePendingCookie(req,'',0)});
+  }
+  if(m==='POST' && p==='/api/auth/google/complete'){
+    if(!googleReady(env))fail(503,'Google chưa được cấu hình.');
+    const b=await readBody(req);
+    if(b.accept_terms!=='yes')fail(400,'Bạn cần đồng ý điều khoản và chính sách quyền riêng tư.');
+    const pending=await pendingGoogleSignup(req,env);
+    if(!pending)fail(401,'Phiên đăng ký Google đã hết hạn. Vui lòng thử lại.');
+    const settings=await getSettings(env);
+    if(settings.signup_enabled!=='1')fail(403,'Hệ thống đang tắt đăng ký mới.');
+    const identity=pending.identity;
+    ensureEmail(identity.email);
+    preventDisposable(identity.email);
+    if(await googleIdentity(env,identity.sub)||await registeredEmail(env,identity.email))
+      fail(409,'Email đã có tài khoản. Hãy đăng nhập tài khoản cũ để liên kết Google.');
+    await signupRateLimit(env,req,identity.email);
+    const removed=await env.DB.prepare('DELETE FROM settings WHERE key=?').bind('google_signup_pending:'+pending.token).run();
+    if(!removed.meta?.changes)fail(409,'Phiên đăng ký Google đã được sử dụng.');
+    const userId=await registerGoogleMember(env,req,identity,null);
+    const response=json({ok:true,message:'Đăng ký Google thành công.'});
+    response.headers.append('Set-Cookie',googlePendingCookie(req,'',0));
+    response.headers.append('Set-Cookie',await createSession(req,env,userId));
+    return response;
+  }
   if(m==='POST' && p==='/api/auth/google/start'){
     if(!googleReady(env))fail(503,'Đăng nhập Google chưa được cấu hình.');
     const redirectUri=googleCallbackUri(env);
@@ -587,8 +638,20 @@ async function handler(req, env) {
         if(!found||found.status!=='active')fail(403,'Tài khoản đã tạm khóa.',{auth_code:'suspended'});
         userId=found.id;
       }else{
-        if(flow.intent==='login')
-          fail(409,'Chưa có tài khoản Google.',{auth_code:'not_registered'});
+        if(flow.intent==='login'){
+          if(await registeredEmail(env,identity.email))
+            fail(409,'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi liên kết Google.',{auth_code:'email_exists'});
+          const currentSettings=await getSettings(env);
+          if(currentSettings.signup_enabled!=='1')
+            fail(403,'Hệ thống đã tắt đăng ký mới.',{auth_code:'signup_closed'});
+          const signupToken=newToken();
+          await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
+            .bind('google_signup_pending:'+signupToken,JSON.stringify({
+              identity:{sub:identity.sub,email:identity.email,name:identity.name},
+              expires:now()+OAUTH_WINDOW_MS
+            })).run();
+          return googleReturn(req,'','',signupToken);
+        }
         const settings=await getSettings(env);
         if(settings.signup_enabled!=='1')fail(403,'Hệ thống đã tắt đăng ký.',{auth_code:'signup_closed'});
         if(await registeredEmail(env,identity.email))
@@ -1022,7 +1085,8 @@ export default {
       env.DB.prepare("DELETE FROM login_attempts WHERE created_at<datetime('now','-30 days')"),
       env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days')"),
       env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
-      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now())
+      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now()),
+      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_signup_pending:%' AND json_extract(value,'$.expires')<?").bind(now())
     ]);
   },
   async fetch(req, env) {
