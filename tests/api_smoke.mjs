@@ -85,6 +85,25 @@ assert.equal((await call('/api/withdrawals','POST',{amount:80,bank_name:'Ngan ha
 const reject=await call(`/api/admin/withdrawals/${w1.data.id}`,'POST',{status:'rejected',admin_note:'Tai khoan chua xac minh'},admCookie);
 assert.equal(reject.status,200,JSON.stringify(reject));
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
+// STK không đúng: hiển thị trạng thái riêng cho khách, nhưng vẫn hoàn Lúa
+// và giữ DB tương thích với schema đang chạy trên Cloudflare D1.
+const invalidWd=await call('/api/withdrawals','POST',{
+ amount:20,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+},cookie,'203.0.113.10');
+assert.equal(invalidWd.status,200,JSON.stringify(invalidWd));
+assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,85);
+const invalidAction=await call('/api/admin/withdrawals/'+invalidWd.data.id,'POST',{status:'invalid_account'},admCookie);
+assert.equal(invalidAction.status,200,JSON.stringify(invalidAction));
+assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
+const invalidHistory=await call('/api/history','GET',undefined,cookie,'203.0.113.10');
+const invalidRecord=invalidHistory.data.withdrawals.find(w=>w.id===invalidWd.data.id);
+assert.equal(invalidRecord.status,'invalid_account');
+assert.match(invalidRecord.admin_note,/Số tài khoản không đúng/);
+assert.ok(!invalidRecord.admin_note.includes('[TL_INVALID_BANK_ACCOUNT]'));
+const adminWrongAccount=await call('/api/admin/withdrawals','GET',undefined,admCookie);
+assert.equal(adminWrongAccount.data.withdrawals.find(w=>w.id===invalidWd.data.id).status,'invalid_account');
+assert.equal((await call('/api/admin/withdrawals/'+invalidWd.data.id,'POST',{status:'invalid_account'},admCookie)).status,409);
+assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
 const taskManual=await call('/api/admin/tasks','POST',{title:'Gửi minh chứng thủ công',description:'Gửi ảnh/bằng chứng dạng liên kết',category:'other',url:'',reward:30,min_seconds:5,review_mode:'manual',repeat_policy:'once',is_active:true},admCookie);
 assert.equal(taskManual.status,201,JSON.stringify(taskManual));
 const mid=taskManual.data.id;
