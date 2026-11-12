@@ -27,3 +27,16 @@ Admin có thể cộng/trừ thưởng qua biểu mẫu ở trang chi tiết th�
 Chọn **Sửa** trên nhiệm vụ để đổi tiêu đề và hướng dẫn. Nếu đã có ít nhất một lượt nộp, mức thưởng được khóa để tránh thay đổi thưởng của nhiệm vụ đã tham gia. Nút **Ẩn/Mở** không xóa nhiệm vụ.
 
 **Hạn chế trước khi triển khai thật:** Điều chỉnh thủ công chỉ nên thực hiện khi có chứng từ; tính năng chưa có cơ chế phê duyệt hai người, kiểm tra chống lạm dụng, phân quyền đa cấp, rate limit, cảnh báo gian lận hay tích hợp thanh toán. Không vận hành tiền thật khi chưa hoàn tất các bước này và kiểm tra pháp lý. SQLite chỉ nên dùng trong môi trường phát triển/sản lượng thấp, sao lưu database cẩn thận. Phải đặt `SECRET_KEY` cố định, mạnh và `COOKIE_SECURE=1` khi dùng HTTPS.
+
+
+## Admin V4 — bộ lọc, phân trang, thống kê, nhật ký
+
+- `/admin`: 4 chỉ số thành viên, nhiệm vụ, chờ duyệt và rút đang chờ; 4 tổng số tiền gồm thưởng nhiệm vụ, số dư khả dụng theo ledger, khoản rút đang chờ và khoản đã đánh dấu chuyển thành công.
+- Bộ lọc nhiệm vụ (tất cả/mở/ẩn), bằng chứng (tất cả/chờ/duyệt/từ chối) và rút tiền (tất cả/chờ/đã chuyển/từ chối). Mỗi danh sách có phân trang 15 mục, lọc và trang được lưu trên URL.
+- `/admin/members`: tìm tên, lọc vai trò, phân trang 15 tài khoản.
+- `/admin/audit`: nhật ký hành động Admin và lọc theo loại, gồm tạo/sửa/ẩn nhiệm vụ, duyệt/từ chối nộp, đánh dấu rút/chặn rút và điều chỉnh số dư. Ghi cùng SQLite transaction của thay đổi dữ liệu; chỉ ghi sự kiện thành công, không ghi thao tác từ các phiên bản trước.
+- `flask --app app init-db` có thể chạy trên database cũ để tạo bảng mới mà không xóa dữ liệu.
+
+**Ý nghĩa số liệu:** số dư khả dụng = tổng ledger (đã trừ số dư giữ cho yêu cầu rút). Chỉ số `Đã chuyển` là trạng thái do Admin ghi nhận, không chứng thực bằng tích hợp ngân hàng. Tiền chờ rút là số tiền đang bị giữ và không có trong số dư khả dụng. Đọc các chỉ số riêng biệt, không cộng tất cả để suy ra tổng tài sản. 
+
+**An toàn:** audit log chỉ nằm trong cùng SQLite database và chưa được bảo vệ chống sửa trực tiếp bởi người có quyền truy cập DB. Trước khi dùng tiền thật cần kiểm thử kỹ và bổ sung xác minh chuyển khoản, sao lưu, quyền riêng của nhật ký, báo cáo đối soát và rate limit.
