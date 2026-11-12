@@ -172,3 +172,7 @@
 .task-ip-manual-form{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:8px 0}
 .task-ip-manual-form input{min-width:185px;flex:1 1 185px;max-width:100%;border:1px solid #bbd4c9;border-radius:9px;font:13px inherit;padding:9px;line-height:1.4;background:#fff;color:#1a4433}
 .task-ip-manual-form button{flex:0 0 auto}
+
+/* Chính sách IP riêng cho nhiệm vụ link: rõ ràng trên trang thành viên */
+.task-link-quota-note{margin:16px 0;border-radius:13px;border:1px solid #c6dfd2;background:#f3f9f5;padding:12px 15px;color:#285b43;font-size:13px;line-height:1.55}
+.task-link-blocked{margin:12px 0 0;border-radius:12px;border:1px solid #f0cebd;background:#fff6f1;color:#91432c;padding:12px;font-size:13px;line-height:1.55;font-weight:650}

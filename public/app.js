@@ -368,13 +368,17 @@ async function tasks(){
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
- ${taskDashboardCard(stats)}<h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
+ ${taskDashboardCard(stats)}
+ ${data.link_quota?.limit>0?`<div class="task-link-quota-note">🔒 Nhiệm vụ link trên IP này: ${data.link_quota.used}/${data.link_quota.limit} lượt trong 24 giờ gần nhất. ${data.link_quota.exclusive?'Nếu đã có tài khoản gửi link từ IP này, tài khoản khác phải chờ hết 24 giờ.':''}</div>`:''}
+ <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
  <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
  <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
  <div class="task-meta"><span>${t.min_seconds} giây tối thiểu</span><span>•</span><span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
- <div class="task-meta"><span>${t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
- ${t.my_status?chip(t.my_status):`<button class="btn" data-action="start-task" data-id="${esc(t.id)}">Bắt đầu nhiệm vụ →</button>`}
+ <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / 24 giờ`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
+ ${t.link_blocked
+   ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_owner'?'IP này đã thực hiện nhiệm vụ link hôm nay bằng tài khoản khác. Hãy chờ đủ 24 giờ hoặc liên hệ Admin.':t.link_blocked==='link_limit'?'IP này đã đủ số lượt nhiệm vụ link trong 24 giờ qua.':'Tài khoản đã đủ lượt nhiệm vụ link này trong 24 giờ qua.'}</p>`
+   :t.my_status?chip(t.my_status):`<button class="btn" data-action="start-task" data-id="${esc(t.id)}">Bắt đầu nhiệm vụ →</button>`}
  </article>`).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
 async function referrals(){
@@ -438,6 +442,8 @@ function taskForm(task={}){
  <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Liên kết'],['other','Khác']],task.category||'video')}
  ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động theo thời gian và CAPTCHA']],task.review_mode||'manual')}</div>
  ${field('url','URL HTTPS (nếu có)',task.url||'', 'type="url" placeholder="https://..."')}
+ ${field('link_24h_limit','Lượt link này / tài khoản / 24 giờ',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
+ <p class="note">Chỉ áp dụng loại Liên kết. Nhập 1 giữ chính sách lặp đang chọn; nhập 2 cho phép tối đa 2 lần làm cùng nhiệm vụ trong 24 giờ gần nhất (nếu quota IP vẫn còn).</p>
  <div class="form-row">${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
  ${field('min_seconds','Thời gian tối thiểu (giây)',task.min_seconds||15,'type="number" min="5" max="3600" required')}</div>
  <div class="form-row">${select('repeat_policy','Lặp lại',[['once','Mỗi người một lần'],['daily','Mỗi ngày một lần']],task.repeat_policy||'once')}
@@ -505,6 +511,11 @@ async function adminSettings(){
  <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
  ${field('quota_device_accounts_daily','Tài khoản/mã trình duyệt/ngày',s.quota_device_accounts_daily,'type="number" min="0" max="100" required')}</div>
  <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
+ <h3>🔗 Quota riêng cho nhiệm vụ link</h3>
+ <p class="note">Áp dụng trong 24 giờ tính từ khi gửi nhiệm vụ link, không reset lúc 00:00. Thành viên khác trùng IP sẽ bị chặn, kể cả dùng điện thoại khác trên cùng Wi-Fi. Nhiệm vụ chờ duyệt cũng tạm giữ quota.</p>
+ <div class="form-row">${field('quota_link_tasks_ip_24h','Tổng lượt link/IP/24 giờ',s.quota_link_tasks_ip_24h,'type="number" min="0" max="100" required')}
+ ${select('quota_link_ip_exclusive','Chặn tài khoản khác trên cùng IP',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}</div>
+ <p class="note">Mặc định 2 lượt link trên một IP. Chỉ tài khoản gửi link trước có thể dùng tiếp lượt còn lại; các tài khoản khác cùng IP phải chờ. Mức lượt cho từng nhiệm vụ link được sửa tại Quản lý nhiệm vụ. Không tự khóa tài khoản và không xóa Lúa.</p>
  <p class="note">Không tự khóa tài khoản. IP có thể dùng chung và mã trình duyệt có thể bị xóa/giả mạo; Admin kiểm tra nhật ký “task_quota_denied” nếu có khiếu nại.</p>
  <button class="btn" type="submit">Lưu cài đặt</button></form>
  <section class="card"><h3>⚠ Cần thiết lập trước khi mở rút</h3><p>Đặt tỷ giá Lúa/VNĐ và chuẩn bị nguồn chi trả thực tế. Mặc định chức năng rút bị tắt để tránh cam kết thanh toán sai.</p>
