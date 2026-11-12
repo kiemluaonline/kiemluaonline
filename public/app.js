@@ -604,16 +604,21 @@ function renderAttemptModal(){
 async function shrinkAppProof(file) {
  if (!file || !file.size) throw new Error('Bạn cần chọn ảnh chụp màn hình trước khi gửi.');
  if (file.size > 20*1024*1024) throw new Error('Ảnh gốc vượt 20 MB. Hãy chọn ảnh chụp màn hình nhỏ hơn.');
- const objectUrl=URL.createObjectURL(file);
- let img;
- try {
-   img=await new Promise((resolve,reject)=>{
-     const element=new Image();
-     element.onload=()=>resolve(element);
-     element.onerror=()=>reject(new Error('iPhone không đọc được định dạng ảnh. Hãy chọn ảnh chụp màn hình JPG/PNG.'));
-     element.src=objectUrl;
-   });
- } finally { URL.revokeObjectURL(objectUrl); }
+ // Read the selected file as data: because the site's CSP permits data: images,
+ // but intentionally does not permit blob: image sources.
+ const imageData=await new Promise((resolve,reject)=>{
+   const reader=new FileReader();
+   reader.onload=()=>resolve(String(reader.result));
+   reader.onerror=()=>reject(new Error('Không đọc được tệp ảnh. Hãy chọn lại ảnh rồi thử gửi.'));
+   reader.onabort=()=>reject(new Error('Đọc ảnh đã bị hủy. Hãy chọn lại ảnh.'));
+   reader.readAsDataURL(file);
+ });
+ const img=await new Promise((resolve,reject)=>{
+   const element=new Image();
+   element.onload=()=>resolve(element);
+   element.onerror=()=>reject(new Error('Không thể mở ảnh này. Hãy thử chụp màn hình mới hoặc chọn ảnh JPG/PNG khác.'));
+   element.src=imageData;
+ });
  if (!img.naturalWidth || !img.naturalHeight) throw new Error('Ảnh không hợp lệ.');
  const dimensions=[1400,1100,900,720,600];
  for (const maxSide of dimensions) {
