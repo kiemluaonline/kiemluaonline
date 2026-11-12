@@ -66,14 +66,40 @@ async function deviceCode(req, env) {
  const seed=stable?'browser:'+stable:'temporary:'+clientIP(req)+'|'+str(req.headers.get('user-agent'),300);
  return (await hash((env.DEVICE_SALT || 'local-only')+'|'+seed)).slice(0,16).toUpperCase();
 }
-async function readBody(req) {
+async function readBody(req, limit = 12000) {
   const size = Number(req.headers.get('content-length') || 0);
-  if (size > 12000) fail(413, 'Dữ liệu quá lớn.');
+  if (size > limit) fail(413, 'Dữ liệu quá lớn.');
   const raw = await req.text();
-  if (raw.length > 12000) fail(413, 'Dữ liệu quá lớn.');
+  if (raw.length > limit) fail(413, 'Dữ liệu quá lớn.');
   try { return JSON.parse(raw || '{}'); }
   catch { fail(400, 'Dữ liệu JSON không hợp lệ.'); }
 }
+
+const APP_PHOTO_PREFIX = 'APP_PHOTO_V1|';
+const APP_PHOTO_MAX_BYTES = 180000;
+// Ảnh do trình duyệt thu nhỏ, lưu trong D1 với mức dung lượng nhỏ;
+// không cần R2, chỉ Admin mới có đường dẫn đọc ảnh.
+function appPhotoEvidence(noteInput, dataUri) {
+  const note = str(noteInput, 200);
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(dataUri || ''));
+  if (!match || match[1].length > 240010)
+    fail(400, 'Cần chọn ảnh bằng chứng JPG hợp lệ, dung lượng dưới 180 KB sau khi nén.');
+  let bytes;
+  try { bytes = atob(match[1]); }
+  catch { fail(400, 'Dữ liệu ảnh không hợp lệ.'); }
+  if (bytes.length < 1000 || bytes.length > APP_PHOTO_MAX_BYTES ||
+      bytes.charCodeAt(0) !== 255 || bytes.charCodeAt(1) !== 216 || bytes.charCodeAt(2) !== 255)
+    fail(400, 'Ảnh bằng chứng JPG không hợp lệ hoặc vượt 180 KB.');
+  return APP_PHOTO_PREFIX + encodeURIComponent(note) + '|' + match[1];
+}
+function readAppPhoto(evidence) {
+  if (typeof evidence !== 'string' || !evidence.startsWith(APP_PHOTO_PREFIX)) return null;
+  const separator = evidence.indexOf('|', APP_PHOTO_PREFIX.length);
+  if (separator < 0) return null;
+  return { note: decodeURIComponent(evidence.slice(APP_PHOTO_PREFIX.length, separator)),
+    base64: evidence.slice(separator + 1) };
+}
+
 function requireSameOrigin(req) {
   const origin = req.headers.get('Origin');
   if (origin !== new URL(req.url).origin) fail(403, 'Yêu cầu sai nguồn gốc.');
@@ -298,14 +324,19 @@ function validateTaskBody(b) {
   const url = str(b.url, 700), reward = Number(b.reward), minSeconds = Number(b.min_seconds);
   const review = str(b.review_mode, 20), repeat = str(b.repeat_policy, 20);
   if (title.length < 3) fail(400, 'Tiêu đề nhiệm vụ phải có ít nhất 3 ký tự.');
-  if (!['video', 'link', 'other'].includes(category)) fail(400, 'Loại nhiệm vụ không hợp lệ.');
+  if (!['video', 'link', 'other', 'app'].includes(category)) fail(400, 'Loại nhiệm vụ không hợp lệ.');
   if (url && (!/^https:\/\//i.test(url) || !URL.canParse(url))) fail(400, 'Liên kết phải là HTTPS hợp lệ.');
   if (!positive(reward)) fail(400, 'Thưởng nhiệm vụ phải là số nguyên dương.');
   if (!Number.isInteger(minSeconds) || minSeconds < 5 || minSeconds > 3600) fail(400, 'Thời gian thực hiện từ 5–3600 giây.');
   if (!['manual', 'auto'].includes(review) || !['once', 'daily'].includes(repeat)) fail(400, 'Cấu hình nhiệm vụ không hợp lệ.');
+  const appCode = str(b.app_referral_code, 80);
+  if (category === 'app' && (review !== 'manual' || repeat !== 'once'))
+    fail(400, 'Nhiệm vụ App bắt buộc Admin duyệt và mỗi tài khoản chỉ làm một lần.');
+  if (category === 'app' && (!url || appCode.length < 2))
+    fail(400, 'Nhiệm vụ App cần URL tải ứng dụng và mã giới thiệu (ít nhất 2 ký tự).');
   const linkLimit=int(b.link_24h_limit,1);
   if(!Number.isInteger(linkLimit)||linkLimit<1||linkLimit>20)fail(400,'Số lượt link/tài khoản/24 giờ phải từ 1 đến 20.');
-  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit};
+  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit,appCode:category==='app'?appCode:''};
 }
 const isPath = (p, prefix) => p.startsWith(prefix);
 async function handler(req, env) {
@@ -410,7 +441,7 @@ async function handler(req, env) {
     const denied=settings.quota_link_ip_exclusive!=='0'&&used.other>0?'link_owner':
       limit>0&&used.total>=limit?'link_limit':null;
     const [overrides,counts]=await Promise.all([
-      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%'").all(),
+      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all(),
       env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours') GROUP BY task_id").bind(me.id).all()
     ]);
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
@@ -419,7 +450,7 @@ async function handler(req, env) {
       const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
       const entry=done.get(t.id)||{n:0,pending:0},used=entry.n;
       const blocked=t.category==='link'?(max>1&&used>=max?'link_task_limit':(browserDenied||denied)):null;
-      return {...t,link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
+      return {...t,app_referral_code:t.category==='app'?str(overrides.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
@@ -462,11 +493,11 @@ async function handler(req, env) {
        VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, now() + 20 * 60000,
       clientIP(req), await deviceCode(req, env)).run();
     return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: 1200,
-      review_mode: task.review_mode, task_url: task.url });
+      review_mode: task.review_mode, category: task.category, task_url: task.url });
   }
   const submitMatch = p.match(/^\/api\/tasks\/([^/]+)\/submit$/);
   if (m === 'POST' && submitMatch) {
-    const me = await auth(req, env), body = await readBody(req), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(submitMatch[1]).first();
+    const me = await auth(req, env), body = await readBody(req, 260000), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(submitMatch[1]).first();
     if (!task) fail(404, 'Nhiệm vụ đã ngừng hoạt động.');
     const attempt = await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=?')
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
@@ -478,8 +509,8 @@ async function handler(req, env) {
       await event(env, req, 'captcha_wrong', me.id, `task:${task.id}`);
       fail(422, 'Phép tính chưa đúng. Hãy giải phép tính mới.', { a, b });
     }
-    const evidence = str(body.evidence, 2000);
-    if (task.review_mode === 'manual' && evidence.length < 12) fail(400, 'Nhiệm vụ này cần bằng chứng ít nhất 12 ký tự.');
+    const evidence = task.category === 'app' ? appPhotoEvidence(body.evidence, body.photo) : str(body.evidence, 2000);
+    if (task.category !== 'app' && task.review_mode === 'manual' && evidence.length < 12) fail(400, 'Nhiệm vụ này cần bằng chứng ít nhất 12 ký tự.');
     if(task.category==='link'&&attempt.ip!==clientIP(req))
       fail(409,'IP mạng thay đổi trong lúc thực hiện link. Hãy mở nhiệm vụ lại trên mạng hiện tại.');
     const settings=await getSettings(env);
@@ -529,7 +560,9 @@ async function handler(req, env) {
     const me = await auth(req, env);
     const [walletEntries, completionRows, withdrawals] = await Promise.all([
       env.DB.prepare('SELECT * FROM wallet_entries WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all(),
-      env.DB.prepare(`SELECT c.*,t.title FROM task_completions c JOIN tasks t ON t.id=c.task_id
+      env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
+            CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN '[Ảnh bằng chứng đã gửi]' ELSE c.evidence END AS evidence,
+            c.ip,c.device_code,c.created_at,c.reviewed_at,t.title FROM task_completions c JOIN tasks t ON t.id=c.task_id
           WHERE c.user_id=? ORDER BY c.created_at DESC LIMIT 80`).bind(me.id).all(),
       env.DB.prepare('SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all()
     ]);
@@ -600,17 +633,18 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings]=await Promise.all([
         env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
-        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%'").all()
+        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all()
       ]);
       const limits=new Map(settings.results.map(r=>[r.key,int(r.value,1)]));
-      return json({tasks:rows.results.map(t=>({...t,link_24h_limit:limits.get('link_task_limit:'+t.id)||1}))});
+      return json({tasks:rows.results.map(t=>({...t,link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:t.category==='app'?str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80):''}))});
     }
     if (m === 'POST' && p === '/api/admin/tasks') {
       const t = validateTaskBody(await readBody(req)), taskId = id();
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO tasks(id,title,description,category,url,reward,min_seconds,review_mode,repeat_policy,is_active)
           VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId,t.title,t.description,t.category,t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active),
-        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_task_limit:'+taskId,String(t.linkLimit))
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_task_limit:'+taskId,String(t.linkLimit)),
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode)
       ]);
       return json({ ok: true, id: taskId }, 201);
     }
@@ -624,7 +658,9 @@ async function handler(req, env) {
           review_mode=?,repeat_policy=?,is_active=? WHERE id=?`)
           .bind(t.title,t.description,t.category,t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active,taskEdit[1]),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-          .bind('link_task_limit:'+taskEdit[1],String(t.linkLimit))
+          .bind('link_task_limit:'+taskEdit[1],String(t.linkLimit)),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+          .bind('app_referral_code:'+taskEdit[1],t.appCode)
       ]);
       return json({ ok: true });
     }
@@ -645,10 +681,25 @@ async function handler(req, env) {
       return json({ ok: true });
     }
     if (m === 'GET' && p === '/api/admin/reviews') {
-      const rows = await env.DB.prepare(`SELECT c.*,t.title,u.name,u.email FROM task_completions c
-        JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
+      const rows = await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
+        CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN 1 ELSE 0 END AS has_photo,
+        CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|'
+          THEN substr(c.evidence,14,instr(substr(c.evidence,14),'|')-1)
+          ELSE c.evidence END AS evidence,
+        c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email
+        FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 150`).all();
-      return json({ reviews: rows.results });
+      return json({ reviews: rows.results.map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})) });
+    }
+    const proofRead = p.match(/^\/api\/admin\/reviews\/([^/]+)\/photo$/);
+    if (m === 'GET' && proofRead) {
+      const c = await env.DB.prepare('SELECT evidence FROM task_completions WHERE id=?').bind(proofRead[1]).first();
+      const proof = c ? readAppPhoto(c.evidence) : null;
+      if (!proof) fail(404, 'Không tìm thấy ảnh bằng chứng.');
+      const binary = atob(proof.base64);
+      const bytes = Uint8Array.from(binary, char=>char.charCodeAt(0));
+      return new Response(bytes, { headers: { ...HEADERS, 'Content-Type':'image/jpeg',
+        'Content-Disposition':'inline; filename="tram-lua-app-proof.jpg"' } });
     }
     const review = p.match(/^\/api\/admin\/reviews\/([^/]+)$/);
     if (m === 'POST' && review) {

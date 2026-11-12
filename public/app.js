@@ -373,8 +373,9 @@ async function tasks(){
  ${(data.browser_quota?.limit>0||data.browser_quota?.exclusive)?`<div class="task-link-quota-note">📱 Giới hạn trình duyệt: ${data.browser_quota.used}/${data.browser_quota.limit||'∞'} lượt link trong 24 giờ gần nhất. Đổi IP, VPN, Wi-Fi hay 4G không đặt lại số lượt của cùng mã trình duyệt. ${data.browser_quota.exclusive?'Tài khoản khác dùng chung mã trình duyệt cũng bị giới hạn.':''}</div>`:''}
  <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
- <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
+ <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':t.category==='app'?'📱':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
  <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
+ ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
  <div class="task-meta"><span>${t.min_seconds} giây tối thiểu</span><span>•</span><span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
  <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / 24 giờ`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
  ${t.link_blocked
@@ -440,9 +441,11 @@ function taskForm(task={}){
  <input type="hidden" name="id" value="${esc(task.id||'')}">
  ${field('title','Tên nhiệm vụ',task.title||'', 'required minlength="3"')}
  <div class="field"><label for="description">Hướng dẫn / mô tả</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
- <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Liên kết'],['other','Khác']],task.category||'video')}
+ <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Liên kết'],['app','App (tải & nhập mã)'],['other','Khác']],task.category||'video')}
  ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động theo thời gian và CAPTCHA']],task.review_mode||'manual')}</div>
- ${field('url','URL HTTPS (nếu có)',task.url||'', 'type="url" placeholder="https://..."')}
+ ${field('url','URL HTTPS (link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
+ ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
+ <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
  ${field('link_24h_limit','Lượt link này / tài khoản / 24 giờ',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
  <p class="note">Chỉ áp dụng loại Liên kết. Nhập 1 giữ chính sách lặp đang chọn; nhập 2 cho phép tối đa 2 lần làm cùng nhiệm vụ trong 24 giờ gần nhất (nếu quota IP vẫn còn).</p>
  <div class="form-row">${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
@@ -470,7 +473,7 @@ async function adminReviews(){
  const d=await api('/api/admin/reviews');
  return `${heading('Duyệt bằng chứng','Chỉ khi duyệt thành công, Lúa mới được ghi vào ví thành viên.')}
  <section class="card">${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Kiểm tra','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
- <td style="max-width:270px;white-space:pre-wrap">${esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
+ <td style="max-width:270px;white-space:pre-wrap">${c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
  <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved">Duyệt</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
@@ -540,12 +543,54 @@ function renderAttemptModal(){
  <span class="eyebrow">KIỂM TRA THỰC HIỆN</span><h3>Hoàn thành nhiệm vụ</h3>
  ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
  <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra thời gian và CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
+ ${a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
  <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
  ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
- ${a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
+ ${a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
  <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
  <p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p></form></section></div>`;
 }
+
+async function shrinkAppProof(file) {
+ if (!file || !file.size) throw new Error('Bạn cần chọn ảnh chụp màn hình trước khi gửi.');
+ if (file.size > 20*1024*1024) throw new Error('Ảnh gốc vượt 20 MB. Hãy chọn ảnh chụp màn hình nhỏ hơn.');
+ const objectUrl=URL.createObjectURL(file);
+ let img;
+ try {
+   img=await new Promise((resolve,reject)=>{
+     const element=new Image();
+     element.onload=()=>resolve(element);
+     element.onerror=()=>reject(new Error('iPhone không đọc được định dạng ảnh. Hãy chọn ảnh chụp màn hình JPG/PNG.'));
+     element.src=objectUrl;
+   });
+ } finally { URL.revokeObjectURL(objectUrl); }
+ if (!img.naturalWidth || !img.naturalHeight) throw new Error('Ảnh không hợp lệ.');
+ const dimensions=[1400,1100,900,720,600];
+ for (const maxSide of dimensions) {
+   const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+   canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+   const context=canvas.getContext('2d');
+   if(!context)throw new Error('Không thể xử lý ảnh trên trình duyệt này.');
+   context.fillStyle='#fff';
+   context.fillRect(0,0,canvas.width,canvas.height);
+   context.drawImage(img,0,0,canvas.width,canvas.height);
+   for (const quality of [0.79,0.65,0.5]) {
+     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));
+     if (blob && blob.size>=1000 && blob.size<=175000) {
+       return await new Promise((resolve,reject)=>{
+         const reader=new FileReader();
+         reader.onload=()=>resolve(String(reader.result));
+         reader.onerror=()=>reject(new Error('Không đọc được ảnh đã nén.'));
+         reader.readAsDataURL(blob);
+       });
+     }
+   }
+ }
+ throw new Error('Ảnh quá phức tạp để nén dưới 180 KB. Hãy cắt ảnh rồi thử lại.');
+}
+
 async function afterAction(view=state.view){await refreshMe();if(state.me)await navigate(view);}
 
 window.addEventListener('resize',()=>{
@@ -571,6 +616,11 @@ app.addEventListener('click',async e=>{
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.authMode='login';renderAuth();return;}
   if(act==='start-task'){await startTask(el.dataset.id);return;}
+  if(act==='view-photo'){
+   const root=document.getElementById('modal-root');
+   root.innerHTML=`<div class="modal-cover"><section class="modal"><button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button><h3>Ảnh bằng chứng nhiệm vụ App</h3><p class="note">Ghi chú: ${esc(el.dataset.note||'Không có')}</p><img class="app-proof-image" src="/api/admin/reviews/${encodeURIComponent(el.dataset.id)}/photo" alt="Ảnh chụp màn hình thành viên gửi" loading="lazy"><p class="note">Chỉ Admin đã đăng nhập mới xem được ảnh. Hãy đối chiếu kết quả trong hệ thống giới thiệu của ứng dụng trước khi duyệt.</p></section></div>`;
+   return;
+  }
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
@@ -619,15 +669,21 @@ app.addEventListener('submit',async e=>{
   if(kind==='task-claim'){
     const a=state.attempt;
     if(!a)throw new Error('Phiên nhiệm vụ không còn.');
+    const photo=a.category==='app'?await shrinkAppProof(b.photo):'';
     const r=await api('/api/tasks/'+encodeURIComponent(a.taskId)+'/submit','POST',{
-      attempt_id:a.attempt_id,answer:b.answer,evidence:b.evidence||'' });
+      attempt_id:a.attempt_id,answer:b.answer,evidence:b.evidence||'',...(a.category==='app'?{photo}:{}) });
     state.attempt=null;document.getElementById('modal-root').innerHTML='';toast(r.message);await afterAction('tasks');
   }
  }catch(err){
    if(kind==='task-claim'&&err.status===422&&state.attempt){
      state.attempt.a=err.a;state.attempt.b=err.b;
-     const evidence=b.evidence;renderAttemptModal();
-     if(evidence){const area=document.querySelector('#evidence');if(area)area.value=evidence;}
+     if(state.attempt.category==='app'){
+       const quiz=document.querySelector('#modal-root .captcha');if(quiz)quiz.textContent=err.a+' + '+err.b+' = ?';
+       const ans=document.querySelector('#modal-root #answer');if(ans)ans.value='';
+     }else{
+       const evidence=b.evidence;renderAttemptModal();
+       if(evidence){const area=document.querySelector('#evidence');if(area)area.value=evidence;}
+     }
    }
    toast(err.message,true);
  }finally{if(button&&button.isConnected)button.disabled=false;}

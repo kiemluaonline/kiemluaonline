@@ -176,3 +176,10 @@
 /* Chính sách IP riêng cho nhiệm vụ link: rõ ràng trên trang thành viên */
 .task-link-quota-note{margin:16px 0;border-radius:13px;border:1px solid #c6dfd2;background:#f3f9f5;padding:12px 15px;color:#285b43;font-size:13px;line-height:1.55}
 .task-link-blocked{margin:12px 0 0;border-radius:12px;border:1px solid #f0cebd;background:#fff6f1;color:#91432c;padding:12px;font-size:13px;line-height:1.55;font-weight:650}
+
+/* Nhiệm vụ App: gửi ảnh trực tiếp, chỉ Admin xem ảnh gốc đã nén. */
+.app-ref-code{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 12px;border:1px solid #cbdfd1;border-radius:11px;background:#f4faf5;font-size:13px;margin:12px 0}
+.app-ref-code strong{font-size:16px;letter-spacing:.7px;color:#145b42;overflow-wrap:anywhere}
+.app-proof-cell .small{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.app-proof-image{display:block;width:100%;max-height:68vh;object-fit:contain;border:1px solid #d8e5dd;border-radius:10px;background:#f8faf9;margin:12px 0}
+#photo{width:100%;max-width:100%;font-size:13px}
