@@ -197,29 +197,71 @@ function taskDashboardCard(d){
  </div>`;
 }
 
+
+// Một số trình duyệt trong ứng dụng mở được ipify trực tiếp nhưng hạn chế fetch chéo miền.
+// Phương án dự phòng chạy JSONP trong iframe sandbox, KHÔNG cho script bên ngoài
+// truy cập cookie, localStorage, DOM hoặc phiên đăng nhập của website.
+function ipv4FromSandboxedJSONP(){
+ return new Promise((resolve,reject)=>{
+  const token=crypto.randomUUID();
+  const frame=document.createElement('iframe');
+  frame.setAttribute('sandbox','allow-scripts');
+  frame.setAttribute('title','Kiểm tra IPv4 công khai');
+  frame.style.cssText='position:absolute;width:0;height:0;border:0;opacity:0;pointer-events:none';
+  let done=false;
+  const finish=(ip,error)=>{
+   if(done)return;
+   done=true;
+   window.removeEventListener('message',receive);
+   clearTimeout(timeout);
+   frame.remove();
+   if(isIPv4(ip))resolve(ip);
+   else reject(new Error(error||'IPv4 lookup did not return an address'));
+  };
+  const receive=e=>{
+   if(e.source!==frame.contentWindow||e.data?.kind!=='tram-lua-v4'||e.data?.token!==token)return;
+   finish(String(e.data.ip||''),'Invalid IPv4 JSONP response');
+  };
+  const timeout=setTimeout(()=>finish('', 'IPv4 JSONP timed out'),11000);
+  window.addEventListener('message',receive);
+  // The callback runs only in the opaque-origin sandbox; only a validated IPv4 is used.
+  frame.srcdoc='<!doctype html><meta charset="utf-8"><script>function tramLuaIPv4(d){parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',ip:d&&d.ip},"*");}</scr'+'ipt><script src="https://api.ipify.org?format=jsonp&callback=tramLuaIPv4"></scr'+'ipt>';
+  document.body.appendChild(frame);
+ });
+}
+async function resolvePublicIPv4(){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),8500);
+ try{
+  const response=await fetch('https://api.ipify.org?format=json',{
+   mode:'cors',cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',
+   signal:controller.signal
+  });
+  if(!response.ok)throw new Error('IPv4 fetch failed');
+  const payload=await response.json();
+  const ip=String(payload?.ip||'');
+  if(!isIPv4(ip))throw new Error('Invalid IPv4 response');
+  return ip;
+ }catch{
+  return await ipv4FromSandboxedJSONP();
+ }finally{
+  clearTimeout(timer);
+ }
+}
 async function detectPublicIPv4(button,silent=false){
  if(!button?.isConnected||button.disabled)return;
- const ipElement=document.getElementById('taskDisplayIP');
- if(!ipElement)return;
+ if(!document.getElementById('taskDisplayIP'))return;
  button.disabled=true;
  button.textContent='Đang tìm IPv4…';
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6500);
  try{
-  // Yêu cầu trực tiếp từ trình duyệt đến điểm cuối IPv4-only; không thể thay IPv6 của Cloudflare.
-  const response=await fetch('https://api.ipify.org?format=json',{
-   mode:'cors',cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal
-  });
-  if(!response.ok)throw new Error('IPv4 endpoint unavailable');
-  const json=await response.json();
-  const ip=String(json?.ip||'');
-  if(!isIPv4(ip))throw new Error('No actual public IPv4 returned');
+  const ip=await resolvePublicIPv4();
   const currentIP=document.getElementById('taskDisplayIP');
   const label=document.getElementById('taskIPLabel');
   if(!button.isConnected||!currentIP||!label||state.view!=='tasks')return;
   currentIP.textContent=ip;
-  label.textContent='IPv4 công khai • tự động phát hiện';
+  label.textContent='IPv4 công khai • kiểm tra trực tiếp';
   const note=document.getElementById('taskIPv4Help');
-  if(note)note.textContent='IPv4 do ipify đo từ đường kết nối hiện tại. Cloudflare có thể nhận IPv6 khác; mã IP không phải định danh thiết bị.';
+  if(note)note.textContent='IPv4 được kiểm tra từ trình duyệt qua ipify. Cloudflare có thể thấy IPv6 khác. Chỉ dùng IPv4 này để hiển thị, không dùng để tự động khóa tài khoản.';
   button.textContent='Kiểm tra lại IPv4';
   let copy=document.getElementById('taskCopyIPv4');
   if(!copy){
@@ -228,18 +270,18 @@ async function detectPublicIPv4(button,silent=false){
    copy.dataset.action='copy-ip';
    button.parentNode?.insertBefore(copy,button.nextSibling);
   }
-  copy.dataset.value=ip;copy.textContent='Sao chép IPv4';
-  if(!silent)toast('Đã phát hiện IPv4 công khai.');
- }catch(error){
+  copy.dataset.value=ip;
+  copy.textContent='Sao chép IPv4';
+  if(!silent)toast('Đã nhận diện IPv4 công khai.');
+ }catch{
   if(button.isConnected&&state.view==='tasks'){
    const label=document.getElementById('taskIPLabel');
-   if(label)label.textContent='IPv6 • chưa lấy được IPv4 công khai';
+   if(label)label.textContent='IPv6 • chưa đọc được IPv4 trong trang web';
    const note=document.getElementById('taskIPv4Help');
-   if(note)note.textContent='Không lấy được IPv4 trên kết nối này. Bạn vẫn có thể xem IPv6 thật hoặc thử lại. Việc kiểm tra dùng dịch vụ ipify.';
-   if(!silent)toast('Chưa lấy được IPv4. Hãy thử đổi mạng hoặc kiểm tra lại.',true);
+   if(note)note.textContent='Safari có thể mở ipify trực tiếp nhưng giới hạn yêu cầu từ trang web. Đã thử hai cách đọc IPv4; IPv6 thật vẫn được giữ và có thể sao chép.';
+   if(!silent)toast('Trình duyệt chưa trả IPv4 cho website. IP mạng vẫn được ghi nhận bằng IPv6.',true);
   }
  }finally{
-  clearTimeout(timer);
   if(button.isConnected){
    button.disabled=false;
    if(button.textContent==='Đang tìm IPv4…')button.textContent='Thử lại IPv4';
