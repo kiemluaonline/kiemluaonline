@@ -1,7 +1,8 @@
 // Trạm Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
-const PBKDF2_ROUNDS = 160000;
+// Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
+const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
 const DEFAULTS = {
   site_name: 'Trạm Lúa', signup_enabled: '1', checkin_reward: '0',
