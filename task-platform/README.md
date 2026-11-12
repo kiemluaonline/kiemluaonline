@@ -40,3 +40,19 @@ Chọn **Sửa** trên nhiệm vụ để đổi tiêu đề và hướng dẫn.
 **Ý nghĩa số liệu:** số dư khả dụng = tổng ledger (đã trừ số dư giữ cho yêu cầu rút). Chỉ số `Đã chuyển` là trạng thái do Admin ghi nhận, không chứng thực bằng tích hợp ngân hàng. Tiền chờ rút là số tiền đang bị giữ và không có trong số dư khả dụng. Đọc các chỉ số riêng biệt, không cộng tất cả để suy ra tổng tài sản. 
 
 **An toàn:** audit log chỉ nằm trong cùng SQLite database và chưa được bảo vệ chống sửa trực tiếp bởi người có quyền truy cập DB. Trước khi dùng tiền thật cần kiểm thử kỹ và bổ sung xác minh chuyển khoản, sao lưu, quyền riêng của nhật ký, báo cáo đối soát và rate limit.
+
+
+## V5: kiểm thử tự động và bảo mật cơ bản
+
+Chạy trong thư mục `task-platform`:
+
+```bash
+python -m pip install -r requirements.txt pytest
+python -m pytest -q tests
+```
+
+GitHub Actions ở `.github/workflows/task-platform-tests.yml` cũng kiểm tra cú pháp và chạy bộ test sau khi cập nhật mã nguồn. Vào tab **Actions** trên repository để xem kết quả; việc đã có workflow không có nghĩa là bộ test đã chạy thành công.
+
+Biện pháp bổ sung: giới hạn 5 lần đăng nhập sai trong cửa sổ 15 phút cho từng cặp tên đăng nhập/IP; giới hạn POST body 32 KiB; session hết hạn sau 12 giờ; CSP, X-Frame-Options, nosniff, Referrer-Policy, no-store. Ở môi trường `APP_ENV=production`, bắt buộc `SECRET_KEY` mạnh (>=32 ký tự) và `COOKIE_SECURE=1`; truy cập bằng HTTPS. Cơ chế hạn chế đăng nhập hiện tại chưa đủ thay thế hệ thống rate limit theo IP và giám sát chống brute-force quy mô lớn.
+
+`Dockerfile` chạy Waitress ở cổng 8000, nhưng **không được triển khai với database SQLite đặt trên ổ đĩa tạm hoặc trong container không có persistent volume**. Phải gắn volume bền vững ngoài container cho `DATABASE_PATH`, sao lưu tự động và kiểm thử phục hồi. Trong môi trường dùng nhiều worker/máy chủ, nên chuyển sang PostgreSQL và thiết kế migration chuẩn. Không sử dụng dữ liệu tiền thật ở môi trường staging.
