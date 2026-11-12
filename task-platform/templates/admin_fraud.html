@@ -1,0 +1,58 @@
+{% extends 'base.html' %}{% from '_pagination.html' import pages %}
+{% block title %}Trung tâm chống gian lận{% endblock %}
+{% block content %}
+<section class="page-head">
+ <div><span class="eyebrow">BẢO VỆ HỆ THỐNG</span><h1>Trung tâm chống gian lận</h1>
+ <p>Cảnh báo chỉ là dấu hiệu cần kiểm tra. Không tự động kết luận hay khóa thành viên.</p></div>
+ <a class="button button-outline" href="{{ url_for('admin_home') }}">← Admin</a>
+</section>
+<div class="form-card">
+ <div class="form-heading"><span class="form-icon">⚑</span><div><h2>Quy trình kiểm tra</h2>
+ <p>Cảnh báo rủi ro cao cần được xem xét trước khi xác nhận đã chuyển tiền. Thành viên vẫn đăng nhập, làm nhiệm vụ và yêu cầu rút bình thường.</p></div></div>
+ <p class="form-hint">Nếu phát hiện trùng tài khoản ngân hàng hay bằng chứng, hãy đối chiếu cẩn thận. Cùng gia đình hoặc cùng cơ quan có thể có những đặc điểm giống nhau. Quyết định xử lý cần có lý do cụ thể.</p>
+</div>
+<section class="section">
+ <div class="section-bar"><div><span class="eyebrow">HỒ SƠ CẢNH BÁO</span><h2>Danh sách cần kiểm tra</h2>
+ <p>{{ data.count }} cảnh báo phù hợp · {{ data.page }}/{{ data.pages }} trang</p></div></div>
+ <div class="table-card">
+ <form method="get" action="{{ url_for('admin_fraud') }}" class="filter-form">
+  <label for="status">Trạng thái</label>
+  <select name="status" id="status">
+   {% for value,label in [('open','Chưa xử lý'),('cleared','Không vi phạm'),('confirmed','Xác nhận dấu hiệu'),('all','Tất cả')] %}
+   <option value="{{ value }}" {% if status==value %}selected{% endif %}>{{ label }}</option>
+   {% endfor %}
+  </select>
+  <button class="button button-small">Lọc</button>
+ </form>
+ <div class="fraud-case-list">
+  {% for alert in data.rows %}
+  <article class="fraud-case">
+   <div class="fraud-case-head">
+    <div><strong>Hồ sơ #{{ alert.id }} · {{ alert.username }}</strong><small>ID thành viên #{{ alert.user_id }}</small></div>
+    <span class="status {{ 'status-rejected' if alert.severity>=60 else 'status-pending' }}">{{ alert.severity }}/100 điểm</span>
+   </div>
+   <p><strong>{{ {'duplicate_evidence':'Bằng chứng trùng lặp','shared_payout_account':'Trùng tài khoản nhận tiền'}.get(alert.kind,alert.kind) }}</strong></p>
+   <p>{{ alert.details }}</p>
+   <p><small>Đối tượng: {{ alert.target_type }} #{{ alert.target_id }} · {{ alert.created_at }} UTC</small></p>
+   {% if alert.status=='open' %}
+   <form method="post" action="{{ url_for('admin_review_fraud',alert_id=alert.id) }}" onsubmit="return confirm('Bạn đã kiểm tra thông tin và muốn lưu kết luận này?')">
+    <input type="hidden" name="csrf" value="{{ csrf() }}">
+    <label for="reason-{{ alert.id }}">Lý do quyết định (bắt buộc)</label>
+    <textarea id="reason-{{ alert.id }}" name="reason" minlength="10" maxlength="500" required placeholder="Ghi lý do và thông tin đã đối chiếu (không chép số tài khoản ngân hàng)..."></textarea>
+    <div class="action-buttons">
+     <button class="button button-small button-subtle" name="decision" value="cleared">Không vi phạm</button>
+     <button class="button button-small" name="decision" value="confirmed">Đã xem xét: có dấu hiệu</button>
+    </div>
+   </form>
+   {% else %}
+   <span class="status {{ 'status-approved' if alert.status=='cleared' else 'status-pending' }}">{{ 'Đã loại trừ' if alert.status=='cleared' else 'Đã xác nhận dấu hiệu' }}</span>
+   <p><small>Lý do: {{ alert.review_reason or '—' }}</small></p>
+   {% endif %}
+  </article>
+  {% else %}<div class="table-empty">Chưa có cảnh báo phù hợp.</div>{% endfor %}
+ </div>
+ {{ pages(data,'admin_fraud','page',extra={'status':status}) }}
+ </div>
+</section>
+<p class="form-hint">Cảnh báo «đã xác nhận dấu hiệu» chỉ có nghĩa Admin đã kiểm tra hồ sơ; đây không phải lệnh khóa hoặc tịch thu tiền. Mọi yêu cầu rút có cảnh báo mức cao đều cần đóng hồ sơ cảnh báo trước khi ghi nhận đã chuyển tiền.</p>
+{% endblock %}
