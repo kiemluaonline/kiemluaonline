@@ -30,7 +30,16 @@ const str = (v, max = 300) => String(v ?? '').trim().slice(0, max);
 const int = (v, defaultNum = 0) => /^-?\d+$/.test(String(v)) ? Number(v) : defaultNum;
 const positive = (v, max = 10000000) => Number.isSafeInteger(Number(v)) && Number(v) > 0 && Number(v) <= max;
 const isLocal = req => ['localhost', '127.0.0.1'].includes(new URL(req.url).hostname);
+// IP công khai do Cloudflare cung cấp ở edge; không lấy từ biểu mẫu người dùng.
 const clientIP = req => str(req.headers.get('CF-Connecting-IP') || (isLocal(req) ? 'local' : 'unknown'), 60);
+const browserDeviceId = req => {
+ const value=str(req.headers.get('X-TL-Device'),80);
+ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():'';
+};
+const maskedAccount = value => {
+ const digits=str(value,40).replace(/\D/g,'');
+ return digits.length>=6?digits.slice(0,2)+'******'+digits.slice(-2):'••••';
+};
 const bytesToHex = a => [...new Uint8Array(a)].map(v => v.toString(16).padStart(2, '0')).join('');
 const hexToBytes = hex => new Uint8Array(hex.match(/../g).map(v => parseInt(v, 16)));
 const hash = async data => bytesToHex(await crypto.subtle.digest('SHA-256', encoder.encode(data)));
@@ -49,8 +58,10 @@ async function checkPassword(password, user) {
   return difference === 0;
 }
 async function deviceCode(req, env) {
-  // Mã nhận diện gần đúng của cặp IP + trình duyệt, KHÔNG phải IMEI/thiết bị vật lý.
-  return (await hash((env.DEVICE_SALT || 'local-only') + '|' + clientIP(req) + '|' + str(req.headers.get('user-agent'), 300))).slice(0, 16).toUpperCase();
+ // Mã giả danh theo trình duyệt (không phải IMEI), có thể bị người dùng đổi hoặc xóa.
+ const stable=browserDeviceId(req);
+ const seed=stable?'browser:'+stable:'temporary:'+clientIP(req)+'|'+str(req.headers.get('user-agent'),300);
+ return (await hash((env.DEVICE_SALT || 'local-only')+'|'+seed)).slice(0,16).toUpperCase();
 }
 async function readBody(req) {
   const size = Number(req.headers.get('content-length') || 0);
@@ -214,8 +225,12 @@ async function handler(req, env) {
     const me = await auth(req, env);
     const result = await env.DB.prepare('SELECT COUNT(*) AS n FROM users WHERE referred_by=?').bind(me.id).first();
     const earned = await env.DB.prepare('SELECT COALESCE(SUM(amount),0) AS n FROM wallet_entries WHERE user_id=? AND amount>0').bind(me.id).first();
+    const code=await deviceCode(req,env),ip=clientIP(req);
+    // Bổ sung nhật ký IP hiện tại một lần/ngày theo tài khoản, IP và mã.
+    const seen=await env.DB.prepare("SELECT id FROM risk_events WHERE user_id=? AND device_code=? AND ip=? AND event_type='device_seen' AND created_at>=datetime('now','-1 day') LIMIT 1").bind(me.id,code,ip).first();
+    if(!seen)await event(env,req,'device_seen',me.id,browserDeviceId(req)?'browser_id':'temporary');
     return json({ user: me, balance: await wallet(env, me.id), earned: earned.n, referral_count: result.n,
-      ip: clientIP(req), device_code: await deviceCode(req, env) });
+      ip, device_code: code, device_registered: Boolean(browserDeviceId(req)) });
   }
   if (m === 'POST' && p === '/api/me/password') {
     const me = await auth(req, env), b = await readBody(req);
@@ -237,6 +252,21 @@ async function handler(req, env) {
       AND c.period_key=CASE WHEN t.repeat_policy='daily' THEN ? ELSE '*' END
       WHERE t.is_active=1 ORDER BY t.created_at DESC LIMIT 100`).bind(me.id, vnDay()).all();
     return json({ tasks: results.results });
+  }
+  if (m === 'GET' && p === '/api/task-dashboard') {
+    const me=await auth(req,env),today=vnDay();
+    const [todayLua,linkLua,submittedToday,latest] = await Promise.all([
+      env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM wallet_entries WHERE user_id=? AND amount>0 AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
+      env.DB.prepare("SELECT COALESCE(SUM(c.reward),0) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=? AND c.status='approved' AND t.category='link'").bind(me.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
+      env.DB.prepare("SELECT bank_account,vnd_amount,reviewed_at FROM withdrawals WHERE status='paid' ORDER BY reviewed_at DESC LIMIT 1").first()
+    ]);
+    return json({
+      today_lua:todayLua.n,link_lua:linkLua.n,submitted_today:submittedToday.n,
+      next_reset_at:Date.parse(today+'T00:00:00+07:00')+DAY,
+      ip:clientIP(req),device_code:await deviceCode(req,env),device_registered:Boolean(browserDeviceId(req)),
+      latest_payment:latest?{masked_account:maskedAccount(latest.bank_account),vnd_amount:latest.vnd_amount,at:latest.reviewed_at}:null
+    });
   }
   const startMatch = p.match(/^\/api\/tasks\/([^/]+)\/start$/);
   if (m === 'POST' && startMatch) {
@@ -452,9 +482,17 @@ async function handler(req, env) {
     }
     if (m === 'GET' && p === '/api/admin/risk-events') {
       const risks = await env.DB.prepare('SELECT * FROM risk_events ORDER BY created_at DESC LIMIT 150').all();
-      const recentIP = await env.DB.prepare(`SELECT joined_ip,COUNT(*) n FROM users WHERE joined_ip<>''
-        GROUP BY joined_ip HAVING COUNT(*)>=2 ORDER BY n DESC LIMIT 40`).all();
-      return json({ events: risks.results, repeated_ips: recentIP.results });
+      const [recentIP,sharedDevice]=await Promise.all([
+        env.DB.prepare(`SELECT ip,COUNT(DISTINCT user_id) AS n FROM risk_events
+          WHERE event_type='device_seen' AND user_id IS NOT NULL AND ip NOT IN ('unknown','local','')
+          AND created_at>=datetime('now','-30 days')
+          GROUP BY ip HAVING COUNT(DISTINCT user_id)>=2 ORDER BY n DESC LIMIT 40`).all(),
+        env.DB.prepare(`SELECT device_code,COUNT(DISTINCT user_id) AS n FROM risk_events
+          WHERE event_type='device_seen' AND detail='browser_id' AND user_id IS NOT NULL
+          AND created_at>=datetime('now','-30 days')
+          GROUP BY device_code HAVING COUNT(DISTINCT user_id)>=2 ORDER BY n DESC LIMIT 40`).all()
+      ]);
+      return json({ events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results });
     }
     if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env) });
     if (m === 'PUT' && p === '/api/admin/settings') {

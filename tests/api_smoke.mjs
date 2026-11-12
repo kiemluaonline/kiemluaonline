@@ -22,8 +22,8 @@ const env={
   }}
 };
 const origin='http://localhost:8787';
-async function call(path,method='GET',body, cookie='',ip='192.0.2.15'){
- const headers={'CF-Connecting-IP':ip,'User-Agent':'Test-Browser/1.0'};
+async function call(path,method='GET',body, cookie='',ip='192.0.2.15',device='11111111-2222-4333-8444-555555555555'){
+ const headers={'CF-Connecting-IP':ip,'User-Agent':'Test-Browser/1.0','X-TL-Device':device};
  if(body!==undefined){headers['Content-Type']='application/json';headers['Origin']=origin;headers['X-Tram-Lua']='1';}
  if(cookie)headers['Cookie']=cookie;
  const r=await worker.fetch(new Request(origin+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),env);
@@ -64,6 +64,15 @@ const dup=await call(`/api/tasks/${taskId}/submit`,'POST',{attempt_id:a.attempt_
 assert.equal(dup.status,410);
 const userMe=await call('/api/me','GET',undefined,cookie,'203.0.113.10');
 assert.equal(userMe.data.balance,100);assert.equal(userMe.data.device_code.length,16);
+assert.equal(userMe.data.device_registered,true);
+const changedIp=await call('/api/me','GET',undefined,cookie,'198.51.100.22');
+assert.equal(changedIp.data.device_code,userMe.data.device_code,'Same browser ID must survive IP change');
+const changedDevice=await call('/api/me','GET',undefined,cookie,'203.0.113.10','99999999-2222-4333-8444-555555555555');
+assert.notEqual(changedDevice.data.device_code,userMe.data.device_code);
+const beforePayment=await call('/api/task-dashboard','GET',undefined,cookie);
+assert.equal(beforePayment.status,200);
+assert.equal(beforePayment.data.latest_payment,null,'No invented payout');
+assert.equal(typeof beforePayment.data.submitted_today,'number');
 const referralMe=await call('/api/me','GET',undefined,refCookie);
 assert.equal(referralMe.data.balance,25);
 const checkin=await call('/api/checkin','POST',{},cookie,'203.0.113.10');assert.equal(checkin.status,200);
@@ -99,6 +108,15 @@ const w2=await call('/api/withdrawals','POST',{amount:20,bank_name:'Ngan hang A'
 assert.equal(w2.status,200);
 assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'paid',admin_note:'Giao dich da doi chieu'},admCookie)).status,200);
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,115);
+const dashboard=await call('/api/task-dashboard','GET',undefined,cookie,'203.0.113.10');
+assert.equal(dashboard.status,200);
+assert.equal(dashboard.data.latest_payment.vnd_amount,2);
+assert.equal(dashboard.data.latest_payment.masked_account,'12******90');
+assert.equal(dashboard.data.latest_payment.bank_account,undefined);
+assert.ok(dashboard.data.link_lua>=100);
+const riskSummary=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.equal(riskSummary.status,200);
+assert.ok(Array.isArray(riskSummary.data.repeated_devices));
 const change=await call('/api/me/password','POST',{old_password:'user-password-2026',new_password:'My-new-2026-password'},cookie,'203.0.113.10');
 assert.equal(change.status,200);
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).status,401);
