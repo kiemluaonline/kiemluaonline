@@ -342,7 +342,7 @@ async function taskQuota(env,req,userId,settings){
 // Điều kiện được kiểm tra lại trong cùng transaction ghi nhận nhiệm vụ, tránh vượt
 // quota khi nhiều yêu cầu đồng thời. Không ghi nhiệm vụ thì không cộng Lúa.
 const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
- WHERE id=? AND user_id=? AND consumed_by IS NULL AND expires_at>? AND available_at<=?
+ WHERE id=? AND user_id=? AND consumed_by IS NULL AND expires_at>? AND (available_at<=? OR ?<>'video')
  AND (?=0 OR
   (SELECT COUNT(*) FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)
  AND (?=0 OR
@@ -469,7 +469,7 @@ async function resolveTaskCategory(env,task) {
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
   const title = str(b.title, 120), description = str(b.description, 1200), category = str(b.category, 20);
-  const url = str(b.url, 700), reward = Number(b.reward), minSeconds = Number(b.min_seconds);
+  const url = str(b.url, 700), reward = Number(b.reward), minSeconds = category === 'video' ? Number(b.min_seconds) : 5;
   const review = str(b.review_mode, 20), repeat = str(b.repeat_policy, 20);
   if (title.length < 3) fail(400, 'Tiêu đề nhiệm vụ phải có ít nhất 3 ký tự.');
   if (!['video', 'link', 'other', 'app'].includes(category)) fail(400, 'Loại nhiệm vụ không hợp lệ.');
@@ -800,7 +800,7 @@ async function handler(req, env) {
     await linkBrowserQuota(env,req,me.id,task,settings);
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
-    const a = rand(), b = rand(), attempt = id(), available = now() + task.min_seconds * 1000;
+    const a = rand(), b = rand(), attempt = id(), available = now() + (task.category === 'video' ? task.min_seconds * 1000 : 0);
     await env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
        VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, now() + 20 * 60000,
       clientIP(req), await deviceCode(req, env)).run();
@@ -815,7 +815,7 @@ async function handler(req, env) {
     const attempt = await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=?')
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
     if (!attempt || attempt.consumed_by || attempt.expires_at <= now()) fail(410, 'Phiên nhiệm vụ hết hạn. Vui lòng mở lại nhiệm vụ.');
-    if (now() < attempt.available_at) fail(425, 'Chưa đủ thời gian thực hiện nhiệm vụ.', { remaining_seconds: Math.ceil((attempt.available_at - now()) / 1000) });
+    if (task.category === 'video' && now() < attempt.available_at) fail(425, 'Chưa đủ thời gian thực hiện nhiệm vụ.', { remaining_seconds: Math.ceil((attempt.available_at - now()) / 1000) });
     if (Number(body.answer) !== attempt.captcha_a + attempt.captcha_b || !/^\d+$/.test(String(body.answer))) {
       const a = rand(), b = rand();
       await env.DB.prepare('UPDATE task_attempts SET captcha_a=?,captcha_b=? WHERE id=? AND consumed_by IS NULL').bind(a, b, attempt.id).run();
@@ -837,7 +837,7 @@ async function handler(req, env) {
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
     const batch = await env.DB.batch([
       env.DB.prepare(TASK_CLAIM_UPDATE)
-        .bind(completionId, attempt.id, me.id, now(), now(),
+        .bind(completionId, attempt.id, me.id, now(), now(), task.category,
           quota.maxUser,me.id,quota.day,quota.maxUser,
           quota.maxIP,quota.ip,me.id,quota.day,quota.maxIP,
           quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice,

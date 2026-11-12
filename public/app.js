@@ -426,7 +426,7 @@ async function tasks(){
  <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':t.category==='app'?'📱':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
  <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
  ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
- <div class="task-meta"><span>${t.min_seconds} giây tối thiểu</span><span>•</span><span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
+ <div class="task-meta">${t.category==='video'?`<span>${t.min_seconds} giây tối thiểu</span><span>•</span>`:''}<span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
  <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / 24 giờ`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
  ${t.link_blocked
    ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_browser_owner'?'Trình duyệt này đã làm nhiệm vụ link bằng tài khoản khác trong 24 giờ. Đổi IP, VPN hay 4G không đặt lại lượt.':t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong 24 giờ qua. Đổi mạng không làm mới lượt.':t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':t.link_blocked==='link_owner'?'IP này đã thực hiện nhiệm vụ link bằng tài khoản khác trong 24 giờ. Hãy chờ hoặc liên hệ Admin.':t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong 24 giờ qua.':'Nhiệm vụ link này đã hết lượt trong 24 giờ qua.'}</p>`
@@ -492,18 +492,18 @@ function taskForm(task={}){
  ${field('title','Tên nhiệm vụ',task.title||'', 'required minlength="3"')}
  <div class="field"><label for="description">Hướng dẫn / mô tả</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
  <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Liên kết'],['app','App (tải & nhập mã)'],['other','Khác']],task.category||'video')}
- ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động theo thời gian và CAPTCHA']],task.review_mode||'manual')}</div>
+ ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động sau khi xác nhận CAPTCHA']],task.review_mode||'manual')}</div>
  ${field('url','URL HTTPS (link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
  <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
  ${field('link_24h_limit','Lượt link này / tài khoản / 24 giờ',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
  <p class="note">Chỉ áp dụng loại Liên kết. Nhập 1 giữ chính sách lặp đang chọn; nhập 2 cho phép tối đa 2 lần làm cùng nhiệm vụ trong 24 giờ gần nhất (nếu quota IP vẫn còn).</p>
  <div class="form-row">${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
- ${field('min_seconds','Thời gian tối thiểu (giây)',task.min_seconds||15,'type="number" min="5" max="3600" required')}</div>
+ <div id="task-time-field" ${(task.category||'video')==='video'?'':'hidden'}>${field('min_seconds','Thời gian tối thiểu cho Video (giây)',task.min_seconds||15,`type="number" min="5" max="3600" ${(task.category||'video')==='video'?'required':'disabled'}`)}</div></div>
  <div class="form-row">${select('repeat_policy','Lặp lại',[['once','Mỗi người một lần'],['daily','Mỗi ngày một lần']],task.repeat_policy||'once')}
  ${select('is_active','Trạng thái',[['1','Bật công khai'],['0','Tắt / nháp']],Number(task.is_active||0).toString())}</div>
  <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?'<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button>':''}</div>
- <p class="note">Chỉ dùng chế độ tự động cho nhiệm vụ có thể kiểm tra bằng thời gian + CAPTCHA. Không có khả năng xác minh người xem thực sự đã xem video tại nền tảng bên ngoài.</p></form>`;
+ <p class="note">Nhiệm vụ App, Link và Khác không yêu cầu thời gian chờ. Chỉ nhiệm vụ Video áp dụng thời gian tối thiểu. Không có khả năng xác minh người xem thực sự đã xem video tại nền tảng bên ngoài.</p></form>`;
 }
 async function adminTasks(){
  const d=await api('/api/admin/tasks');state.adminTasks=d.tasks;
@@ -587,18 +587,18 @@ async function startTask(taskId){
 }
 function renderAttemptModal(){
  const a=state.attempt;if(!a)return;
- const remain=Math.max(0,Math.ceil((a.available_at-Date.now())/1000));
+ const remain=a.category==='video'?Math.max(0,Math.ceil((a.available_at-Date.now())/1000)):0;
  const root=document.getElementById('modal-root');
  root.innerHTML=`<div class="modal-cover"><section class="modal"><button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
  <span class="eyebrow">KIỂM TRA THỰC HIỆN</span><h3>Hoàn thành nhiệm vụ</h3>
  ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
- <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra thời gian và CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
+ <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
  ${a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
  <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
  ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
  ${a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
  <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
- <p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p></form></section></div>`;
+ ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
 }
 
 async function shrinkAppProof(file) {
@@ -647,6 +647,14 @@ async function shrinkAppProof(file) {
 }
 
 async function afterAction(view=state.view){await refreshMe();if(state.me)await navigate(view);}
+
+app.addEventListener('change',e=>{
+ if(e.target.matches('#task-form [name="category"]')){
+  const video=e.target.value==='video', input=document.querySelector('#task-form [name="min_seconds"]');
+  document.getElementById('task-time-field').hidden=!video;
+  input.disabled=!video;input.required=video;
+ }
+});
 
 window.addEventListener('resize',()=>{
  if(app.querySelector('.layout'))setMenuOpen(false);

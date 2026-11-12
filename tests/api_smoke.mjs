@@ -52,9 +52,9 @@ await call('/api/admin/settings','PUT',{referral_reward:'25',checkin_reward:'5',
 const start=await call(`/api/tasks/${taskId}/start`,'POST',{},cookie,'203.0.113.10');
 assert.equal(start.status,200,JSON.stringify(start));
 const a=start.data;
-let tooEarly=await call(`/api/tasks/${taskId}/submit`,'POST',{attempt_id:a.attempt_id,answer:a.a+a.b},cookie,'203.0.113.10');
-assert.equal(tooEarly.status,425,JSON.stringify(tooEarly));
-sqlite.prepare('UPDATE task_attempts SET available_at=0 WHERE id=?').run(a.attempt_id);
+assert.ok(a.available_at<=Date.now());
+// Existing attempts created before removal of the timer must also work.
+sqlite.prepare('UPDATE task_attempts SET available_at=? WHERE id=?').run(Date.now()+60000,a.attempt_id);
 const wrong=await call(`/api/tasks/${taskId}/submit`,'POST',{attempt_id:a.attempt_id,answer:999},cookie,'203.0.113.10');
 assert.equal(wrong.status,422,JSON.stringify(wrong));
 const claim=await call(`/api/tasks/${taskId}/submit`,'POST',{attempt_id:a.attempt_id,answer:wrong.data.a+wrong.data.b},cookie,'203.0.113.10');
@@ -89,7 +89,7 @@ const taskManual=await call('/api/admin/tasks','POST',{title:'Gửi minh chứng
 assert.equal(taskManual.status,201,JSON.stringify(taskManual));
 const mid=taskManual.data.id;
 const ms=await call(`/api/tasks/${mid}/start`,'POST',{},cookie,'203.0.113.10');
-sqlite.prepare('UPDATE task_attempts SET available_at=0 WHERE id=?').run(ms.data.attempt_id);
+assert.ok(ms.data.available_at<=Date.now());
 const evidence=await call(`/api/tasks/${mid}/submit`,'POST',{attempt_id:ms.data.attempt_id,answer:ms.data.a+ms.data.b,evidence:'Bằng chứng là đường dẫn https://example.com/task'},cookie,'203.0.113.10');
 assert.equal(evidence.status,200,JSON.stringify(evidence));assert.equal(evidence.data.status,'pending');
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
@@ -310,7 +310,8 @@ assert.ok(newLogin.cookie);
  const appStart=await call('/api/tasks/'+appTaskID+'/start','POST',{},user2.cookie,appIP,user2Device);
  assert.equal(appStart.status,200,JSON.stringify(appStart));
  assert.equal(appStart.data.category,'app');
- sqlite.prepare('UPDATE task_attempts SET available_at=? WHERE id=?').run(Date.now()-1,appStart.data.attempt_id);
+ assert.ok(appStart.data.available_at<=Date.now());
+ sqlite.prepare('UPDATE task_attempts SET available_at=? WHERE id=?').run(Date.now()+60000,appStart.data.attempt_id);
  const missingPhoto=await call('/api/tasks/'+appTaskID+'/submit','POST',{attempt_id:appStart.data.attempt_id,answer:appStart.data.a+appStart.data.b},user2.cookie,appIP,user2Device);
  assert.equal(missingPhoto.status,400);
  const jpg=Buffer.concat([Buffer.from([255,216,255,224]),Buffer.alloc(1300)]).toString('base64');
@@ -417,3 +418,17 @@ assert.ok(newLogin.cookie);
 
 await worker.scheduled({},env); // Xác nhận tác vụ dọn dẹp hoạt động trong mô phỏng.
 console.log('PASS: link IP độc quyền 24h, giới hạn 2 lượt/IP, 2 lượt/nhiệm vụ, mở lại sau 24h, quota chống nhiều tài khoản/IP/trình duyệt, Admin cấu hình, tài khoản không bị khóa, admin setup một lần, thành viên, giới thiệu, CAPTCHA đổi câu hỏi, chờ thời gian, cộng Lúa một lần, điểm danh, giữ/hoàn Lúa, duyệt bằng chứng, chống duyệt trùng, phân quyền, lịch sử.');
+
+// Video continues to enforce its configured wait on the server.
+const videoTask=await call('/api/admin/tasks','POST',{title:'Video giữ thời gian',category:'video',url:'https://example.com/video',reward:1,min_seconds:60,review_mode:'auto',repeat_policy:'once',is_active:true},admCookie);
+assert.equal(videoTask.status,201,JSON.stringify(videoTask));
+const videoStart=await call(`/api/tasks/${videoTask.data.id}/start`,'POST',{},admCookie,'198.51.100.252','a1111111-2222-4333-8444-555555555555');
+assert.equal(videoStart.status,200,JSON.stringify(videoStart));
+const va=videoStart.data;
+assert.ok(va.available_at>Date.now());
+const videoEarly=await call(`/api/tasks/${videoTask.data.id}/submit`,'POST',{attempt_id:va.attempt_id,answer:va.a+va.b},admCookie,'198.51.100.252','a1111111-2222-4333-8444-555555555555');
+assert.equal(videoEarly.status,425,JSON.stringify(videoEarly));
+sqlite.prepare('UPDATE task_attempts SET available_at=0 WHERE id=?').run(va.attempt_id);
+const videoDone=await call(`/api/tasks/${videoTask.data.id}/submit`,'POST',{attempt_id:va.attempt_id,answer:va.a+va.b},admCookie,'198.51.100.252','a1111111-2222-4333-8444-555555555555');
+assert.equal(videoDone.status,200,JSON.stringify(videoDone));
+console.log('PASS: App/Link/Other submit without wait, legacy attempts accepted, Video wait enforced.');
