@@ -164,6 +164,48 @@ function referralCode() { return newToken().slice(0, 10).toUpperCase(); }
 function ensureEmail(email) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) fail(400, 'Email không hợp lệ.');
 }
+
+const TEMP_MAIL_DOMAINS=new Set([
+ '10minutemail.com','10minutemail.net','mailinator.com','guerrillamail.com',
+ 'guerrillamail.info','sharklasers.com','grr.la','yopmail.com','yopmail.fr',
+ 'maildrop.cc','temp-mail.org','tempmail.com','tempmail.net','tempmail.dev',
+ 'trashmail.com','trashmail.net','getnada.com','dispostable.com',
+ 'throwawaymail.com','emailondeck.com','mailnesia.com','mohmal.com',
+ 'mintemail.com','tempmailo.com','fakeinbox.com','inboxkitten.com',
+ 'minuteinbox.com','dropmail.me','mail.tm','tempmail.plus',
+ '1secmail.com','1secmail.net','1secmail.org','1secmail.cc'
+]);
+const gmailDomain=d=>d==='gmail.com'||d==='googlemail.com';
+function canonicalEmail(input){
+ const email=normEmail(input),at=email.lastIndexOf('@');
+ if(at<0)return email;
+ const domain=email.slice(at+1);
+ if(!gmailDomain(domain))return email;
+ return email.slice(0,at).split('+')[0].replace(/\./g,'')+'@gmail.com';
+}
+function preventDisposable(email){
+ const domain=normEmail(email).split('@').pop();
+ if(TEMP_MAIL_DOMAINS.has(domain))fail(400,'Không chấp nhận email tạm thời. Hãy dùng email cá nhân.');
+}
+async function registeredEmail(env,email){
+ const exact=await env.DB.prepare('SELECT id,email FROM users WHERE email=?').bind(normEmail(email)).first();
+ if(exact)return exact;
+ if(!canonicalEmail(email).endsWith('@gmail.com'))return null;
+ const canonical=canonicalEmail(email);
+ const rows=await env.DB.prepare("SELECT id,email FROM users WHERE lower(email) LIKE '%@gmail.com' OR lower(email) LIKE '%@googlemail.com'").all();
+ return rows.results.find(user=>canonicalEmail(user.email)===canonical)||null;
+}
+async function signupRateLimit(env,req){
+ const ip=clientIP(req);
+ const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE joined_ip=? AND created_at>=datetime('now','-1 day')").bind(ip).first();
+ if(recent.n>=3){await event(env,req,'signup_rate_limited',null,'IP: 3 tài khoản/24h');fail(429,'Mạng này đã tạo quá nhiều tài khoản trong 24 giờ.');}
+ if(browserDeviceId(req)){
+  const code=await deviceCode(req,env);
+  const result=await env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM risk_events WHERE event_type='signup_completed' AND device_code=? AND created_at>=datetime('now','-1 day')").bind(code).first();
+  if(result.n>=2){await event(env,req,'signup_device_limit',null,'mã trình duyệt');fail(429,'Trình duyệt này đã tạo quá nhiều tài khoản trong 24 giờ.');}
+ }
+}
+
 function ensurePassword(password) {
   if (typeof password !== 'string' || password.length < 10 || password.length > 128) fail(400, 'Mật khẩu phải có 10–128 ký tự.');
 }
@@ -379,16 +421,18 @@ async function handler(req, env) {
     const email = normEmail(b.email), password = b.password, name = str(b.name, 70);
     if (b.accept_terms !== 'yes') fail(400, 'Bạn cần đồng ý với điều khoản và chính sách dữ liệu.');
     ensureEmail(email); ensurePassword(password);
-    if (name.length < 2) fail(400, 'Họ tên cần ít nhất 2 ký tự.');
-    const ip = clientIP(req);
-    const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE joined_ip=? AND created_at >= datetime('now','-1 day')").bind(ip).first();
-    if (recent.n >= 3) { await event(env, req, 'signup_rate_limited', null, email); fail(429, 'IP này đã tạo quá nhiều tài khoản trong 24 giờ.'); }
-    const taken = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
-    if (taken) fail(409, 'Email đã được đăng ký.');
+    preventDisposable(email);
+    if(googleReady(env)&&gmailDomain(email.split('@')[1]))
+      fail(400,'Gmail mới phải đăng ký bằng Google để xác minh địa chỉ. Tài khoản cũ vẫn đăng nhập bằng mật khẩu.');
+    if(name.length<2)fail(400,'Họ tên cần ít nhất 2 ký tự.');
+    const ip=clientIP(req);
+    await signupRateLimit(env,req);
+    if(await registeredEmail(env,email))fail(409,'Email đã được đăng ký hoặc trùng biến thể Gmail.');
     const ref = str(b.referral_code, 30).toUpperCase();
     const refUser = ref ? await env.DB.prepare('SELECT id FROM users WHERE referral_code=? AND status=\'active\'').bind(ref).first() : null;
     if (ref && !refUser) fail(400, 'Mã giới thiệu không tồn tại.');
     const userId = await registerUser(env, { email, password, name, role: 'member', ip, referredBy: refUser?.id });
+    await event(env,req,'signup_completed',userId,'email_password');
     return json({ ok: true, message: 'Đăng ký thành công.' }, 201, { 'Set-Cookie': await createSession(req, env, userId) });
   }
   if (m === 'POST' && p === '/api/auth/login') {
