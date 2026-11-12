@@ -159,10 +159,18 @@ function taskDashboardCard(d){
     <div class="card task-stat"><span>✓ NHIỆM VỤ ĐÃ GỬI HÔM NAY</span><strong>${fmt(d.submitted_today)}</strong></div>
     <div class="card task-stat"><span>↻ ĐỔI NGÀY SAU</span><strong id="taskResetCountdown" data-reset-at="${Number(d.next_reset_at)}">--:--:--</strong></div>
   </div>
-  <section class="card task-device-card"><h3>🛡️ Hệ thống chống gian lận</h3>
-   <p>IP công khai hiện tại (Cloudflare nhận được)</p><div class="task-ip-value">${esc(d.ip||'Chưa xác định')}</div>
-   <div class="task-device-status">▣ ${d.device_registered?'Đã lưu mã nhận diện cho trình duyệt này':'Mã tạm: trình duyệt chưa lưu nhận diện'}<div class="task-device-code">${esc(d.device_code||'—')}</div></div>
-   <p class="note">Mã do website tạo riêng cho trình duyệt, không phải IMEI hoặc mã phần cứng. Mã có thể thay đổi nếu xóa dữ liệu duyệt web hoặc dùng ẩn danh. IP có thể thay đổi khi đổi mạng/VPN; trùng IP không tự động là gian lận.</p>
+  <section class="card task-device-card" aria-label="IP mạng và nhận diện trình duyệt">
+   <div class="task-ip-heading">
+    <svg class="task-ip-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 4.2-5 13.8 0 18M12 3c5 4.2 5 13.8 0 18"/></svg>
+    <h3>IP hiện tại</h3>
+   </div>
+   <div class="task-ip-value" data-ip-version="${/^(?:\d{1,3}\.){3}\d{1,3}$/.test(d.ip||'')?'v4':String(d.ip||'').includes(':')?'v6':'unknown'}">${esc(d.ip||'Chưa xác định')}</div>
+   <p class="task-ip-help">Đây là địa chỉ IP công khai của mạng đang truy cập, do Cloudflare ghi nhận. ${String(d.ip||'').includes(':')?'Kết nối đang dùng IPv6 nên địa chỉ dài hơn dạng IPv4.':''}</p>
+   <div class="task-device-tag">
+    <svg class="task-phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M10.5 18.5h3"/></svg>
+    <div><strong>${d.device_registered?'Đã nhận diện trình duyệt':'Nhận diện tạm thời'}</strong><span>${esc(d.device_code||'—')}</span></div>
+   </div>
+   <p class="task-device-note">Mã nhận diện do website lưu trên trình duyệt, không phải IMEI. IP hoặc mã có thể thay đổi; không tự kết luận gian lận chỉ dựa vào chúng.</p>
   </section>
  </div>`;
 }

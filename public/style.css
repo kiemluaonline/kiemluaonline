@@ -59,3 +59,75 @@
 .task-list-heading{margin:25px 0 16px;font-size:21px}
 @media(max-width:730px){.task-stats{gap:10px}.task-stat{padding:15px 12px;min-height:99px}
 .task-stat span{font-size:10px}.task-stat strong{font-size:18px}.task-payment{padding:17px}}
+
+
+/* IP network card: compact, close to reference layout. */
+.task-device-card{
+ padding:22px 24px;
+ border:1px solid #dbe4ea;
+ background:#fff;
+ border-radius:22px;
+ box-shadow:0 2px 8px rgba(32,59,71,.06);
+}
+.task-ip-heading{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+.task-ip-globe{width:27px;height:27px;flex-shrink:0;color:#3487fa}
+.task-device-card .task-ip-heading h3{
+ margin:0;
+ font-size:clamp(17px,2.3vw,23px);
+ font-weight:650;
+ color:#657489;
+}
+.task-device-card .task-ip-value{
+ margin:0 0 12px;
+ font-size:clamp(23px,4.6vw,36px);
+ line-height:1.2;
+ letter-spacing:.25px;
+ font-weight:850;
+ color:#141b2d;
+ overflow-wrap:anywhere;
+ font-variant-numeric:tabular-nums;
+}
+.task-device-card .task-ip-value[data-ip-version="v6"]{
+ font-size:clamp(16px,3.1vw,24px);
+ line-height:1.4;
+}
+.task-device-card .task-ip-help{
+ color:#63748a;
+ font-size:14px;
+ line-height:1.55;
+ margin:0 0 14px;
+}
+.task-device-tag{
+ display:inline-flex;
+ align-items:center;
+ gap:11px;
+ max-width:100%;
+ padding:10px 13px;
+ background:#f5f7fa;
+ border-radius:15px;
+ color:#35445c;
+}
+.task-phone-icon{width:22px;height:22px;flex-shrink:0}
+.task-device-tag strong{font-size:14px;font-weight:750;line-height:1.35;display:block}
+.task-device-tag span{
+ display:block;
+ font-size:12px;
+ color:#8996ac;
+ margin-top:3px;
+ overflow-wrap:anywhere;
+}
+.task-device-card .task-device-note{
+ color:#788596;
+ font-size:12px;
+ line-height:1.55;
+ margin:12px 0 0;
+}
+@media(max-width:730px){
+ .task-device-card{padding:17px 18px;border-radius:18px}
+ .task-ip-globe{width:23px;height:23px}
+ .task-ip-heading{margin-bottom:9px;gap:9px}
+ .task-device-card .task-ip-value{font-size:clamp(23px,6.5vw,31px);margin-bottom:10px}
+ .task-device-card .task-ip-value[data-ip-version="v6"]{font-size:17px}
+ .task-device-card .task-ip-help{font-size:13px;margin-bottom:12px}
+ .task-device-tag{padding:9px 12px;border-radius:13px}
+}
