@@ -1,6 +1,6 @@
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
-const state = { meta: {}, me: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null };
+const state = { meta: {}, me: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all' };
 const NAV = [
   ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['referrals','♧','Tuyển Ref'],
   ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
@@ -365,6 +365,7 @@ function startTaskResetTimer(){
 }
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
+ const shownTasks=data.tasks.filter(t=>state.taskFilter==='all'||t.category===state.taskFilter);
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
@@ -372,7 +373,8 @@ async function tasks(){
  ${(data.link_quota?.limit>0||data.link_quota?.exclusive)?`<div class="task-link-quota-note">🔒 Nhiệm vụ link trên IP này: ${data.link_quota.used}/${data.link_quota.limit} lượt trong 24 giờ gần nhất. ${data.link_quota.exclusive?'Nếu đã có tài khoản gửi link từ IP này, tài khoản khác phải chờ hết 24 giờ.':''}</div>`:''}
  ${(data.browser_quota?.limit>0||data.browser_quota?.exclusive)?`<div class="task-link-quota-note">📱 Giới hạn trình duyệt: ${data.browser_quota.used}/${data.browser_quota.limit||'∞'} lượt link trong 24 giờ gần nhất. Đổi IP, VPN, Wi-Fi hay 4G không đặt lại số lượt của cùng mã trình duyệt. ${data.browser_quota.exclusive?'Tài khoản khác dùng chung mã trình duyệt cũng bị giới hạn.':''}</div>`:''}
  <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
- ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
+ <div class="task-filter-row">${[['all','Tất cả'],['app','📱 Nhiệm vụ App'],['link','🔗 Link'],['video','🎬 Video'],['other','Khác']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
+ ${shownTasks.length?`<div class="grid">${shownTasks.map(t=>`<article class="card task-card">
  <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':t.category==='app'?'📱':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
  <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
  ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
@@ -615,6 +617,7 @@ app.addEventListener('click',async e=>{
   if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.authMode='login';renderAuth();return;}
+  if(act==='filter-tasks'){state.taskFilter=el.dataset.filter||'all';await navigate('tasks');return;}
   if(act==='start-task'){await startTask(el.dataset.id);return;}
   if(act==='view-photo'){
    const root=document.getElementById('modal-root');
