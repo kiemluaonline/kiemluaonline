@@ -124,7 +124,8 @@ def withdraw():
 @admin
 def admin_home():
  c=db()
- return render_template("admin.html",tasks=c.execute("SELECT * FROM tasks ORDER BY id DESC").fetchall(),submissions=c.execute("SELECT s.*,u.username,t.title,t.reward FROM submissions s JOIN users u ON u.id=s.user_id JOIN tasks t ON t.id=s.task_id ORDER BY s.id DESC").fetchall(),withdrawals=c.execute("SELECT w.*,u.username FROM withdrawals w JOIN users u ON w.user_id=u.id ORDER BY w.id DESC").fetchall())
+ member_count=c.execute("SELECT COUNT(*) n FROM users WHERE role='user'").fetchone()["n"]
+ return render_template("admin.html",member_count=member_count,tasks=c.execute("SELECT * FROM tasks ORDER BY id DESC").fetchall(),submissions=c.execute("SELECT s.*,u.username,t.title,t.reward FROM submissions s JOIN users u ON u.id=s.user_id JOIN tasks t ON t.id=s.task_id ORDER BY s.id DESC").fetchall(),withdrawals=c.execute("SELECT w.*,u.username FROM withdrawals w JOIN users u ON w.user_id=u.id ORDER BY w.id DESC").fetchall())
 @app.post("/admin/task")
 @admin
 def create_task():
@@ -171,4 +172,98 @@ def payout(wid,decision):
   if c.in_transaction:c.execute("ROLLBACK")
   raise
  return redirect(url_for("admin_home"))
+
+# V3 administration: immutable manual adjustments and member detail.
+def ensure_adjustments_table():
+ db().execute("""CREATE TABLE IF NOT EXISTS admin_adjustments(
+ id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, admin_id INTEGER NOT NULL,
+ amount INTEGER NOT NULL CHECK(amount != 0), reason TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+
+@app.get("/admin/members")
+@admin
+def admin_members():
+ search=request.args.get("q","").strip()[:80]
+ rows=db().execute("""SELECT u.id,u.username,u.role,
+ COALESCE((SELECT SUM(amount) FROM ledger WHERE user_id=u.id),0) current_balance,
+ (SELECT COUNT(*) FROM submissions WHERE user_id=u.id) submission_count
+ FROM users u WHERE u.username LIKE ? COLLATE NOCASE ORDER BY u.id DESC LIMIT 100""",("%"+search+"%",)).fetchall()
+ total=db().execute("SELECT COUNT(*) n FROM users WHERE role='user'").fetchone()["n"]
+ return render_template("admin_members.html",users=rows,search=search,total=total)
+
+@app.get("/admin/members/<int:uid>")
+@admin
+def admin_member(uid):
+ ensure_adjustments_table()
+ user=db().execute("SELECT id,username,role FROM users WHERE id=?",(uid,)).fetchone()
+ if not user:abort(404)
+ entries=db().execute("""SELECT l.*,a.reason,a.created_at FROM ledger l
+ LEFT JOIN admin_adjustments a ON l.kind='manual' AND a.id=l.reference_id
+ WHERE l.user_id=? ORDER BY l.id DESC LIMIT 100""",(uid,)).fetchall()
+ submissions=db().execute("""SELECT s.status,t.title,t.reward FROM submissions s JOIN tasks t
+ ON t.id=s.task_id WHERE s.user_id=? ORDER BY s.id DESC LIMIT 50""",(uid,)).fetchall()
+ withdrawals=db().execute("SELECT amount,status FROM withdrawals WHERE user_id=? ORDER BY id DESC LIMIT 50",(uid,)).fetchall()
+ return render_template("admin_member.html",member=user,balance=balance(uid),entries=entries,submissions=submissions,withdrawals=withdrawals)
+
+@app.post("/admin/members/<int:uid>/adjust")
+@admin
+def admin_adjust(uid):
+ ensure_adjustments_table()
+ reason=request.form.get("reason","").strip()
+ if not 10<=len(reason)<=300:abort(400)
+ try: delta=int(request.form.get("amount",""))
+ except (ValueError,TypeError):abort(400)
+ if not delta or abs(delta)>100000000:abort(400)
+ c=db()
+ try:
+  c.execute("BEGIN IMMEDIATE")
+  user=c.execute("SELECT role FROM users WHERE id=?",(uid,)).fetchone()
+  if not user:abort(404)
+  if user["role"]!="user":abort(403)
+  if delta<0 and balance(uid)<-delta:
+   c.execute("ROLLBACK")
+   flash("Không thể trừ vượt số dư khả dụng.")
+   return redirect(url_for("admin_member",uid=uid))
+  adjustment_id=c.execute("INSERT INTO admin_adjustments(user_id,admin_id,amount,reason) VALUES(?,?,?,?)",(uid,g.user["id"],delta,reason)).lastrowid
+  c.execute("INSERT INTO ledger(user_id,amount,kind,reference_id) VALUES(?,?,'manual',?)",(uid,delta,adjustment_id))
+  c.execute("COMMIT")
+ except Exception:
+  if c.in_transaction:c.execute("ROLLBACK")
+  raise
+ flash("Đã ghi giao dịch điều chỉnh vào lịch sử.")
+ return redirect(url_for("admin_member",uid=uid))
+
+@app.get("/admin/tasks/<int:task_id>/edit")
+@admin
+def admin_edit_task(task_id):
+ task=db().execute("SELECT * FROM tasks WHERE id=?",(task_id,)).fetchone()
+ if not task:abort(404)
+ count=db().execute("SELECT COUNT(*) n FROM submissions WHERE task_id=?",(task_id,)).fetchone()["n"]
+ return render_template("admin_task_edit.html",task=task,submissions=count)
+
+@app.post("/admin/tasks/<int:task_id>/edit")
+@admin
+def admin_save_task(task_id):
+ title=request.form.get("title","").strip()
+ description=request.form.get("description","").strip()
+ reward=amount(request.form.get("reward"))
+ if not 5<=len(title)<=120 or not 10<=len(description)<=3000:abort(400)
+ c=db()
+ try:
+  c.execute("BEGIN IMMEDIATE")
+  task=c.execute("SELECT * FROM tasks WHERE id=?",(task_id,)).fetchone()
+  if not task:abort(404)
+  count=c.execute("SELECT COUNT(*) n FROM submissions WHERE task_id=?",(task_id,)).fetchone()["n"]
+  if count and task["reward"]!=reward:
+   c.execute("ROLLBACK")
+   flash("Mức thưởng không thể thay đổi sau khi có người nộp nhiệm vụ.")
+   return redirect(url_for("admin_edit_task",task_id=task_id))
+  c.execute("UPDATE tasks SET title=?,description=?,reward=? WHERE id=?",(title,description,reward,task_id))
+  c.execute("COMMIT")
+ except Exception:
+  if c.in_transaction:c.execute("ROLLBACK")
+  raise
+ flash("Đã cập nhật nhiệm vụ.")
+ return redirect(url_for("admin_home")+"#tasks")
+
 if __name__=="__main__":app.run(debug=os.getenv("FLASK_DEBUG")=="1")
