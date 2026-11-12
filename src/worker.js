@@ -186,11 +186,11 @@ const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
    AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)
  AND (?=0 OR
    (SELECT COUNT(*) FROM task_completions c JOIN tasks t ON t.id=c.task_id
-    WHERE c.ip=? AND t.category='link' AND c.status IN ('pending','approved')
+    WHERE c.ip LIKE ? AND t.category='link' AND c.status IN ('pending','approved')
       AND c.created_at>=datetime('now','-24 hours'))<?)
  AND (?=0 OR NOT EXISTS
    (SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
-    WHERE c.ip=? AND c.user_id<>? AND t.category='link'
+    WHERE c.ip LIKE ? AND c.user_id<>? AND t.category='link'
      AND c.status IN ('pending','approved')
      AND c.created_at>=datetime('now','-24 hours')))
  AND (?=0 OR
@@ -199,14 +199,26 @@ const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
 
 /* IP Cloudflare, không dùng IPv4 người dùng tự dán. Cửa sổ đúng 24 giờ gần nhất.
  Pending giữ chỗ cho tới khi được duyệt/từ chối, rejected không giữ quota. */
+
+// IPv4: so chính xác. IPv6: nhóm theo /64 trong trường hợp bốn nhóm prefix được
+// viết đầy đủ; giúp nhận ra nhiều điện thoại cùng mạng dù IPv6 phần host khác nhau.
+// Một vài dạng IPv6 rút gọn khác nhau sẽ không khớp; KHÔNG dùng để khóa tài khoản.
+function linkNetworkPattern(ip){
+ const value=String(ip||'').toLowerCase();
+ if(!value.includes(':'))return value;
+ const parts=value.split(':');
+ if(parts.length>=5&&parts.slice(0,4).every(p=>/^[0-9a-f]{1,4}$/.test(p)))
+  return parts.slice(0,4).join(':')+':%';
+ return value;
+}
 async function linkIPUsage(env,ip,userId){
  if(!ip||ip==='unknown'||ip==='local')return {total:0,other:0};
  const row=await env.DB.prepare(
   "SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN c.user_id<>? THEN 1 ELSE 0 END),0) other "+
   "FROM task_completions c JOIN tasks t ON t.id=c.task_id "+
-  "WHERE t.category='link' AND c.ip=? AND c.status IN ('pending','approved') "+
+  "WHERE t.category='link' AND c.ip LIKE ? AND c.status IN ('pending','approved') "+
   "AND c.created_at>=datetime('now','-24 hours')"
- ).bind(userId,ip).first();
+ ).bind(userId,linkNetworkPattern(ip)).first();
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
 
@@ -235,7 +247,7 @@ async function linkIPQuota(env,req,userId,task,settings){
    :'Tài khoản đã đủ lượt của nhiệm vụ link này trong 24 giờ qua.',
    {quota_scope:denied});
  }
- return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip,perTask:perTaskLimit>1?perTaskLimit:0};
+ return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip:linkNetworkPattern(ip),perTask:perTaskLimit>1?perTaskLimit:0};
 }
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
@@ -445,8 +457,10 @@ async function handler(req, env) {
         ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
         .bind(id(), me.id, task.reward, `Nhiệm vụ: ${task.title}`, completionId, completionId)
     ]);
-    if ((batch[0].meta?.changes || 0) < 1 || (batch[1].meta?.changes || 0) < 1)
-      fail(409, 'Nhiệm vụ đã được gửi hoặc nhận thưởng trước đó.');
+    if ((batch[0].meta?.changes || 0) < 1 || (batch[1].meta?.changes || 0) < 1) {
+      if(task.category==='link')await linkIPQuota(env,req,me.id,task,settings);
+      fail(409,'Nhiệm vụ đã được gửi hoặc nhận thưởng trước đó.');
+    }
     if (status === 'approved') await giveReferral(env, me.id, await getSettings(env));
     return json({ ok: true, status, reward: task.reward,
       message: status === 'approved' ? 'Đã ghi nhận Lúa vào ví.' : 'Đã gửi bằng chứng, đang chờ Admin duyệt.' });
