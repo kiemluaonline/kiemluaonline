@@ -6,5 +6,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py ./
 COPY templates ./templates
 COPY static ./static
-EXPOSE 8000
-CMD ["waitress-serve","--host=0.0.0.0","--port=8000","app:app"]
+COPY start.sh ./start.sh
+EXPOSE 10000
+CMD ["sh","/app/start.sh"]
