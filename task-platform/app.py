@@ -98,6 +98,11 @@ def admin(fn):
   return fn(*a,**kw)
  return inner
 def balance(uid):return db().execute("SELECT COALESCE(SUM(amount),0) n FROM ledger WHERE user_id=?",(uid,)).fetchone()["n"]
+def lock_balance_owner(c,uid):
+ # PostgreSQL READ COMMITTED requires a per-user row lock before checking
+ # balances. SQLite already serializes writers via BEGIN IMMEDIATE.
+ if DATABASE_URL:
+  if not c.execute("SELECT id FROM users WHERE id=? FOR UPDATE",(uid,)).fetchone():abort(404)
 def amount(s):
  try:
   n=int(s)
@@ -135,7 +140,7 @@ def login():
   if row and now-row["window_start"]<900 and row["attempts"]>=5:
    flash("Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.")
    return render_template("auth.html",register=False),429
-  u=db().execute("SELECT * FROM users WHERE username=?",(request.form.get("username",""),)).fetchone()
+  u=db().execute("SELECT * FROM users WHERE lower(username)=lower(?)",(request.form.get("username",""),)).fetchone()
   if u and check_password_hash(u["password_hash"],request.form.get("password","")):
    c.execute("DELETE FROM login_attempts WHERE key=?",(login_key,))
    session.clear();session.permanent=True;session["user_id"]=u["id"];session["csrf"]=secrets.token_hex(32);return redirect(url_for("home"))
@@ -175,6 +180,7 @@ def withdraw():
   c=db()
   try:
    c.execute("BEGIN IMMEDIATE")
+   lock_balance_owner(c,g.user["id"])
    if balance(g.user["id"])<n:c.execute("ROLLBACK");flash("Số dư không đủ.");return redirect(url_for("withdraw"))
    w=c.execute("INSERT INTO withdrawals(user_id,amount,bank,holder,account) VALUES(?,?,?,?,?)",(g.user["id"],n,bank,holder,account)).lastrowid
    c.execute("INSERT INTO ledger(user_id,amount,kind,reference_id) VALUES(?,?,'hold',?)",(g.user["id"],-n,w))
@@ -339,6 +345,7 @@ def admin_adjust(uid):
   user=c.execute("SELECT role FROM users WHERE id=?",(uid,)).fetchone()
   if not user:abort(404)
   if user["role"]!="user":abort(403)
+  lock_balance_owner(c,uid)
   if delta<0 and balance(uid)<-delta:
    c.execute("ROLLBACK")
    flash("Không thể trừ vượt số dư khả dụng.")
