@@ -1,0 +1,4 @@
+# Sao chép file này thành .dev.vars khi chạy thử trên máy của bạn.
+# Chọn chuỗi bí mật mạnh, KHÔNG đăng công khai, KHÔNG tải lên GitHub.
+SETUP_KEY="DAN_MOT_CHUOI_BI_MAT_NGAU_NHIEN_IT_NHAT_32_KY_TU"
+DEVICE_SALT="DAN_MOT_CHUOI_NGAU_NHIEN_KHAC_IT_NHAT_32_KY_TU"
