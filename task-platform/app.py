@@ -77,6 +77,14 @@ def amount(s):
   if 0<n<=100000000:return n
  except (ValueError,TypeError):pass
  abort(400)
+@app.get("/health")
+def health():
+ try:
+  db().execute("SELECT 1").fetchone()
+ except sqlite3.Error:
+  return {"status":"unavailable"},503
+ return {"status":"ok"}
+
 @app.get("/")
 def home():return redirect(url_for("admin_home" if g.user["role"]=="admin" else "dashboard")) if g.user else render_template("landing.html")
 @app.route("/register",methods=["GET","POST"])
