@@ -97,3 +97,68 @@ def test_login_throttle(site):
  for _ in range(5):
   assert login(c,"member","wrong-password").status_code==200
  assert login(c,"member","wrong-password").status_code==429
+
+
+def test_duplicate_evidence_alert_requires_manual_review(site):
+ mod,c=site
+ with mod.app.app_context():
+  conn=mod.db()
+  conn.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,'user')",("membertwo",generate_password_hash("membertwo-password-123")))
+  conn.execute("INSERT INTO tasks(title,description,reward) VALUES(?,?,?)",("Duplicate check","Nhiệm vụ kiểm tra bằng chứng trùng",5000))
+  task=conn.execute("SELECT id FROM tasks").fetchone()["id"]
+ assert login(c,"member","member-password-123").status_code==302
+ evidence="Cùng một bằng chứng để kiểm tra trùng lặp"
+ assert post(c,f"/task/{task}/submit",{"evidence":evidence}).status_code==302
+ assert post(c,"/logout").status_code==302
+ assert login(c,"membertwo","membertwo-password-123").status_code==302
+ assert post(c,f"/task/{task}/submit",{"evidence":evidence}).status_code==302
+ with mod.app.app_context():
+  alerts=mod.db().execute("SELECT * FROM fraud_alerts WHERE kind='duplicate_evidence'").fetchall()
+  assert len(alerts)==1
+  assert alerts[0]["user_id"]==3
+  assert alerts[0]["severity"]>=60
+ assert c.get("/admin/fraud").status_code==403
+ assert post(c,"/logout").status_code==302
+ assert login(c,"boss","admin-password-123").status_code==302
+ assert c.get("/admin/fraud").status_code==200
+ alert_id=alerts[0]["id"]
+ assert post(c,f"/admin/fraud/{alert_id}/review",{"decision":"cleared","reason":"Hai người độc lập đã được đối chiếu."}).status_code==302
+ assert post(c,f"/admin/fraud/{alert_id}/review",{"decision":"confirmed","reason":"Không được ghi lại quyết định."}).status_code==302
+ with mod.app.app_context():
+  assert mod.db().execute("SELECT status FROM fraud_alerts WHERE id=?",(alert_id,)).fetchone()["status"]=="cleared"
+  assert mod.db().execute("SELECT COUNT(*) n FROM admin_audit WHERE action='fraud_cleared'").fetchone()["n"]==1
+
+
+def test_high_risk_withdrawal_cannot_be_paid_before_clearance(site):
+ mod,c=site
+ with mod.app.app_context():
+  conn=mod.db()
+  conn.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,'user')",("membertwo",generate_password_hash("membertwo-password-123")))
+  conn.execute("INSERT INTO ledger(user_id,amount,kind,reference_id) VALUES(2,10000,'seed',11)")
+  conn.execute("INSERT INTO ledger(user_id,amount,kind,reference_id) VALUES(3,10000,'seed',12)")
+ def withdraw_same_account():
+  return post(c,"/withdraw",{"amount":"5000","bank":"VCB","holder":"Nguoi Nhan","account":"123456789"})
+ assert login(c,"member","member-password-123").status_code==302
+ assert withdraw_same_account().status_code==302
+ assert post(c,"/logout").status_code==302
+ assert login(c,"membertwo","membertwo-password-123").status_code==302
+ assert withdraw_same_account().status_code==302
+ with mod.app.app_context():
+  conn=mod.db()
+  alert=conn.execute("SELECT * FROM fraud_alerts WHERE kind='shared_payout_account'").fetchone()
+  second_withdraw=conn.execute("SELECT id FROM withdrawals WHERE user_id=3").fetchone()["id"]
+  assert alert and alert["user_id"]==3
+ assert post(c,"/logout").status_code==302
+ assert login(c,"boss","admin-password-123").status_code==302
+ assert post(c,f"/admin/payout/{second_withdraw}/paid").status_code==302
+ with mod.app.app_context():
+  assert mod.db().execute("SELECT status FROM withdrawals WHERE id=?",(second_withdraw,)).fetchone()["status"]=="pending"
+ assert post(c,f"/admin/fraud/{alert['id']}/review",{"decision":"confirmed","reason":"Thông tin giống nhau, vẫn cần đối chiếu."}).status_code==302
+ assert post(c,f"/admin/payout/{second_withdraw}/paid").status_code==302
+ with mod.app.app_context():
+  assert mod.db().execute("SELECT status FROM withdrawals WHERE id=?",(second_withdraw,)).fetchone()["status"]=="pending"
+ # Admin may reject the withdrawal and return the held balance after investigation.
+ assert post(c,f"/admin/payout/{second_withdraw}/rejected").status_code==302
+ with mod.app.app_context():
+  assert mod.db().execute("SELECT status FROM withdrawals WHERE id=?",(second_withdraw,)).fetchone()["status"]=="rejected"
+  assert mod.balance(3)==10000
