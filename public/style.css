@@ -158,3 +158,9 @@
 .task-ip-tools{align-items:center}
 .task-ip-tools .task-ip-btn{font-size:12px}
 .task-ip-type{max-width:100%;line-height:1.4}
+
+/* Chẩn đoán IPv4, chỉ có tên dịch vụ và lỗi mạng; không chứa cookie hoặc tài khoản */
+.task-ip-debug{margin:10px 0;color:#5c6b7b;font-size:12px;max-width:100%}
+.task-ip-debug summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.task-ip-debug pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:#855144;background:#fff6ef;padding:10px;border-radius:9px;margin:8px 0}
+.task-ip-debug[hidden]{display:none}

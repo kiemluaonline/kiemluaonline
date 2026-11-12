@@ -188,7 +188,8 @@ function taskDashboardCard(d){
  </div>
  <details class="task-ip-full"><summary>Xem IPv6 đầy đủ</summary><code>${esc(d.ip)}</code></details>
  <a class="task-ip-direct" href="https://api.ipify.org?format=json" target="_blank" rel="noopener noreferrer">Mở địa chỉ IPv4 trực tiếp ↗</a>
- <p class="task-ip-helper" id="taskIPv4Help">Website tự kiểm tra IPv4 bằng ipify và SeeIP. Nếu có IPv4 thật sẽ ưu tiên hiển thị. IPv6 Cloudflare vẫn được giữ để kiểm tra bảo mật.</p>`:''}
+ <p class="task-ip-helper" id="taskIPv4Help">Website tự kiểm tra IPv4 bằng ipify và SeeIP. Nếu có IPv4 thật sẽ ưu tiên hiển thị. IPv6 Cloudflare vẫn được giữ để kiểm tra bảo mật.</p>
+ <details class="task-ip-debug" id="taskIPv4Diagnostics" hidden><summary>Chi tiết lỗi IPv4 (bấm để xem)</summary><pre id="taskIPv4DebugInfo"></pre></details>`:''}
    <div class="task-device-tag">
     <svg class="task-phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M10.5 18.5h3"/></svg>
     <div><strong>${d.device_registered?'Đã nhận diện trình duyệt':'Nhận diện tạm thời'}</strong><span>${esc(d.device_code||'—')}</span></div>
@@ -205,52 +206,67 @@ const PUBLIC_IPV4_PROVIDERS=[
  {label:'ipify',json:'https://api.ipify.org?format=json',jsonp:'https://api.ipify.org?format=jsonp&callback=tramLuaIPv4'},
  {label:'SeeIP',json:'https://ipv4.seeip.org/jsonip',jsonp:'https://ipv4.seeip.org/jsonip?callback=tramLuaIPv4'}
 ];
-async function ipv4FromFetch(url){
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),5000);
+async function ipv4FromFetch(provider){
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),6500);
  try{
-  const response=await fetch(url,{
+  const response=await fetch(provider.json,{
    mode:'cors',cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',
    signal:controller.signal
   });
-  if(!response.ok)throw new Error('Network HTTP '+response.status);
+  if(!response.ok)throw new Error('HTTP '+response.status);
   const obj=await response.json(),ip=String(obj?.ip||'');
-  if(!isIPv4(ip))throw new Error('Invalid IPv4');
+  if(!isIPv4(ip))throw new Error('Phản hồi không phải IPv4');
   return ip;
+ }catch(error){
+  throw new Error(provider.label+' (fetch): '+(error?.name||'Error')+': '+String(error?.message||'Không rõ lỗi').slice(0,130));
  }finally{clearTimeout(timeout);}
 }
-// JSONP phải chạy trong iframe sandbox có opaque origin để bảo vệ phiên đăng nhập.
-function ipv4FromJSONP(url){
+// JSONP chạy trong iframe sandbox với opaque origin, không truy cập phiên đăng nhập.
+function ipv4FromJSONP(provider){
  return new Promise((resolve,reject)=>{
   const token=crypto.randomUUID(),frame=document.createElement('iframe');
   frame.setAttribute('sandbox','allow-scripts');
   frame.setAttribute('title','Kiểm tra IPv4');
   frame.style.cssText='position:absolute;width:0;height:0;border:0;opacity:0;pointer-events:none';
   let settled=false;
-  const complete=(ip)=>{
+  const complete=(ip,reason)=>{
    if(settled)return;
    settled=true;window.removeEventListener('message',receive);
    clearTimeout(timer);frame.remove();
-   if(isIPv4(ip))resolve(ip);else reject(new Error('Unavailable IPv4 JSONP'));
+   if(isIPv4(ip))resolve(ip);
+   else reject(new Error(provider.label+' (JSONP): '+(reason||'Không nhận được IPv4')));
   };
   const receive=e=>{
    if(e.source!==frame.contentWindow||e.data?.kind!=='tram-lua-v4'||e.data?.token!==token)return;
-   complete(String(e.data.ip||''));
+   complete(String(e.data.ip||''),String(e.data.reason||'').slice(0,130));
   };
-  const timer=setTimeout(()=>complete(''),7500);
+  const timer=setTimeout(()=>complete('','Hết thời gian nhận callback (7,5 giây)'),7500);
   window.addEventListener('message',receive);
-  const safeURL=url.replaceAll('&','&amp;').replaceAll('"','&quot;');
-  frame.srcdoc='<!doctype html><meta charset="utf-8"><script>function tramLuaIPv4(d){parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',ip:d&&d.ip},"*");}</scr'+'ipt><script src="'+safeURL+'"></scr'+'ipt>';
+  const safeURL=provider.jsonp.replaceAll('&','&amp;').replaceAll('"','&quot;');
+  const postError='parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',reason:"Tải script JSONP thất bại"},"*")';
+  frame.srcdoc='<!doctype html><meta charset="utf-8"><script>function tramLuaIPv4(d){parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',ip:d&&d.ip},"*");}</scr'+'ipt><script src="'+safeURL+'" onerror='+JSON.stringify(postError)+'></scr'+'ipt>';
   document.body.appendChild(frame);
  });
 }
 async function resolvePublicIPv4(){
- // Trước tiên thử cả hai nhà cung cấp có CORS, chọn kết quả hợp lệ đầu tiên.
- try{return await Promise.any(PUBLIC_IPV4_PROVIDERS.map(p=>ipv4FromFetch(p.json)));}
- catch{
-  // Sau đó thử JSONP cách ly, không cho mã ngoài truy cập website.
-  return Promise.any(PUBLIC_IPV4_PROVIDERS.map(p=>ipv4FromJSONP(p.jsonp)));
- }
+ const reasons=[];
+ try{return await Promise.any(PUBLIC_IPV4_PROVIDERS.map(p=>ipv4FromFetch(p)));}
+ catch(error){reasons.push(...(error?.errors||[error]).map(e=>String(e?.message||e).slice(0,200)));}
+ try{return await Promise.any(PUBLIC_IPV4_PROVIDERS.map(p=>ipv4FromJSONP(p)));}
+ catch(error){reasons.push(...(error?.errors||[error]).map(e=>String(e?.message||e).slice(0,200)));}
+ const failure=new Error('Không tìm được IPv4 trong trình duyệt.');
+ failure.details=reasons;
+ throw failure;
 }
+function updateIPv4Diagnostics(details){
+ const container=document.getElementById('taskIPv4Diagnostics');
+ const output=document.getElementById('taskIPv4DebugInfo');
+ if(!container||!output)return;
+ const lines=Array.isArray(details)?details:[];
+ container.hidden=lines.length===0;
+ output.textContent=lines.join('\n');
+}
+
 async function detectPublicIPv4(button,silent=false){
  if(!button?.isConnected||button.disabled)return;
  if(!document.getElementById('taskDisplayIP'))return;
@@ -263,6 +279,7 @@ async function detectPublicIPv4(button,silent=false){
   if(!button.isConnected||!currentIP||!label||state.view!=='tasks')return;
   currentIP.textContent=ip;
   label.textContent='IPv4 công khai • kiểm tra trực tiếp';
+  updateIPv4Diagnostics([]);
   const note=document.getElementById('taskIPv4Help');
   if(note)note.textContent='IPv4 được kiểm tra từ trình duyệt qua ipify. Cloudflare có thể thấy IPv6 khác. Chỉ dùng IPv4 này để hiển thị, không dùng để tự động khóa tài khoản.';
   button.textContent='Kiểm tra lại IPv4';
@@ -276,8 +293,9 @@ async function detectPublicIPv4(button,silent=false){
   copy.dataset.value=ip;
   copy.textContent='Sao chép IPv4';
   if(!silent)toast('Đã nhận diện IPv4 công khai.');
- }catch{
+ }catch(error){
   if(button.isConnected&&state.view==='tasks'){
+   updateIPv4Diagnostics(error?.details||[String(error?.message||'Không rõ lỗi')]);
    const label=document.getElementById('taskIPLabel');
    if(label)label.textContent='IPv6 • chưa đọc được IPv4 trong trang web';
    const note=document.getElementById('taskIPv4Help');
