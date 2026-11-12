@@ -318,6 +318,14 @@ async function linkBrowserQuota(env,req,userId,task,settings){
  }
  return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,code};
 }
+// D1 hiện hỗ trợ 3 loại ban đầu. Nhiệm vụ App lưu dạng 'other' kèm
+// settings app_referral_code:<taskId> để không phải thay schema cũ.
+const storedTaskCategory = category => category === 'app' ? 'other' : category;
+async function resolveTaskCategory(env,task) {
+ if(task.category!=='other')return task.category;
+ const row=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('app_referral_code:'+task.id).first();
+ return row?.value?'app':'other';
+}
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
   const title = str(b.title, 120), description = str(b.description, 1200), category = str(b.category, 20);
@@ -447,10 +455,12 @@ async function handler(req, env) {
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
     const done=new Map(counts.results.map(r=>[r.task_id,{n:Number(r.n),pending:Number(r.pending||0)}]));
     const tasks=results.results.map(t=>{
+      const appCode=str(overrides.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
+      const displayCategory=t.category==='other'&&appCode?'app':t.category;
       const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
       const entry=done.get(t.id)||{n:0,pending:0},used=entry.n;
       const blocked=t.category==='link'?(max>1&&used>=max?'link_task_limit':(browserDenied||denied)):null;
-      return {...t,app_referral_code:t.category==='app'?str(overrides.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
+      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
@@ -477,6 +487,7 @@ async function handler(req, env) {
   if (m === 'POST' && startMatch) {
     const me = await auth(req, env), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(startMatch[1]).first();
     if (!task) fail(404, 'Nhiệm vụ không còn hoạt động.');
+    task.category=await resolveTaskCategory(env,task);
     if(await linkTaskPerAccountLimit(env,task)<=1){
       const existing=await env.DB.prepare('SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND period_key=?')
         .bind(me.id,task.id,period(task)).first();
@@ -499,6 +510,7 @@ async function handler(req, env) {
   if (m === 'POST' && submitMatch) {
     const me = await auth(req, env), body = await readBody(req, 260000), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(submitMatch[1]).first();
     if (!task) fail(404, 'Nhiệm vụ đã ngừng hoạt động.');
+    task.category=await resolveTaskCategory(env,task);
     const attempt = await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=?')
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
     if (!attempt || attempt.consumed_by || attempt.expires_at <= now()) fail(410, 'Phiên nhiệm vụ hết hạn. Vui lòng mở lại nhiệm vụ.');
@@ -636,13 +648,13 @@ async function handler(req, env) {
         env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all()
       ]);
       const limits=new Map(settings.results.map(r=>[r.key,int(r.value,1)]));
-      return json({tasks:rows.results.map(t=>({...t,link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:t.category==='app'?str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80):''}))});
+      return json({tasks:rows.results.map(t=>{const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);return {...t,category:t.category==='other'&&appCode?'app':t.category,link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode};})});
     }
     if (m === 'POST' && p === '/api/admin/tasks') {
       const t = validateTaskBody(await readBody(req)), taskId = id();
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO tasks(id,title,description,category,url,reward,min_seconds,review_mode,repeat_policy,is_active)
-          VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId,t.title,t.description,t.category,t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active),
+          VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId,t.title,t.description,storedTaskCategory(t.category),t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_task_limit:'+taskId,String(t.linkLimit)),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode)
       ]);
@@ -656,7 +668,7 @@ async function handler(req, env) {
       await env.DB.batch([
         env.DB.prepare(`UPDATE tasks SET title=?,description=?,category=?,url=?,reward=?,min_seconds=?,
           review_mode=?,repeat_policy=?,is_active=? WHERE id=?`)
-          .bind(t.title,t.description,t.category,t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active,taskEdit[1]),
+          .bind(t.title,t.description,storedTaskCategory(t.category),t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active,taskEdit[1]),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
           .bind('link_task_limit:'+taskEdit[1],String(t.linkLimit)),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
