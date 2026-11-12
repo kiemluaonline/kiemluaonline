@@ -72,3 +72,18 @@ Biện pháp bổ sung: giới hạn 5 lần đăng nhập sai trong cửa sổ 
 - Mã nguồn **không tự copy dữ liệu SQLite cũ sang PostgreSQL**. Nếu cần giữ dữ liệu cũ, phải backup, migration riêng và đối soát các giao dịch trước khi sử dụng.
 
 **Giới hạn quan trọng:** Render Free ngủ khi ít truy cập; Supabase Free giới hạn tài nguyên và có thể tạm dừng project không hoạt động. Bản này chỉ để thử nghiệm với dữ liệu mẫu, không xử lý tiền thật hay đưa vào môi trường production thương mại.
+
+
+## V8: chống gian lận có Admin xem xét
+
+- `/admin/fraud`: danh sách cảnh báo, mức rủi ro (80/85 cho hai quy tắc ban đầu), lý do và quyết định Admin có giải trình.
+- **Bằng chứng trùng:** băm HMAC nội dung bằng chứng đã chuẩn hóa (chữ thường, khoảng trắng) để phát hiện cùng nội dung giữa **các thành viên khác nhau**. Không lưu nội dung bằng chứng thêm lần nữa trong bảng kiểm tra. Các nhiệm vụ vẫn do Admin duyệt.
+- **Tài khoản nhận tiền trùng:** băm HMAC ngân hàng + số tài khoản đã chuẩn hóa; phát hiện tài khoản nhận tiền giống người dùng khác. Không lưu số tài khoản trong bảng cảnh báo. Dữ liệu rút tiền gốc vẫn được lưu trong `withdrawals` theo chức năng cũ.
+- Thành viên **không tự động bị khóa**, vẫn có thể làm nhiệm vụ và yêu cầu rút tiền. Nếu còn cảnh báo mức cao (>=60) ở trạng thái `open` hoặc `confirmed` đối với thành viên, yêu cầu rút **không thể được Admin xác nhận là đã chuyển tiền**. Admin có thể đánh dấu `cleared` cùng lý do sau khi xác minh, hoặc **từ chối rút** và hoàn lại khoản giữ theo quy trình cũ.
+- **Không đồng nghĩa đã chuyển khoản ngân hàng:** nút `paid` chỉ ghi nhận xác nhận ngoài hệ thống của Admin. Không tự động chuyển tiền.
+- Mọi quyết định chống gian lận được ghi trong `admin_audit` và cùng transaction với thay đổi cảnh báo.
+- Bảng `fraud_alerts` và `fraud_fingerprints` được tạo khi chạy `flask --app app init-db` và khi sử dụng tính năng; ở PostgreSQL, cả hai đều bật RLS và thu hồi quyền `anon,authenticated`.
+- Kiểm thử tự động: trùng bằng chứng, cấm thành viên truy cập Admin, quyết định một lần, rút có cảnh báo cao, không cho xác nhận tiền khi chưa loại trừ, và từ chối rút hoàn lại số dư.
+- Chỉ có **hai quy tắc định danh** đầu tiên; không có theo dõi thiết bị/IP, machine learning, tự khóa, tịch thu số dư hoặc hệ thống kháng nghị hoàn chỉnh. Đây là bản đầu tiên của hệ thống cảnh báo, không phải bảo đảm ngăn chặn mọi gian lận.
+- Tính năng dấu vân tay dùng `SECRET_KEY` làm khóa HMAC. Thay đổi SECRET_KEY đột ngột làm mất khả năng đối chiếu với dấu vân tay cũ; không tùy tiện đổi khóa nếu chưa lập phương án chuyển đổi. Dữ liệu cảnh báo có thể nhầm do nhiều người dùng chung một tài khoản nhận thưởng.
+- Các hành động review bảo vệ bằng đăng nhập Admin + CSRF, nhưng audit trong cùng database chưa chống được sửa đổi bởi quản trị viên cơ sở dữ liệu. Cần có quy trình lưu trữ/bảo vệ và sao lưu thích hợp trước khi vận hành tiền thật.
