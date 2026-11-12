@@ -164,3 +164,11 @@
 .task-ip-debug summary{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .task-ip-debug pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:#855144;background:#fff6ef;padding:10px;border-radius:9px;margin:8px 0}
 .task-ip-debug[hidden]{display:none}
+
+/* Dự phòng tự nhập IPv4 không giả làm giá trị tin cậy từ Cloudflare. */
+.task-ip-manual{font-size:12px;color:#537260;margin:9px 0 14px}
+.task-ip-manual summary{font-weight:700;cursor:pointer}
+.task-ip-manual .note{font-size:12px;line-height:1.5;margin:7px 0}
+.task-ip-manual-form{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.task-ip-manual-form input{min-width:185px;flex:1 1 185px;max-width:100%;border:1px solid #bbd4c9;border-radius:9px;font:13px inherit;padding:9px;line-height:1.4;background:#fff;color:#1a4433}
+.task-ip-manual-form button{flex:0 0 auto}

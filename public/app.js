@@ -158,6 +158,36 @@ const compactIP = ip => {
  const parts=value.split(':').filter(Boolean);
  return parts.slice(0,3).join(':')+'…'+(parts.at(-1)||'');
 };
+// Chỉ lấy IPv4 khi người dùng tự dán; tuyệt đối không thay đổi IP tin cậy trên máy chủ.
+function parsePastedIPv4(raw){
+ const text=String(raw||'').trim();
+ let value=text;
+ if(text.startsWith('{')){
+  try{value=String(JSON.parse(text)?.ip||'').trim();}catch{value='';}
+ }
+ return isIPv4(value)?value:'';
+}
+function showPastedIPv4(){
+ const input=document.getElementById('taskIPv4ManualInput');
+ const ipv4=parsePastedIPv4(input?.value);
+ if(!ipv4){toast('IPv4 không hợp lệ. Bạn hãy sao chép đúng kết quả từ ipify.',true);return;}
+ const el=document.getElementById('taskDisplayIP');
+ const label=document.getElementById('taskIPLabel');
+ if(!el||!label)return;
+ el.textContent=ipv4;
+ label.textContent='IPv4 tự nhập • chưa được website xác minh';
+ const note=document.getElementById('taskIPv4Help');
+ if(note)note.textContent='Đây là địa chỉ bạn sao chép từ ipify, chỉ để hiển thị. Máy chủ vẫn dùng IP Cloudflare ghi nhận để đánh giá an toàn.';
+ const existing=document.getElementById('taskCopyIPv4');
+ const copy=existing||document.createElement('button');
+ if(!existing){
+  copy.id='taskCopyIPv4';copy.type='button';copy.className='task-ip-btn';
+  copy.dataset.action='copy-ip';
+  document.querySelector('.task-ip-tools')?.append(copy);
+ }
+ copy.dataset.value=ipv4;copy.textContent='Sao chép IPv4';
+ toast('Đã hiển thị IPv4 bạn cung cấp. Chưa được hệ thống xác minh.');
+}
 const adminIP = ip => {
  const value=String(ip||'');
  return value.includes(':')?`<details class="risk-ip-details"><summary><code title="${esc(value)}">${esc(compactIP(value))}</code></summary><code>${esc(value)}</code><button type="button" data-action="copy-ip" data-value="${esc(value)}">Sao chép</button></details>`:`<code>${esc(value)}</code>`;
@@ -188,6 +218,14 @@ function taskDashboardCard(d){
  </div>
  <details class="task-ip-full"><summary>Xem IPv6 đầy đủ</summary><code>${esc(d.ip)}</code></details>
  <a class="task-ip-direct" href="https://api.ipify.org?format=json" target="_blank" rel="noopener noreferrer">Mở địa chỉ IPv4 trực tiếp ↗</a>
+ <details class="task-ip-manual">
+  <summary>Không tự nhận được? Dán IPv4 từ ipify</summary>
+  <p class="note">Sao chép kết quả tại ipify rồi dán vào ô bên dưới. Đây là IP do bạn cung cấp, không phải IP website tự xác minh.</p>
+  <div class="task-ip-manual-form">
+   <input id="taskIPv4ManualInput" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder='113.166.167.144 hoặc {"ip":"..."}' aria-label="IPv4 sao chép từ ipify">
+   <button type="button" class="task-ip-btn" data-action="use-manual-ipv4">Hiển thị IPv4</button>
+  </div>
+ </details>
  <p class="task-ip-helper" id="taskIPv4Help">Website tự kiểm tra IPv4 bằng ipify và SeeIP. Nếu có IPv4 thật sẽ ưu tiên hiển thị. IPv6 Cloudflare vẫn được giữ để kiểm tra bảo mật.</p>
  <details class="task-ip-debug" id="taskIPv4Diagnostics" hidden><summary>Chi tiết lỗi IPv4 (bấm để xem)</summary><pre id="taskIPv4DebugInfo"></pre></details>`:''}
    <div class="task-device-tag">
@@ -514,6 +552,7 @@ app.addEventListener('click',async e=>{
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
   if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
+  if(act==='use-manual-ipv4'){showPastedIPv4();return;}
 
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
