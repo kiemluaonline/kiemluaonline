@@ -279,7 +279,7 @@ async function registerGoogleMember(env,req,identity,referredBy){
  const salt=bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
  const password=newToken()+newToken(),uid=id();
  await env.DB.batch([
-  env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at) VALUES(?,?,?,?,?,'member',?,?,?,?,?)")
+  env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at) VALUES(?,?,?,?,?,'member',?,?,?,?)")
    .bind(uid,identity.email,identity.name.length>=2?identity.name:'Thành viên Google',
     await passwordDigest(password,salt),salt,referralCode(),referredBy||null,clientIP(req),new Date().toISOString()),
   env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_sub:'+identity.sub,uid),
@@ -469,6 +469,7 @@ async function handler(req, env) {
     const admin = await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").first();
     return json({ site_name: settings.site_name, announcement: settings.announcement,
       signup_enabled: settings.signup_enabled === '1', setup_required: admin.n === 0,
+      google_auth_enabled: googleReady(env), gmail_google_required: googleReady(env),
       checkin_reward: int(settings.checkin_reward), referral_reward: int(settings.referral_reward),
       withdrawals_enabled: settings.withdrawals_enabled === '1' && int(settings.lua_per_vnd) > 0,
       min_withdraw_lua: int(settings.min_withdraw_lua), lua_per_vnd: int(settings.lua_per_vnd) });
@@ -506,6 +507,100 @@ async function handler(req, env) {
     await event(env,req,'signup_completed',userId,'email_password');
     return json({ ok: true, message: 'Đăng ký thành công.' }, 201, { 'Set-Cookie': await createSession(req, env, userId) });
   }
+
+  if(m==='POST' && p==='/api/auth/google/start'){
+    if(!googleReady(env))fail(503,'Đăng nhập Google chưa được cấu hình.');
+    const redirectUri=googleCallbackUri(env);
+    if(!URL.canParse(redirectUri)||(!isLocal(req)&&!redirectUri.startsWith('https://')))
+      fail(503,'GOOGLE_REDIRECT_URI phải là URL HTTPS.');
+    if(new URL(req.url).origin!==new URL(redirectUri).origin)
+      fail(400,'Vui lòng mở https://nhiemvu.click để sử dụng Google.');
+    const body=await readBody(req),intent=str(body.intent,20);
+    if(!['login','register','link'].includes(intent))fail(400,'Thao tác Google không hợp lệ.');
+    const settings=await getSettings(env);
+    let linkingId='';
+    if(intent==='link')linkingId=(await auth(req,env)).id;
+    if(intent==='register'){
+      if(settings.signup_enabled!=='1')fail(403,'Hệ thống đang tắt đăng ký mới.');
+      if(body.accept_terms!=='yes')fail(400,'Bạn cần đồng ý điều khoản trước khi đăng ký Google.');
+    }
+    const ref=intent==='register'?str(body.referral_code,30).toUpperCase():'';
+    if(ref){
+      const inviter=await env.DB.prepare("SELECT id FROM users WHERE referral_code=? AND status='active'").bind(ref).first();
+      if(!inviter)fail(400,'Mã giới thiệu không tồn tại.');
+    }
+    const state=newToken(),nonce=newToken();
+    await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
+     .bind('google_oauth_flow:'+state,JSON.stringify({nonce,intent,ref,linkingId,expires:now()+OAUTH_WINDOW_MS})).run();
+    const endpoint=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    for(const [k,v] of Object.entries({
+      client_id:env.GOOGLE_CLIENT_ID,redirect_uri:redirectUri,
+      response_type:'code',scope:'openid email profile',state,nonce,prompt:'select_account'
+    }))endpoint.searchParams.set(k,v);
+    return json({url:endpoint.toString()},200,{'Set-Cookie':googleCookie(req,state)});
+  }
+  if(m==='GET' && p==='/api/auth/google/callback'){
+    const cookie=cookies(req)['__Host-tl_google_state']||cookies(req).tl_google_state;
+    const state=str(u.searchParams.get('state'),100);
+    try{
+      if(!googleReady(env))fail(503,'Google chưa được bật.',{auth_code:'not_ready'});
+      if(!/^[a-f0-9]{64}$/.test(state)||state!==cookie)
+        fail(401,'Phiên Google không hợp lệ.',{auth_code:'expired'});
+      const flowRow=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('google_oauth_flow:'+state).first();
+      if(!flowRow)fail(401,'Phiên Google không còn hiệu lực.',{auth_code:'expired'});
+      const removed=await env.DB.prepare('DELETE FROM settings WHERE key=?').bind('google_oauth_flow:'+state).run();
+      if(!removed.meta?.changes)fail(401,'Phiên Google đã được sử dụng.',{auth_code:'expired'});
+      let flow;
+      try{flow=JSON.parse(flowRow.value);}catch{fail(401,'Phiên Google sai định dạng.',{auth_code:'expired'});}
+      if(!flow||flow.expires<now()||!flow.nonce||!['login','register','link'].includes(flow.intent))
+        fail(401,'Phiên Google đã hết hạn.',{auth_code:'expired'});
+      const code=u.searchParams.get('code')||'';
+      if(u.searchParams.get('error')||code.length<8||code.length>4096)
+        fail(400,'Đã hủy đăng nhập Google.',{auth_code:'cancelled'});
+      const tokenRes=await fetch('https://oauth2.googleapis.com/token',{
+       method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+       body:new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,
+        client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:googleCallbackUri(env),
+        grant_type:'authorization_code'}).toString()
+      });
+      if(!tokenRes.ok)fail(401,'Google không xác nhận được mã.',{auth_code:'failed'});
+      const identity=await verifyGoogleIdToken((await tokenRes.json()).id_token,env,flow.nonce);
+      ensureEmail(identity.email);preventDisposable(identity.email);
+      const mapped=await googleIdentity(env,identity.sub);
+      let userId='';
+      if(flow.intent==='link'){
+        const me=await auth(req,env);
+        if(flow.linkingId!==me.id)fail(403,'Tài khoản đăng nhập đã thay đổi.',{auth_code:'expired'});
+        if(canonicalEmail(me.email)!==canonicalEmail(identity.email))
+          fail(409,'Email Google phải trùng email tài khoản Trạm Lúa.',{auth_code:'email_mismatch'});
+        await connectGoogleIdentity(env,identity.sub,me.id);
+        userId=me.id;
+      }else if(mapped){
+        const found=await env.DB.prepare('SELECT id,status FROM users WHERE id=?').bind(mapped.value).first();
+        if(!found||found.status!=='active')fail(403,'Tài khoản đã tạm khóa.',{auth_code:'suspended'});
+        userId=found.id;
+      }else{
+        if(flow.intent==='login')
+          fail(409,'Chưa có tài khoản Google.',{auth_code:'not_registered'});
+        const settings=await getSettings(env);
+        if(settings.signup_enabled!=='1')fail(403,'Hệ thống đã tắt đăng ký.',{auth_code:'signup_closed'});
+        if(await registeredEmail(env,identity.email))
+          fail(409,'Email đã có tài khoản. Hãy đăng nhập mật khẩu và liên kết Google.',{auth_code:'email_exists'});
+        await signupRateLimit(env,req);
+        let referredBy=null;
+        if(flow.ref){
+          const inviter=await env.DB.prepare("SELECT id FROM users WHERE referral_code=? AND status='active'").bind(flow.ref).first();
+          if(!inviter)fail(400,'Mã giới thiệu không hợp lệ.',{auth_code:'bad_ref'});
+          referredBy=inviter.id;
+        }
+        userId=await registerGoogleMember(env,req,identity,referredBy);
+      }
+      return googleReturn(req,'',await createSession(req,env,userId));
+    }catch(err){
+      return googleReturn(req,err instanceof HttpError?err.extra?.auth_code||'failed':'failed');
+    }
+  }
+
   if (m === 'POST' && p === '/api/auth/login') {
     const b = await readBody(req), email = normEmail(b.email), password = String(b.password || '');
     const ip = clientIP(req);
@@ -532,7 +627,8 @@ async function handler(req, env) {
     const seen=await env.DB.prepare("SELECT id FROM risk_events WHERE user_id=? AND device_code=? AND ip=? AND event_type='device_seen' AND created_at>=datetime('now','-1 day') LIMIT 1").bind(me.id,code,ip).first();
     if(!seen)await event(env,req,'device_seen',me.id,browserDeviceId(req)?'browser_id':'temporary');
     return json({ user: me, balance: await wallet(env, me.id), earned: earned.n, referral_count: result.n,
-      ip, device_code: code, device_registered: Boolean(browserDeviceId(req)) });
+      ip, device_code: code, device_registered: Boolean(browserDeviceId(req)),
+      google_linked:Boolean(await googleForUser(env,me.id)) });
   }
   if (m === 'POST' && p === '/api/me/password') {
     const me = await auth(req, env), b = await readBody(req);
@@ -918,7 +1014,8 @@ export default {
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now()),
       env.DB.prepare("DELETE FROM login_attempts WHERE created_at<datetime('now','-30 days')"),
       env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days')"),
-      env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')")
+      env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
+      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now())
     ]);
   },
   async fetch(req, env) {
