@@ -420,9 +420,9 @@ async function linkIPQuota(env,req,userId,task,settings){
  if(denied){
   await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id);
   fail(429,denied==='link_owner'
-   ?'Bạn đã làm hết nhiệm vụ hôm nay. IP này đã được tài khoản khác sử dụng để làm link rút gọn. Lượt được đặt lại lúc 00:00 giờ Việt Nam.'
-   :denied==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay. Lượt đặt lại lúc 00:00 giờ Việt Nam.'
-   :'Tài khoản đã đủ lượt của nhiệm vụ link này trong ngày hôm nay.',
+   ?'Bạn đã làm hết nhiệm vụ hôm nay. IP này đã được tài khoản khác sử dụng để làm link rút gọn. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
+   :denied==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
+   :'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).',
    {quota_scope:denied});
  }
  return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip:linkNetworkPattern(ip),perTask:perTaskLimit>1?perTaskLimit:0};
@@ -454,7 +454,7 @@ async function linkBrowserQuota(env,req,userId,task,settings){
  if(denied){
   await event(env,req,'link_browser_quota_denied',userId,denied+':'+task.id);
   fail(429,denied==='link_browser_owner'
-   ?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt này đã được tài khoản khác sử dụng. Lượt đặt lại lúc 00:00 giờ Việt Nam.'
+   ?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt này đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
    :'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi Wi-Fi, VPN hay 4G không đặt lại lượt.',
    {quota_scope:denied});
  }
