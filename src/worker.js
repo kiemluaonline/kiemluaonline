@@ -138,8 +138,9 @@ async function createSession(req, env, userId) {
   return sessionCookie(req, token);
 }
 async function getSettings(env) {
-  const rows = await env.DB.prepare('SELECT key,value FROM settings').all();
-  return { ...DEFAULTS, ...Object.fromEntries(rows.results.map(r => [r.key, r.value])) };
+  const keys=Object.keys(DEFAULTS);
+  const rows=await env.DB.prepare('SELECT key,value FROM settings WHERE key IN ('+keys.map(()=>'?').join(',')+')').bind(...keys).all();
+  return {...DEFAULTS,...Object.fromEntries(rows.results.map(r=>[r.key,r.value]))};
 }
 async function wallet(env, userId) {
   const v = await env.DB.prepare('SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_entries WHERE user_id=?').bind(userId).first();
@@ -212,9 +213,13 @@ function ensurePassword(password) {
 async function registerUser(env, params) {
   const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
   const userId = id();
-  await env.DB.prepare(`INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(userId, params.email, params.name,
-    await passwordDigest(params.password, salt), salt, params.role || 'member', referralCode(), params.referredBy || null, params.ip, params.role === 'admin' ? null : new Date().toISOString()).run();
+  const entry=env.DB.prepare(`INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(userId,params.email,params.name,
+    await passwordDigest(params.password,salt),salt,params.role||'member',referralCode(),params.referredBy||null,params.ip,params.role==='admin'?null:new Date().toISOString());
+  if(params.role!=='admin'&&gmailDomain(normEmail(params.email).split('@')[1])){
+    await env.DB.batch([entry,env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
+      .bind('gmail_claim:'+await hash(canonicalEmail(params.email)),userId)]);
+  }else await entry.run();
   return userId;
 }
 
@@ -283,7 +288,9 @@ async function registerGoogleMember(env,req,identity,referredBy){
    .bind(uid,identity.email,identity.name.length>=2?identity.name:'Thành viên Google',
     await passwordDigest(password,salt),salt,referralCode(),referredBy||null,clientIP(req),new Date().toISOString()),
   env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_sub:'+identity.sub,uid),
-  env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_user:'+uid,identity.sub)
+  env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_user:'+uid,identity.sub),
+  ...(gmailDomain(identity.email.split('@')[1])?[env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
+   .bind('gmail_claim:'+await hash(canonicalEmail(identity.email)),uid)]:[])
  ]);
  await event(env,req,'signup_completed',uid,'google');
  return uid;
