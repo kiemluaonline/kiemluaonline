@@ -76,11 +76,12 @@ async function loadMe(){ try{state.me=await api('/api/me');}catch{state.me=null;
 function googleAuthPanel(active){
  if(active==='setup')return '';
  if(!state.meta.google_auth_enabled)return '<p class="note auth-google-disabled">Đăng nhập Google sẽ hiển thị sau khi chủ website cấu hình Google Cloud.</p>';
+ if(active==='register')return '<p class="note">Đăng ký bằng email và mật khẩu: bạn có thể nhập mã giới thiệu nếu có. Muốn tạo tài khoản nhanh bằng Google? Chọn tab Đăng nhập rồi bấm Tiếp tục với Google.</p>';
  return '<div class="oauth-separator">hoặc</div>'+
-  '<button class="google-auth-btn" type="button" data-action="google-'+active+'">'+
+  '<button class="google-auth-btn" type="button" data-action="google-login">'+
   '<span class="google-g" aria-hidden="true">G</span>'+
-  'Tiếp tục với Google'+'</button>'+
-  (active==='register'?'<p class="note">Hãy tích đồng ý điều khoản phía trên trước khi đăng ký Google.</p>':'');
+  'Tiếp tục với Google</button>'+
+  '<p class="note">Gmail mới sẽ được hướng dẫn đồng ý điều khoản để tạo tài khoản thành viên; Gmail đã liên kết sẽ đăng nhập ngay.</p>';
 }
 function googleProfilePanel(){
  const connected=Boolean(state.me.google_linked);
@@ -107,7 +108,7 @@ function renderAuth(){
  }
  const mode=state.authMode;
  const ref=new URLSearchParams(location.search).get('ref')||'';
- const tabs=state.meta.setup_required? [['setup','Thiết lập Admin'],['login','Đăng nhập'],['register','Đăng ký']] : [['login','Đăng nhập'],['register','Đăng ký']];
+ const tabs=state.meta.setup_required? [['setup','Thiết lập Admin'],['login','Đăng nhập'],['register','Đăng ký']] : [['login','Đăng nhập'],['register','Đăng ký email']];
  // Không ép quay lại Thiết lập Admin khi người dùng chọn tab Đăng nhập.
  const active=state.authMode;
  const form= active==='setup' ? `<form data-form="setup">
@@ -120,7 +121,7 @@ function renderAuth(){
  active==='register'? `<form data-form="register">
    ${field('name','Tên hiển thị','', 'required minlength="2"')}
    ${field('email','Email','', 'required type="email" autocomplete="email"')}
-   ${state.meta.gmail_google_required?'<p class="note">Gmail mới phải chọn Đăng ký bằng Google để xác minh. Tài khoản cũ vẫn dùng mật khẩu.</p>':''}
+   ${state.meta.gmail_google_required?'<p class="note">Gmail mới cần xác minh qua Tiếp tục với Google ở tab Đăng nhập. Tài khoản email đã đăng ký trước đây vẫn dùng mật khẩu.</p>':''}
    ${field('password','Mật khẩu (ít nhất 10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
    ${field('referral_code','Mã giới thiệu (không bắt buộc)',ref)}
    <div class="field"><label><input type="checkbox" name="accept_terms" value="yes" required style="width:auto;margin-right:7px"> Tôi đã đọc <a href="/terms.html" target="_blank">Điều khoản</a> và <a href="/privacy.html" target="_blank">Chính sách quyền riêng tư</a>.</label></div>
