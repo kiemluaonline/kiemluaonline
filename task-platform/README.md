@@ -56,3 +56,19 @@ GitHub Actions ở `.github/workflows/task-platform-tests.yml` cũng kiểm tra 
 Biện pháp bổ sung: giới hạn 5 lần đăng nhập sai trong cửa sổ 15 phút cho từng cặp tên đăng nhập/IP; giới hạn POST body 32 KiB; session hết hạn sau 12 giờ; CSP, X-Frame-Options, nosniff, Referrer-Policy, no-store. Ở môi trường `APP_ENV=production`, bắt buộc `SECRET_KEY` mạnh (>=32 ký tự) và `COOKIE_SECURE=1`; truy cập bằng HTTPS. Cơ chế hạn chế đăng nhập hiện tại chưa đủ thay thế hệ thống rate limit theo IP và giám sát chống brute-force quy mô lớn.
 
 `Dockerfile` chạy Waitress ở cổng 8000, nhưng **không được triển khai với database SQLite đặt trên ổ đĩa tạm hoặc trong container không có persistent volume**. Phải gắn volume bền vững ngoài container cho `DATABASE_PATH`, sao lưu tự động và kiểm thử phục hồi. Trong môi trường dùng nhiều worker/máy chủ, nên chuyển sang PostgreSQL và thiết kế migration chuẩn. Không sử dụng dữ liệu tiền thật ở môi trường staging.
+
+
+## V7: Render Free + Supabase Free PostgreSQL
+
+**Hướng dẫn từng bước bằng tiếng Việt:** [DEPLOY_FREE_SUPABASE.md](DEPLOY_FREE_SUPABASE.md).
+
+- Khi `DATABASE_URL` được cung cấp, Flask dùng PostgreSQL với psycopg3 và TLS bắt buộc (`sslmode=require`). Ứng dụng vẫn dùng SQLite **chỉ khi phát triển hoặc chạy tests** mà không có `DATABASE_URL`.
+- Khi `APP_ENV=production`, `DATABASE_URL` là **bắt buộc**, cùng `SECRET_KEY` và `COOKIE_SECURE=1`.
+- Dùng Session pooler Supabase (cổng 5432, IPv4), không công khai connection URI. Script `start.sh` tạo bảng PostgreSQL khi khởi động và khởi chạy Waitress.
+- Các bảng chứa dữ liệu cá nhân và tiền thưởng có RLS và không cấp quyền cho vai trò `anon` hoặc `authenticated` trực tiếp. API truy cập chỉ thông qua Flask server.
+- Tạo Admin đầu tiên qua cặp biến Render `BOOTSTRAP_ADMIN_USERNAME`/`BOOTSTRAP_ADMIN_PASSWORD` (chỉ lần đầu, mật khẩu ít nhất 16 ký tự). **Xóa hai biến sau lần chạy đầu thành công**.
+- Mỗi yêu cầu trừ số dư dùng transaction PostgreSQL và `SELECT ... FOR UPDATE` trên bản ghi user để tuần tự hóa các thay đổi đồng thời.
+- Bộ tests mới có `tests/test_postgres_adapter.py` để kiểm tra chuẩn bị câu SQL, TLS và RLS ở mức mã. Không có tích hợp Supabase production trong CI và chưa xác nhận chạy thông suốt trên dịch vụ thực tế.
+- Mã nguồn **không tự copy dữ liệu SQLite cũ sang PostgreSQL**. Nếu cần giữ dữ liệu cũ, phải backup, migration riêng và đối soát các giao dịch trước khi sử dụng.
+
+**Giới hạn quan trọng:** Render Free ngủ khi ít truy cập; Supabase Free giới hạn tài nguyên và có thể tạm dừng project không hoạt động. Bản này chỉ để thử nghiệm với dữ liệu mẫu, không xử lý tiền thật hay đưa vào môi trường production thương mại.
