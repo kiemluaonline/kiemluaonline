@@ -146,6 +146,23 @@ async function overview(){
  <article class="card"><h3>🛡️ Kiểm tra chống gian lận</h3><div class="field-hint">IP đang truy cập</div><div class="field-output">${esc(m.ip)}</div><div class="field-hint" style="margin-top:10px">Mã nhận diện trình duyệt</div><div class="field-output">${esc(m.device_code)}</div><p class="note">Mã do website lưu trên trình duyệt nếu được cho phép. Đây không phải IMEI và có thể bị xóa hoặc thay đổi.</p></article></section>`;
 }
 
+
+const isIPv4 = ip => {
+ const parts=String(ip||'').split('.');
+ return parts.length===4&&parts.every(p=>/^\d{1,3}$/.test(p)&&Number(p)<=255);
+};
+const compactIP = ip => {
+ const value=String(ip||'');
+ if(!value)return 'Chưa xác định';
+ if(!value.includes(':')||value.length<26)return value;
+ const parts=value.split(':').filter(Boolean);
+ return parts.slice(0,3).join(':')+'…'+(parts.at(-1)||'');
+};
+const adminIP = ip => {
+ const value=String(ip||'');
+ return value.includes(':')?`<details class="risk-ip-details"><summary><code title="${esc(value)}">${esc(compactIP(value))}</code></summary><code>${esc(value)}</code><button type="button" data-action="copy-ip" data-value="${esc(value)}">Sao chép</button></details>`:`<code>${esc(value)}</code>`;
+};
+
 function taskDashboardCard(d){
  const p=d.latest_payment;
  const payment=p
@@ -161,16 +178,21 @@ function taskDashboardCard(d){
   </div>
   <section class="card task-device-card" aria-label="IP mạng và nhận diện trình duyệt">
    <div class="task-ip-heading">
-    <svg class="task-ip-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 4.2-5 13.8 0 18M12 3c5 4.2 5 13.8 0 18"/></svg>
-    <h3>IP hiện tại</h3>
+    <svg class="task-ip-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-5 4.2-5 13.8 0 18M12 3c5 4.2 5 13.8 0 18"/></svg><h3>IP hiện tại</h3>
    </div>
-   <div class="task-ip-value" data-ip-version="${/^(?:\d{1,3}\.){3}\d{1,3}$/.test(d.ip||'')?'v4':String(d.ip||'').includes(':')?'v6':'unknown'}">${esc(d.ip||'Chưa xác định')}</div>
-   <p class="task-ip-help">Đây là địa chỉ IP công khai của mạng đang truy cập, do Cloudflare ghi nhận. ${String(d.ip||'').includes(':')?'Kết nối đang dùng IPv6 nên địa chỉ dài hơn dạng IPv4.':''}</p>
+   <div class="task-ip-value" id="taskDisplayIP">${esc(compactIP(d.ip))}</div>
+   <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 • hiển thị rút gọn':'Chưa xác định IP'}</span>
+   ${String(d.ip||'').includes(':')?`<div class="task-ip-tools">
+  <button class="task-ip-btn" type="button" data-action="check-ipv4">Kiểm tra IPv4</button>
+  <button class="task-ip-btn" type="button" data-action="copy-ip" data-value="${esc(d.ip)}">Sao chép IPv6</button>
+ </div>
+ <details class="task-ip-full"><summary>Xem IPv6 đầy đủ</summary><code>${esc(d.ip)}</code></details>
+ <p class="task-ip-helper" id="taskIPv4Help">Kiểm tra IPv4 sẽ kết nối tới dịch vụ ipify. IPv4 nếu có có thể khác IP Cloudflare nhận được.</p>`:''}
    <div class="task-device-tag">
     <svg class="task-phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M10.5 18.5h3"/></svg>
     <div><strong>${d.device_registered?'Đã nhận diện trình duyệt':'Nhận diện tạm thời'}</strong><span>${esc(d.device_code||'—')}</span></div>
    </div>
-   <p class="task-device-note">Mã nhận diện do website lưu trên trình duyệt, không phải IMEI. IP hoặc mã có thể thay đổi; không tự kết luận gian lận chỉ dựa vào chúng.</p>
+   <p class="task-device-note">IP thật do Cloudflare ghi nhận vẫn được giữ trong hệ thống. Mã trình duyệt không phải IMEI và có thể đổi; không tự kết luận gian lận chỉ dựa vào một IP.</p>
   </section>
  </div>`;
 }
@@ -303,11 +325,11 @@ async function adminSecurity(){
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
  <div class="callout">Dữ liệu IP/mã trình duyệt chỉ hỗ trợ đánh giá rủi ro; người dùng chung mạng hoặc thay đổi IP có thể trùng/đổi mã. Không nên tự động quy kết gian lận chỉ dựa trên IP.</div>
  <section class="grid two section"><article class="card"><h3>IP dùng bởi nhiều tài khoản trong 30 ngày</h3>
- ${table(['IP','Tài khoản'],d.repeated_ips.map(r=>`<tr><td><code>${esc(r.ip)}</code></td><td>${r.n}</td></tr>`))}</article>
+ ${table(['IP','Tài khoản'],d.repeated_ips.map(r=>`<tr><td>${adminIP(r.ip)}</td><td>${r.n}</td></tr>`))}</article>
  <article class="card"><h3>Mã trình duyệt dùng bởi nhiều tài khoản (30 ngày)</h3>
   ${table(['Mã nhận diện','Tài khoản'],(d.repeated_devices||[]).map(r=>`<tr><td><code>${esc(r.device_code)}</code></td><td>${r.n}</td></tr>`))}
   <p class="note">Mã nhận diện có thể bị thay đổi; chỉ dùng để đánh giá rủi ro, không tự khóa tài khoản.</p></article>
-  <article class="card"><h3>Nhật ký sự kiện gần đây</h3>${table(['Thời gian','Sự kiện','IP / Mã'],d.events.map(r=>`<tr><td>${dt(r.created_at)}</td><td>${esc(r.event_type)}<div class="small muted">${esc(r.detail)}</div></td><td><code>${esc(r.ip)}</code><div class="small muted">${esc(r.device_code)}</div></td></tr>`))}</article></section>`;
+  <article class="card"><h3>Nhật ký sự kiện gần đây</h3>${table(['Thời gian','Sự kiện','IP / Mã'],d.events.map(r=>`<tr><td>${dt(r.created_at)}</td><td>${esc(r.event_type)}<div class="small muted">${esc(r.detail)}</div></td><td>${adminIP(r.ip)}<div class="small muted">${esc(r.device_code)}</div></td></tr>`))}</article></section>`;
 }
 async function adminSettings(){
  const d=await api('/api/admin/settings'),s=d.settings;
@@ -371,6 +393,32 @@ app.addEventListener('click',async e=>{
   if(act==='start-task'){await startTask(el.dataset.id);return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
+  if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
+  if(act==='check-ipv4'){
+   el.disabled=true;el.textContent='Đang kiểm tra…';
+   const controller=new AbortController(),limit=setTimeout(()=>controller.abort(),6500);
+   try{
+    const res=await fetch('https://api.ipify.org?format=json',{mode:'cors',cache:'no-store',credentials:'omit',signal:controller.signal});
+    if(!res.ok)throw Error('Không lấy được IPv4');
+    const response=await res.json(),ip=String(response?.ip||'');
+    if(!isIPv4(ip))throw Error('Phản hồi không phải IPv4');
+    const ipElement=document.getElementById('taskDisplayIP'),label=document.getElementById('taskIPLabel');
+    if(ipElement&&label&&el.isConnected){
+     ipElement.textContent=ip;
+     label.textContent='IPv4 công khai (qua ipify)';
+     const note=document.getElementById('taskIPv4Help');
+     if(note)note.textContent='IPv4 của đường kết nối tới ipify. Cloudflare có thể nhận IPv6 khác; các địa chỉ này không phải định danh thiết bị.';
+     el.textContent='Kiểm tra lại IPv4';
+    }
+   }catch(error){
+    if(el.isConnected)toast('Không lấy được IPv4 trên kết nối này. Bạn vẫn có thể xem hoặc sao chép IPv6 đầy đủ.',true);
+   }finally{
+    clearTimeout(limit);el.disabled=false;
+    if(el.isConnected&&el.textContent==='Đang kiểm tra…')el.textContent='Kiểm tra IPv4';
+   }
+   return;
+  }
+
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}

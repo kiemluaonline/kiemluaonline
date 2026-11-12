@@ -131,3 +131,25 @@
  .task-device-card .task-ip-help{font-size:13px;margin-bottom:12px}
  .task-device-tag{padding:9px 12px;border-radius:13px}
 }
+
+/* Compact IPv6; never pretend an IPv6 address is an IPv4. */
+.task-device-card .task-ip-value{font-size:clamp(20px,4vw,29px);line-height:1.22;letter-spacing:0;overflow-wrap:anywhere;margin:0 0 7px}
+.task-ip-type{display:inline-flex;border-radius:99px;padding:4px 9px;background:#eef3f8;color:#5c6e80;font-size:11px;font-weight:750;margin-bottom:12px}
+.task-ip-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.task-ip-btn{background:#eff5f1;color:#126345;padding:7px 11px;border:1px solid #bed5c7;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer}
+.task-ip-btn:disabled{opacity:.6;cursor:wait}
+.task-ip-full{max-width:100%;color:#587169;font-size:12px;margin:4px 0 9px}
+.task-ip-full summary{cursor:pointer;font-weight:650}
+.task-ip-full code{display:block;overflow-wrap:anywhere;margin:8px 0 0;padding:8px 10px;background:#f5f8f6;border-radius:8px}
+.task-ip-helper{color:#6d7c8a!important;font-size:11px!important;line-height:1.5!important;margin:6px 0 12px!important}
+.task-device-card .task-device-note{font-size:11px;margin-top:10px}
+.risk-ip-details{max-width:210px}
+.risk-ip-details summary{cursor:pointer}
+.risk-ip-details code{overflow-wrap:anywhere}
+.risk-ip-details>code{display:block;margin-top:7px;padding:6px;background:#f4f7f5}
+.risk-ip-details button{margin-top:6px;padding:5px 8px;border:1px solid #bfd8cb;background:#eff8f2;color:#166243;border-radius:7px;font-size:11px}
+@media(max-width:730px){
+.task-device-card .task-ip-value{font-size:clamp(20px,5.6vw,25px)}
+.task-ip-btn{min-height:36px}
+.task-device-card .task-ip-heading h3{font-size:18px}
+}
