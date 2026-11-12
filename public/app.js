@@ -9,7 +9,7 @@ const ADMIN_NAV = [
   ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],
   ['admin-users','☻','Thành viên'],['admin-reviews','✓','Duyệt bằng chứng'],
   ['admin-withdrawals','⇢','Yêu cầu rút tiền'],['admin-security','♙','Chống gian lận'],
-  ['admin-settings','⚙','Cài đặt']
+  ['admin-settings','⚙','Cài đặt'],['profile','☻','Hồ sơ của tôi']
 ];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const fmt = v => Number(v || 0).toLocaleString('vi-VN');
