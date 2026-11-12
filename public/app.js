@@ -242,9 +242,13 @@ function ipv4FromJSONP(provider){
   };
   const timer=setTimeout(()=>complete('','Hết thời gian nhận callback (7,5 giây)'),7500);
   window.addEventListener('message',receive);
-  const safeURL=provider.jsonp.replaceAll('&','&amp;').replaceAll('"','&quot;');
-  const postError='parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',reason:"Tải script JSONP thất bại"},"*")';
-  frame.srcdoc='<!doctype html><meta charset="utf-8"><script>function tramLuaIPv4(d){parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',ip:d&&d.ip},"*");}</scr'+'ipt><script src="'+safeURL+'" onerror='+JSON.stringify(postError)+'></scr'+'ipt>';
+  // Tạo script bằng DOM bên trong iframe: tránh lỗi escape dấu nháy trong HTML onerror.
+  const scriptSource='function tramLuaIPv4(d){parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',ip:d&&d.ip},"*");}'
+   +'var ext=document.createElement("script");'
+   +'ext.src='+JSON.stringify(provider.jsonp)+';'
+   +'ext.onerror=function(){parent.postMessage({kind:"tram-lua-v4",token:'+JSON.stringify(token)+',reason:"Không tải được script JSONP"},"*");};'
+   +'document.head.appendChild(ext);';
+  frame.srcdoc='<!doctype html><html><head><meta charset="utf-8"><script>'+scriptSource+'</scr'+'ipt></head><body></body></html>';
   document.body.appendChild(frame);
  });
 }
