@@ -35,14 +35,14 @@ async function boot(){
   catch(e){ app.innerHTML=`<div class="auth-page"><div class="auth-card"><h2>Chưa thể kết nối hệ thống</h2><p>${esc(e.message)}. Hãy kiểm tra D1 và migration.</p></div></div>`;return; }
   await loadMe();
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
-  else renderAuth();
+  else { if(state.meta.setup_required) state.authMode='setup'; renderAuth(); }
 }
 async function loadMe(){ try{state.me=await api('/api/me');}catch{state.me=null;} }
 function renderAuth(){
  const mode=state.authMode;
  const ref=new URLSearchParams(location.search).get('ref')||'';
  const tabs=state.meta.setup_required? [['setup','Thiết lập Admin'],['login','Đăng nhập'],['register','Đăng ký']] : [['login','Đăng nhập'],['register','Đăng ký']];
- if(state.meta.setup_required&&mode==='login')state.authMode='setup';
+ // Không ép quay lại Thiết lập Admin khi người dùng chọn tab Đăng nhập.
  const active=state.authMode;
  const form= active==='setup' ? `<form data-form="setup">
    ${field('setup_key','Khóa cài đặt bí mật','', 'required type="password" autocomplete="off"')}
