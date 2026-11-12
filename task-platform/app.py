@@ -4,6 +4,8 @@ from pathlib import Path
 from functools import wraps
 from flask import Flask, g, session, request, redirect, url_for, render_template, flash, abort
 from werkzeug.security import generate_password_hash, check_password_hash
+import psycopg
+from storage import PgConnection
 
 app=Flask(__name__)
 production=os.getenv("APP_ENV")=="production"
@@ -22,6 +24,8 @@ def security_headers(response):
  response.headers["Cache-Control"]="no-store"
  if request.is_secure:response.headers["Strict-Transport-Security"]="max-age=31536000"
  return response
+DATABASE_URL=os.getenv("DATABASE_URL","").strip()
+if production and not DATABASE_URL:raise RuntimeError("Production requires Supabase DATABASE_URL")
 DB=Path(os.getenv("DATABASE_PATH",str(Path(__file__).with_name("platform.db"))))
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,username TEXT UNIQUE COLLATE NOCASE NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user');
@@ -32,10 +36,13 @@ CREATE TABLE IF NOT EXISTS withdrawals(id INTEGER PRIMARY KEY,user_id INTEGER NO
 """
 def db():
  if "db" not in g:
-  DB.parent.mkdir(parents=True,exist_ok=True)
-  g.db=sqlite3.connect(DB,isolation_level=None,timeout=15)
-  g.db.row_factory=sqlite3.Row
-  g.db.execute("PRAGMA busy_timeout=15000")
+  if DATABASE_URL:
+   g.db=PgConnection(DATABASE_URL)
+  else:
+   DB.parent.mkdir(parents=True,exist_ok=True)
+   g.db=sqlite3.connect(DB,isolation_level=None,timeout=15)
+   g.db.row_factory=sqlite3.Row
+   g.db.execute("PRAGMA busy_timeout=15000")
  return g.db
 @app.teardown_appcontext
 def close(_):
@@ -50,6 +57,26 @@ def create_admin():
  if len(password)<12 or len(name)<3:raise ValueError("Admin password needs >=12 characters; name >=3")
  db().execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,'admin')",(name,generate_password_hash(password)))
  print("Admin created")
+@app.cli.command("bootstrap-admin")
+def bootstrap_admin():
+ """Create the first Admin only, using temporary private environment variables."""
+ import click
+ name=os.getenv("BOOTSTRAP_ADMIN_USERNAME","").strip()
+ password=os.getenv("BOOTSTRAP_ADMIN_PASSWORD","")
+ if not name and not password:
+  click.echo("No admin bootstrap requested")
+  return
+ if not (3<=len(name)<=40 and name.replace("_","").isalnum() and len(password)>=16):
+  raise click.ClickException("Invalid bootstrap username or password (min 16 chars)")
+ if db().execute("SELECT 1 FROM users WHERE role='admin' LIMIT 1").fetchone():
+  click.echo("Admin already exists; bootstrap skipped")
+  return
+ try:
+  db().execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,'admin')",(name,generate_password_hash(password)))
+ except (sqlite3.IntegrityError,psycopg.IntegrityError):
+  raise click.ClickException("Admin username already exists")
+ click.echo("First admin created; REMOVE bootstrap credentials from hosting environment")
+
 @app.before_request
 def auth():
  g.user=db().execute("SELECT * FROM users WHERE id=?",(session["user_id"],)).fetchone() if session.get("user_id") else None
@@ -94,7 +121,7 @@ def register():
   if not 3<=len(name)<=40 or not name.replace("_","").isalnum() or len(password)<10:flash("Tài khoản hoặc mật khẩu không hợp lệ.")
   else:
    try:db().execute("INSERT INTO users(username,password_hash) VALUES(?,?)",(name,generate_password_hash(password)));return redirect(url_for("login"))
-   except sqlite3.IntegrityError:flash("Tên tài khoản đã tồn tại.")
+   except (sqlite3.IntegrityError,psycopg.IntegrityError):flash("Tên tài khoản đã tồn tại.")
  return render_template("auth.html",register=True)
 @app.route("/login",methods=["GET","POST"])
 def login():
