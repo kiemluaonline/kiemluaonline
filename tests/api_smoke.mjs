@@ -117,6 +117,62 @@ assert.ok(dashboard.data.link_lua>=100);
 const riskSummary=await call('/api/admin/risk-events','GET',undefined,admCookie);
 assert.equal(riskSummary.status,200);
 assert.ok(Array.isArray(riskSummary.data.repeated_devices));
+
+// Quota theo IP, trình duyệt, tài khoản: mỗi giới hạn do Admin tự thay đổi.
+const defaultQuota=await call('/api/admin/settings','GET',undefined,admCookie);
+assert.equal(defaultQuota.status,200);
+assert.equal(defaultQuota.data.settings.quota_user_tasks_daily,'25');
+assert.equal(defaultQuota.data.settings.quota_device_accounts_daily,'2');
+assert.equal(defaultQuota.data.settings.quota_ip_accounts_daily,'6');
+assert.equal((await call('/api/admin/settings','PUT',{quota_ip_accounts_daily:'200'},admCookie)).status,400);
+const otherIP='203.0.113.10';
+const browserID='11111111-2222-4333-8444-555555555555';
+const user2=await call('/api/auth/register','POST',{name:'Người dùng hai',email:'quota2@example.com',password:'test-password-2026',accept_terms:'yes'},'',otherIP,browserID);
+assert.equal(user2.status,201,JSON.stringify(user2));
+async function claimFor(cookieFor, taskFor, ipFor=otherIP, deviceFor=browserID){
+ const startFor=await call('/api/tasks/'+taskFor+'/start','POST',{},cookieFor,ipFor,deviceFor);
+ if(startFor.status!==200)return startFor;
+ sqlite.prepare('UPDATE task_attempts SET available_at=0 WHERE id=?').run(startFor.data.attempt_id);
+ return call('/api/tasks/'+taskFor+'/submit','POST',{
+  attempt_id:startFor.data.attempt_id,answer:startFor.data.a+startFor.data.b
+ },cookieFor,ipFor,deviceFor);
+}
+const user2Claim=await claimFor(user2.cookie,taskId);
+assert.equal(user2Claim.status,200,JSON.stringify(user2Claim));
+const user3=await call('/api/auth/register','POST',{name:'Người dùng ba',email:'quota3@example.com',password:'test-password-2026',accept_terms:'yes'},'',otherIP,browserID);
+assert.equal(user3.status,201,JSON.stringify(user3));
+const blockedDevice=await call('/api/tasks/'+taskId+'/start','POST',{},user3.cookie,otherIP,browserID);
+assert.equal(blockedDevice.status,429,JSON.stringify(blockedDevice));
+assert.equal(blockedDevice.data.quota_scope,'device');
+assert.equal((await call('/api/me','GET',undefined,user3.cookie,otherIP)).status,200,'Quota không khóa tài khoản');
+// Tắt thiết bị để kiểm tra IP độc lập, kể cả khi mã trình duyệt khác.
+assert.equal((await call('/api/admin/settings','PUT',{
+ quota_device_accounts_daily:'0',quota_ip_accounts_daily:'2'
+},admCookie)).status,200);
+const differentBrowser='99999999-2222-4333-8444-555555555555';
+const blockedIP=await call('/api/tasks/'+taskId+'/start','POST',{},user3.cookie,otherIP,differentBrowser);
+assert.equal(blockedIP.status,429,JSON.stringify(blockedIP));
+assert.equal(blockedIP.data.quota_scope,'ip');
+// Tắt giới hạn IP và hạn chế mỗi tài khoản: tài khoản có 2 nhiệm vụ đã duyệt sẽ bị từ chối.
+assert.equal((await call('/api/admin/settings','PUT',{
+ quota_ip_accounts_daily:'0',quota_user_tasks_daily:'1'
+},admCookie)).status,200);
+const extraTask=await call('/api/admin/tasks','POST',{
+ title:'Kiểm thử quota theo tài khoản',description:'Nhiệm vụ kiểm thử',
+ category:'link',url:'https://example.com',reward:10,min_seconds:5,
+ review_mode:'auto',repeat_policy:'once',is_active:true
+},admCookie);
+assert.equal(extraTask.status,201,JSON.stringify(extraTask));
+const blockedAccount=await call('/api/tasks/'+extraTask.data.id+'/start','POST',{},cookie,otherIP,browserID);
+assert.equal(blockedAccount.status,429,JSON.stringify(blockedAccount));
+assert.equal(blockedAccount.data.quota_scope,'user');
+// Quay về mặc định, không can thiệp dữ liệu ví.
+assert.equal((await call('/api/admin/settings','PUT',{
+ quota_user_tasks_daily:'25',quota_device_accounts_daily:'2',quota_ip_accounts_daily:'6'
+},admCookie)).status,200);
+const riskQuota=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.equal(riskQuota.status,200);
+assert.ok(riskQuota.data.events.some(e=>e.event_type==='task_quota_denied'));
 const change=await call('/api/me/password','POST',{old_password:'user-password-2026',new_password:'My-new-2026-password'},cookie,'203.0.113.10');
 assert.equal(change.status,200);
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).status,401);
@@ -124,4 +180,4 @@ const newLogin=await call('/api/auth/login','POST',{email:'user@example.com',pas
 assert.equal(newLogin.status,200);
 assert.ok(newLogin.cookie);
 await worker.scheduled({},env); // Xác nhận tác vụ dọn dẹp hoạt động trong mô phỏng.
-console.log('PASS: admin setup một lần, thành viên, giới thiệu, CAPTCHA đổi câu hỏi, chờ thời gian, cộng Lúa một lần, điểm danh, giữ/hoàn Lúa, duyệt bằng chứng, chống duyệt trùng, phân quyền, lịch sử.');
+console.log('PASS: quota chống nhiều tài khoản/IP/trình duyệt, Admin cấu hình, tài khoản không bị khóa, admin setup một lần, thành viên, giới thiệu, CAPTCHA đổi câu hỏi, chờ thời gian, cộng Lúa một lần, điểm danh, giữ/hoàn Lúa, duyệt bằng chứng, chống duyệt trùng, phân quyền, lịch sử.');
