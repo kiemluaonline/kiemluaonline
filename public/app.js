@@ -268,11 +268,7 @@ function taskDashboardCard(d,quotas={}){
    <p class="task-security-policy">Quota chặn theo mã thiết bị và địa chỉ IP — đổi IP/VPN/4G không giúp vượt giới hạn.</p>
    <div class="task-security-id"><span>Mã định danh:</span> <code>${esc(d.device_code||'—')}</code></div>
    <p class="task-security-description">Hệ thống kiểm tra IP và mã định danh thiết bị để giới hạn lượt làm và ngăn nhận thưởng trùng.</p>
-   ${(quotas.link_quota?.limit>0||quotas.link_quota?.exclusive||quotas.browser_quota?.limit>0||quotas.browser_quota?.exclusive)?`<div class="task-security-quotas" aria-label="Lượt link trong 24 giờ gần nhất">
-    <span>Link / 24 giờ:</span>
-    ${(quotas.link_quota?.limit>0||quotas.link_quota?.exclusive)?`<span>IP <b>${fmt(quotas.link_quota.used)}/${quotas.link_quota.limit>0?fmt(quotas.link_quota.limit):'∞'}</b></span>`:''}
-    ${(quotas.browser_quota?.limit>0||quotas.browser_quota?.exclusive)?`<span>Mã định danh <b>${fmt(quotas.browser_quota.used)}/${quotas.browser_quota.limit>0?fmt(quotas.browser_quota.limit):'∞'}</b></span>`:''}
-   </div>`:''}
+   <div class="task-security-quotas"><span>Link rút gọn: 1 tài khoản/IP và mã trình duyệt mỗi ngày · Đặt lại 00:00</span></div>
    <details class="task-security-details"><summary>Xem chi tiết</summary>
     <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 • hiển thị rút gọn':'Chưa xác định IP'}</span>
     <div class="task-ip-tools">
@@ -427,9 +423,9 @@ async function tasks(){
  <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
  ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
  <div class="task-meta">${t.category==='video'?`<span>${t.min_seconds} giây tối thiểu</span><span>•</span>`:''}<span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
- <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / 24 giờ`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
+ <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / ngày`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
  ${t.link_blocked
-   ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_browser_owner'?'Trình duyệt này đã làm nhiệm vụ link bằng tài khoản khác trong 24 giờ. Đổi IP, VPN hay 4G không đặt lại lượt.':t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong 24 giờ qua. Đổi mạng không làm mới lượt.':t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':t.link_blocked==='link_owner'?'IP này đã thực hiện nhiệm vụ link bằng tài khoản khác trong 24 giờ. Hãy chờ hoặc liên hệ Admin.':t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong 24 giờ qua.':'Nhiệm vụ link này đã hết lượt trong 24 giờ qua.'}</p>`
+   ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Đặt lại lúc 00:00 giờ Việt Nam.':t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':t.link_blocked==='link_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. IP đã được tài khoản khác sử dụng. Đặt lại lúc 00:00 giờ Việt Nam.':t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':'Nhiệm vụ link này đã hết lượt trong ngày hôm nay.'}</p>`
    :t.my_status?chip(t.my_status):`<button class="btn" data-action="start-task" data-id="${esc(t.id)}">Bắt đầu nhiệm vụ →</button>`}
  </article>`).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
@@ -483,7 +479,7 @@ async function adminOverview(){
  return `${heading('Trung tâm điều hành','Số liệu đọc trực tiếp từ cơ sở dữ liệu, không dùng số liệu minh họa.')}
  <section class="grid four">${[['Thành viên',d.members],['Nhiệm vụ đang mở',d.tasks],['Bằng chứng chờ duyệt',d.pending_evidence],['Rút tiền chờ xử lý',d.pending_withdrawals]].map(([label,val])=>`<article class="card"><div class="metric-label">${esc(label)}</div><div class="metric">${fmt(val)}</div></article>`).join('')}</section>
  <section class="grid two section"><article class="card"><h3>🌾 Tổng Lúa phát hành</h3><div class="metric">${fmt(d.total_issued_lua)}</div><p>Giá trị cộng Lúa từ mọi loại thưởng đã ghi nhận. Đây không phải số tiền thật đã thanh toán.</p></article>
- <article class="card"><h3>🛡️ Hoạt động chống gian lận</h3><div class="metric">${fmt(d.risk_events_today)}</div><p>Sự kiện được ghi nhận trong 24 giờ qua.</p><button data-go="admin-security" class="btn alt">Kiểm tra sự kiện →</button></article></section>
+ <article class="card"><h3>🛡️ Hoạt động chống gian lận</h3><div class="metric">${fmt(d.risk_events_today)}</div><p>Sự kiện được ghi nhận hôm nay, giờ Việt Nam.</p><button data-go="admin-security" class="btn alt">Kiểm tra sự kiện →</button></article></section>
  <div class="callout section">Để có dữ liệu thật, hãy tạo nhiệm vụ, cấu hình chính sách thưởng và quy đổi. Trạng thái chi trả chỉ được cập nhật sau khi đã chuyển khoản thật.</div>`;
 }
 function taskForm(task={}){
@@ -491,13 +487,13 @@ function taskForm(task={}){
  <input type="hidden" name="id" value="${esc(task.id||'')}">
  ${field('title','Tên nhiệm vụ',task.title||'', 'required minlength="3"')}
  <div class="field"><label for="description">Hướng dẫn / mô tả</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
- <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Liên kết'],['app','App (tải & nhập mã)'],['other','Khác']],task.category||'video')}
+ <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Link rút gọn'],['app','App (tải & nhập mã)'],['other','Khác']],task.category||'video')}
  ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động sau khi xác nhận CAPTCHA']],task.review_mode||'manual')}</div>
  ${field('url','URL HTTPS (link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
  <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
- ${field('link_24h_limit','Lượt link này / tài khoản / 24 giờ',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
- <p class="note">Chỉ áp dụng loại Liên kết. Nhập 1 giữ chính sách lặp đang chọn; nhập 2 cho phép tối đa 2 lần làm cùng nhiệm vụ trong 24 giờ gần nhất (nếu quota IP vẫn còn).</p>
+ ${field('link_24h_limit','Lượt link rút gọn này / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
+ <p class="note">Chỉ áp dụng loại Link rút gọn. Nhập 1 giữ chính sách lặp đang chọn; từ 2 trở lên là số lượt mỗi ngày, đặt lại lúc 00:00 giờ Việt Nam. Không giới hạn tổng lượt trên toàn bộ danh sách link.</p>
  <div class="form-row">${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
  <div id="task-time-field" ${(task.category||'video')==='video'?'':'hidden'}>${field('min_seconds','Thời gian tối thiểu cho Video (giây)',task.min_seconds||15,`type="number" min="5" max="3600" ${(task.category||'video')==='video'?'required':'disabled'}`)}</div></div>
  <div class="form-row">${select('repeat_policy','Lặp lại',[['once','Mỗi người một lần'],['daily','Mỗi ngày một lần']],task.repeat_policy||'once')}
@@ -541,12 +537,16 @@ async function adminSecurity(){
  const d=await api('/api/admin/risk-events');
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
  <div class="callout">Dữ liệu IP/mã trình duyệt chỉ hỗ trợ đánh giá rủi ro; người dùng chung mạng hoặc thay đổi IP có thể trùng/đổi mã. Không nên tự động quy kết gian lận chỉ dựa trên IP.</div>
+ <section class="card section"><h3>⚠ Cảnh báo link rút gọn hôm nay</h3>
+ <p><strong>${fmt(d.link_alert_count||0)}</strong> lượt bị chặn · <strong>${fmt(d.link_alert_accounts||0)}</strong> tài khoản · Đặt lại 00:00 giờ Việt Nam</p>
+ <p class="note">Phát hiện tài khoản khác dùng chung IP hoặc mã trình duyệt. Đây là cảnh báo để Admin kiểm tra, chưa phải kết luận gian lận.</p>
+ ${table(['Thời gian / Nhiệm vụ','Tài khoản bị chặn','Nguyên nhân / Tài khoản giữ lượt','IP / Mã'],(d.link_alerts||[]).map(r=>`<tr><td>${dt(r.created_at)}<div>${esc(r.task_title||(r.detail?.endsWith(':list')?'Xem danh sách nhiệm vụ':'—'))}</div></td><td>${esc(r.name||'—')}<div>${esc(r.email||r.user_id||'—')}</div></td><td>${esc(r.detail?.startsWith('link_owner:')?'Trùng IP với tài khoản khác':r.detail?.startsWith('link_browser_owner:')?'Trùng mã trình duyệt với tài khoản khác':'Đã đủ lượt nhiệm vụ')}<div>${esc(r.owner_email||'—')}</div></td><td>${adminIP(r.ip)}<div class="small">${esc(r.device_code)}</div></td></tr>`))}</section>
  <section class="grid two section"><article class="card"><h3>IP dùng bởi nhiều tài khoản trong 30 ngày</h3>
  ${table(['IP','Tài khoản'],d.repeated_ips.map(r=>`<tr><td>${adminIP(r.ip)}</td><td>${r.n}</td></tr>`))}</article>
  <article class="card"><h3>Mã trình duyệt dùng bởi nhiều tài khoản (30 ngày)</h3>
   ${table(['Mã nhận diện','Tài khoản'],(d.repeated_devices||[]).map(r=>`<tr><td><code>${esc(r.device_code)}</code></td><td>${r.n}</td></tr>`))}
   <p class="note">Mã nhận diện có thể bị thay đổi; chỉ dùng để đánh giá rủi ro, không tự khóa tài khoản.</p></article>
-  <article class="card"><h3>Nhật ký sự kiện gần đây</h3>${table(['Thời gian','Sự kiện','IP / Mã'],d.events.map(r=>`<tr><td>${dt(r.created_at)}</td><td>${esc(r.event_type)}<div class="small muted">${esc(r.detail)}</div></td><td>${adminIP(r.ip)}<div class="small muted">${esc(r.device_code)}</div></td></tr>`))}</article></section>`;
+  <article class="card"><h3>Nhật ký sự kiện gần đây</h3>${table(['Thời gian','Sự kiện','IP / Mã'],d.events.map(r=>`<tr><td>${dt(r.created_at)}</td><td>${esc(r.event_type)}<div>${esc(r.email||r.user_id||'—')}</div><div class="small muted">${esc(r.detail)}</div></td><td>${adminIP(r.ip)}<div class="small muted">${esc(r.device_code)}</div></td></tr>`))}</article></section>`;
 }
 async function adminSettings(){
  const d=await api('/api/admin/settings'),s=d.settings;
@@ -565,17 +565,12 @@ async function adminSettings(){
  <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
  ${field('quota_device_accounts_daily','Tài khoản/mã trình duyệt/ngày',s.quota_device_accounts_daily,'type="number" min="0" max="100" required')}</div>
  <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
- <h3>🔗 Quota riêng cho nhiệm vụ link</h3>
- <p class="note">Áp dụng trong 24 giờ tính từ khi gửi nhiệm vụ link, không reset lúc 00:00. Thành viên khác trùng IP sẽ bị chặn, kể cả dùng điện thoại khác trên cùng Wi-Fi. Nhiệm vụ chờ duyệt cũng tạm giữ quota.</p>
- <div class="form-row">${field('quota_link_tasks_ip_24h','Tổng lượt link/IP/24 giờ',s.quota_link_tasks_ip_24h,'type="number" min="0" max="100" required')}
- ${select('quota_link_ip_exclusive','Chặn tài khoản khác trên cùng IP',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}</div>
- <h3>📱 Chặn đổi IP / VPN bằng mã trình duyệt</h3>
- <p class="note">Áp dụng cho nhiệm vụ link: số lượt bám theo mã trình duyệt do website tạo, không phụ thuộc Wi-Fi, 4G, VPN hoặc proxy. Thời hạn tính trong 24 giờ gần nhất.</p>
- <div class="form-row">${field('quota_link_tasks_device_24h','Tổng lượt link / mã trình duyệt / 24 giờ',s.quota_link_tasks_device_24h,'type="number" min="0" max="100" required')}
- ${select('quota_link_device_exclusive','Chặn tài khoản khác dùng cùng mã',[['1','Bật'],['0','Tắt']],s.quota_link_device_exclusive)}</div>
- <p class="note">Đề xuất 2 lượt và Bật. Không thể chặn tuyệt đối người xóa dữ liệu, dùng trình duyệt khác hoặc giả mạo mã. Đây không phải IMEI hay mã thiết bị vật lý. Không tự khóa tài khoản.</p>
- <p class="note">Mặc định 2 lượt link trên một IP. Chỉ tài khoản gửi link trước có thể dùng tiếp lượt còn lại; các tài khoản khác cùng IP phải chờ. Mức lượt cho từng nhiệm vụ link được sửa tại Quản lý nhiệm vụ. Không tự khóa tài khoản và không xóa Lúa.</p>
- <p class="note">Không tự khóa tài khoản. IP có thể dùng chung và mã trình duyệt có thể bị xóa/giả mạo; Admin kiểm tra nhật ký “task_quota_denied” nếu có khiếu nại.</p>
+ <h3>🔗 Bảo vệ link rút gọn theo ngày</h3>
+ <p class="note">IP được dành cho tài khoản gửi nhiệm vụ đầu tiên trong ngày. Tài khoản khác cùng IP bị chặn toàn bộ link rút gọn. Nhiệm vụ chờ duyệt cũng giữ chỗ; bị từ chối sẽ không giữ chỗ. Đặt lại lúc 00:00 giờ Việt Nam.</p>
+ ${select('quota_link_ip_exclusive','Chặn tài khoản khác trên cùng IP',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}
+ ${select('quota_link_device_exclusive','Chặn đổi tài khoản trên cùng mã trình duyệt',[['1','Bật'],['0','Tắt']],s.quota_link_device_exclusive)}
+ <p class="note">Đã bỏ giới hạn tổng 2 lượt. Tài khoản giữ IP được làm các link khác theo số lượt riêng tại Quản lý nhiệm vụ. Các giới hạn chung phía trên áp dụng cho App, Video và Khác.</p>
+ <p class="note">Mã trình duyệt không phải IMEI, có thể bị thay đổi. Dùng chung IP là dấu hiệu cần xem xét, không tự khóa tài khoản hoặc xóa Lúa. Xem cảnh báo tại Chống gian lận.</p>
  <button class="btn" type="submit">Lưu cài đặt</button></form>
  <section class="card"><h3>⚠ Cần thiết lập trước khi mở rút</h3><p>Đặt tỷ giá Lúa/VNĐ và chuẩn bị nguồn chi trả thực tế. Mặc định chức năng rút bị tắt để tránh cam kết thanh toán sai.</p>
  <p>Admin duyệt nhiệm vụ có thể cộng Lúa; Admin từ chối yêu cầu rút sẽ tự hoàn Lúa vào ví.</p>
