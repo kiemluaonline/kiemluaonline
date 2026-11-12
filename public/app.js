@@ -370,6 +370,7 @@ async function tasks(){
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
  ${taskDashboardCard(stats)}
  ${(data.link_quota?.limit>0||data.link_quota?.exclusive)?`<div class="task-link-quota-note">🔒 Nhiệm vụ link trên IP này: ${data.link_quota.used}/${data.link_quota.limit} lượt trong 24 giờ gần nhất. ${data.link_quota.exclusive?'Nếu đã có tài khoản gửi link từ IP này, tài khoản khác phải chờ hết 24 giờ.':''}</div>`:''}
+ ${(data.browser_quota?.limit>0||data.browser_quota?.exclusive)?`<div class="task-link-quota-note">📱 Giới hạn trình duyệt: ${data.browser_quota.used}/${data.browser_quota.limit||'∞'} lượt link trong 24 giờ gần nhất. Đổi IP, VPN, Wi-Fi hay 4G không đặt lại số lượt của cùng mã trình duyệt. ${data.browser_quota.exclusive?'Tài khoản khác dùng chung mã trình duyệt cũng bị giới hạn.':''}</div>`:''}
  <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
  <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
@@ -377,7 +378,7 @@ async function tasks(){
  <div class="task-meta"><span>${t.min_seconds} giây tối thiểu</span><span>•</span><span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
  <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / 24 giờ`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
  ${t.link_blocked
-   ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_owner'?'IP này đã thực hiện nhiệm vụ link hôm nay bằng tài khoản khác. Hãy chờ đủ 24 giờ hoặc liên hệ Admin.':t.link_blocked==='link_limit'?'IP này đã đủ số lượt nhiệm vụ link trong 24 giờ qua.':'Tài khoản đã đủ lượt nhiệm vụ link này trong 24 giờ qua.'}</p>`
+   ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_browser_owner'?'Trình duyệt này đã làm nhiệm vụ link bằng tài khoản khác trong 24 giờ. Đổi IP, VPN hay 4G không đặt lại lượt.':t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong 24 giờ qua. Đổi mạng không làm mới lượt.':t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':t.link_blocked==='link_owner'?'IP này đã thực hiện nhiệm vụ link bằng tài khoản khác trong 24 giờ. Hãy chờ hoặc liên hệ Admin.':t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong 24 giờ qua.':'Nhiệm vụ link này đã hết lượt trong 24 giờ qua.'}</p>`
    :t.my_status?chip(t.my_status):`<button class="btn" data-action="start-task" data-id="${esc(t.id)}">Bắt đầu nhiệm vụ →</button>`}
  </article>`).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
@@ -515,6 +516,11 @@ async function adminSettings(){
  <p class="note">Áp dụng trong 24 giờ tính từ khi gửi nhiệm vụ link, không reset lúc 00:00. Thành viên khác trùng IP sẽ bị chặn, kể cả dùng điện thoại khác trên cùng Wi-Fi. Nhiệm vụ chờ duyệt cũng tạm giữ quota.</p>
  <div class="form-row">${field('quota_link_tasks_ip_24h','Tổng lượt link/IP/24 giờ',s.quota_link_tasks_ip_24h,'type="number" min="0" max="100" required')}
  ${select('quota_link_ip_exclusive','Chặn tài khoản khác trên cùng IP',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}</div>
+ <h3>📱 Chặn đổi IP / VPN bằng mã trình duyệt</h3>
+ <p class="note">Áp dụng cho nhiệm vụ link: số lượt bám theo mã trình duyệt do website tạo, không phụ thuộc Wi-Fi, 4G, VPN hoặc proxy. Thời hạn tính trong 24 giờ gần nhất.</p>
+ <div class="form-row">${field('quota_link_tasks_device_24h','Tổng lượt link / mã trình duyệt / 24 giờ',s.quota_link_tasks_device_24h,'type="number" min="0" max="100" required')}
+ ${select('quota_link_device_exclusive','Chặn tài khoản khác dùng cùng mã',[['1','Bật'],['0','Tắt']],s.quota_link_device_exclusive)}</div>
+ <p class="note">Đề xuất 2 lượt và Bật. Không thể chặn tuyệt đối người xóa dữ liệu, dùng trình duyệt khác hoặc giả mạo mã. Đây không phải IMEI hay mã thiết bị vật lý. Không tự khóa tài khoản.</p>
  <p class="note">Mặc định 2 lượt link trên một IP. Chỉ tài khoản gửi link trước có thể dùng tiếp lượt còn lại; các tài khoản khác cùng IP phải chờ. Mức lượt cho từng nhiệm vụ link được sửa tại Quản lý nhiệm vụ. Không tự khóa tài khoản và không xóa Lúa.</p>
  <p class="note">Không tự khóa tài khoản. IP có thể dùng chung và mã trình duyệt có thể bị xóa/giả mạo; Admin kiểm tra nhật ký “task_quota_denied” nếu có khiếu nại.</p>
  <button class="btn" type="submit">Lưu cài đặt</button></form>
