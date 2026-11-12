@@ -15,7 +15,7 @@ const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&l
 const fmt = v => Number(v || 0).toLocaleString('vi-VN');
 const dt = v => v ? new Date(String(v).replace(' ', 'T') + (String(v).includes('Z') ? '' : 'Z')).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}) : '—';
 const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
-const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',rejected:'Từ chối',paid:'Đã chuyển',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
+const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã chuyển',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
 const field = (key, label, value='', attrs='') => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><input id="${esc(key)}" name="${esc(key)}" value="${esc(value)}" ${attrs}></div>`;
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
 const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
@@ -454,7 +454,7 @@ async function withdrawals(){
  ${field('bank_account','Số tài khoản (chỉ chữ số)','',`required inputmode="numeric" pattern="[0-9]{5,30}" ${!meta.withdrawals_enabled?'disabled':''}`)}
  ${field('bank_owner','Tên chủ tài khoản','',`required ${!meta.withdrawals_enabled?'disabled':''}`)}
  <button class="btn" type="submit" ${!meta.withdrawals_enabled?'disabled':''}>Gửi yêu cầu</button>
- <p class="note">Lúa sẽ được giữ ngay khi gửi để không bị rút trùng. Nếu Admin từ chối, hệ thống tự hoàn Lúa.</p></form>`;
+ <p class="note">Lúa sẽ được giữ ngay khi gửi để không bị rút trùng. Nếu Admin từ chối hoặc đánh dấu số tài khoản không đúng, hệ thống tự hoàn Lúa.</p></form>`;
  const rows=data.withdrawals.map(w=>`<tr><td>${dt(w.created_at)}</td><td class="num">${fmt(w.amount)} Lúa</td><td>${fmt(w.vnd_amount)} ₫</td><td>${chip(w.status)}</td><td>${esc(w.admin_note||'—')}</td></tr>`);
  return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống này không tự chuyển khoản. Quản trị viên chỉ đánh dấu <strong>Đã chuyển</strong> sau khi thanh toán ngoài website và đối chiếu giao dịch ngân hàng.</p><p>Yêu cầu đang chờ sẽ được lưu trong trang quản trị để xử lý.</p></div></section><section class="section"><h3>Lịch sử yêu cầu rút</h3>${table(['Thời gian','Số Lúa','Giá trị VNĐ','Trạng thái','Ghi chú'],rows)}</section>`;
 }
@@ -524,14 +524,14 @@ async function adminReviews(){
 }
 async function adminWithdrawals(){
  const d=await api('/api/admin/withdrawals');
- return `${heading('Yêu cầu rút tiền','Đối chiếu ngân hàng trước khi đánh dấu đã chuyển; từ chối sẽ hoàn Lúa tự động.')}
+ return `${heading('Yêu cầu rút tiền','Đối chiếu ngân hàng trước khi đánh dấu đã chuyển; từ chối hoặc STK không đúng sẽ hoàn Lúa tự động.')}
  <div class="callout">Website chỉ ghi nhận yêu cầu và tình trạng. Bạn phải tự thực hiện giao dịch ngân hàng thực tế ngoài hệ thống trước khi bấm “Đã chuyển”.</div>
  <section class="card section">${table(['Thành viên','Số tiền','Ngân hàng','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr>
  <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div></td>
  <td class="num">${fmt(w.amount)} Lúa<div class="green">${fmt(w.vnd_amount)} ₫</div></td>
  <td>${esc(w.bank_name)}<br><code>${esc(w.bank_account)}</code><div class="small">${esc(w.bank_owner)}</div></td>
  <td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div></td>
- <td>${w.status==='pending'?`<div class="btn-row"><button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid">Đã chuyển</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
+ <td>${w.status==='pending'?`<div class="btn-row"><button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid">Đã chuyển</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="invalid_account">STK không đúng</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
 }
 async function adminSecurity(){
  const d=await api('/api/admin/risk-events');
@@ -720,6 +720,8 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    if(el.dataset.status==='paid'){
      if(!confirm('Chỉ xác nhận nếu bạn đã CHUYỂN KHOẢN THẬT và đối chiếu giao dịch. Đã chuyển?'))return;
      note=prompt('Mã giao dịch hoặc ghi chú đối chiếu ngân hàng (nên nhập):','')||'';
+   }else if(el.dataset.status==='invalid_account'){
+     if(!confirm('Xác nhận số tài khoản không đúng? Khách sẽ được thông báo và hoàn Lúa để gửi yêu cầu mới.'))return;
    }else{note=prompt('Nhập lý do từ chối (bắt buộc):','')||'';if(!note.trim())return;}
    await api('/api/admin/withdrawals/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status,admin_note:note});toast('Đã xử lý yêu cầu rút tiền.');await afterAction('admin-withdrawals');return;
   }
