@@ -48,8 +48,41 @@ async function boot(){
   await loadMe();
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
   else { if(state.meta.setup_required) state.authMode='setup'; renderAuth(); }
+const googleError=new URLSearchParams(location.search).get('google_error');
+if(googleError){
+ const messages={
+  email_exists:'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi vào Hồ sơ để liên kết Google.',
+  not_registered:'Google này chưa đăng ký. Hãy chọn Đăng ký bằng Google.',
+  email_mismatch:'Email Google phải trùng email tài khoản Trạm Lúa.',
+  expired:'Phiên Google đã hết hạn. Hãy thử lại.',
+  cancelled:'Bạn đã hủy đăng nhập Google.',
+  signup_closed:'Hệ thống đã tắt đăng ký mới.',
+  suspended:'Tài khoản đang tạm khóa.',
+  bad_ref:'Mã giới thiệu không hợp lệ.',
+  not_ready:'Chủ website chưa cấu hình Google.'
+ };
+ toast(messages[googleError]||'Đăng nhập Google chưa thành công. Hãy thử lại.',true);
+ history.replaceState(null,'',location.pathname);
+}
 }
 async function loadMe(){ try{state.me=await api('/api/me');}catch{state.me=null;} }
+function googleAuthPanel(active){
+ if(active==='setup')return '';
+ if(!state.meta.google_auth_enabled)return '<p class="note auth-google-disabled">Đăng nhập Google sẽ hiển thị sau khi chủ website cấu hình Google Cloud.</p>';
+ return '<div class="oauth-separator">hoặc</div>'+
+  '<button class="google-auth-btn" type="button" data-action="google-'+active+'">'+
+  '<span class="google-g" aria-hidden="true">G</span>'+
+  (active==='register'?'Đăng ký bằng Google':'Đăng nhập bằng Google')+'</button>'+
+  (active==='register'?'<p class="note">Hãy tích đồng ý điều khoản phía trên trước khi đăng ký Google.</p>':'');
+}
+function googleProfilePanel(){
+ if(!state.meta.google_auth_enabled)return '';
+ const connected=Boolean(state.me.google_linked);
+ return '<section class="card"><h3>Đăng nhập bằng Google</h3><p>'+
+  (connected?'Đã liên kết Google. Bạn có thể đăng nhập bằng Google.':'Liên kết Google cùng email để giữ nguyên Lúa và lịch sử.')+
+  '</p>'+(connected?'<span class="chip approved">Đã liên kết</span>':'<button class="btn alt" data-action="google-link">Liên kết Google</button>')+'</section>';
+}
+
 function renderAuth(){
  const mode=state.authMode;
  const ref=new URLSearchParams(location.search).get('ref')||'';
@@ -66,6 +99,7 @@ function renderAuth(){
  active==='register'? `<form data-form="register">
    ${field('name','Tên hiển thị','', 'required minlength="2"')}
    ${field('email','Email','', 'required type="email" autocomplete="email"')}
+   ${state.meta.gmail_google_required?'<p class="note">Gmail mới phải chọn Đăng ký bằng Google để xác minh. Tài khoản cũ vẫn dùng mật khẩu.</p>':''}
    ${field('password','Mật khẩu (ít nhất 10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
    ${field('referral_code','Mã giới thiệu (không bắt buộc)',ref)}
    <div class="field"><label><input type="checkbox" name="accept_terms" value="yes" required style="width:auto;margin-right:7px"> Tôi đã đọc <a href="/terms.html" target="_blank">Điều khoản</a> và <a href="/privacy.html" target="_blank">Chính sách quyền riêng tư</a>.</label></div>
@@ -80,7 +114,7 @@ function renderAuth(){
  </div><section class="auth-card"><div class="auth-tabs">${tabs.map(([k,t])=>`<button type="button" data-auth="${k}" class="${active===k?'chosen':''}">${t}</button>`).join('')}</div>
  <h2>${active==='setup'?'Khởi tạo hệ thống':active==='register'?'Tạo tài khoản':'Chào mừng quay lại'}</h2>
  <p>${active==='setup'?'Chỉ dành cho chủ website.':active==='register'?'Nhập thông tin để bắt đầu tích Lúa.':'Đăng nhập để tiếp tục nhiệm vụ.'}</p>
- ${form}</section></div>`;
+ ${form}${googleAuthPanel(active)}</section></div>`;
 }
 
 function setMenuOpen(open,restoreFocus=false){
@@ -428,7 +462,7 @@ async function profile(){
  <form class="card" data-form="password"><h3>Đổi mật khẩu</h3>
  ${field('old_password','Mật khẩu hiện tại','', 'required type="password" autocomplete="current-password"')}
  ${field('new_password','Mật khẩu mới (≥10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
- <button class="btn" type="submit">Lưu mật khẩu mới</button><p class="note">Đổi xong, tất cả phiên đăng nhập sẽ bị đăng xuất.</p></form></div>`;
+ <button class="btn" type="submit">Lưu mật khẩu mới</button><p class="note">Đổi xong, tất cả phiên đăng nhập sẽ bị đăng xuất.</p></form>${googleProfilePanel()}</div>`;
 }
 async function adminOverview(){
  const d=await api('/api/admin/overview');
@@ -614,7 +648,21 @@ app.addEventListener('click',async e=>{
  if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
-  if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
+  if(act.startsWith('google-')){
+ const intent=act.slice(7);
+ if(!['login','register','link'].includes(intent))throw new Error('Thao tác Google không hợp lệ.');
+ const body={intent};
+ if(intent==='register'){
+  const f=app.querySelector('form[data-form="register"]');
+  if(!f?.querySelector('[name="accept_terms"]')?.checked)
+   throw new Error('Bạn cần tích đồng ý điều khoản trước khi đăng ký Google.');
+  body.accept_terms='yes';
+  body.referral_code=f.querySelector('[name="referral_code"]')?.value||'';
+ }
+ const response=await api('/api/auth/google/start','POST',body);
+ location.assign(response.url);return;
+}
+if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.authMode='login';renderAuth();return;}
   if(act==='filter-tasks'){state.taskFilter=el.dataset.filter||'all';await navigate('tasks');return;}

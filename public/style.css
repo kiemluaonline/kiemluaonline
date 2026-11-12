@@ -183,3 +183,11 @@
 .app-proof-cell .small{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .app-proof-image{display:block;width:100%;max-height:68vh;object-fit:contain;border:1px solid #d8e5dd;border-radius:10px;background:#f8faf9;margin:12px 0}
 #photo{width:100%;max-width:100%;font-size:13px}
+
+.oauth-separator{display:flex;align-items:center;gap:12px;color:#779080;font-size:12px;margin:17px 0 12px}
+.oauth-separator:before,.oauth-separator:after{content:"";height:1px;background:#d8e5dc;flex:1}
+.google-auth-btn{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;min-height:48px;padding:11px 15px;border:1px solid #cbd9d0;border-radius:11px;background:white;font-size:14px;font-weight:750;color:#23392d;cursor:pointer}
+.google-auth-btn:hover{background:#f6faf7;border-color:#9bbeb0}
+.google-auth-btn:focus-visible{outline:3px solid #e2c36a;outline-offset:2px}
+.google-g{font-family:Arial,sans-serif;font-weight:900;font-size:20px;color:#4285f4}
+.auth-google-disabled{margin-top:17px}
