@@ -6,6 +6,7 @@ from flask import Flask, g, session, request, redirect, url_for, render_template
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg
 from storage import PgConnection
+from fraud import ensure_schema as ensure_fraud_schema, evidence_digest, payout_digest, record_signal, has_open_high_alert
 
 app=Flask(__name__)
 production=os.getenv("APP_ENV")=="production"
@@ -49,7 +50,7 @@ def close(_):
  if "db" in g:g.db.close()
 @app.cli.command("init-db")
 def init_db():
- db().executescript(SCHEMA);ensure_audit_table();ensure_adjustments_table();ensure_login_attempts();print("Database initialized")
+ db().executescript(SCHEMA);ensure_audit_table();ensure_adjustments_table();ensure_login_attempts();ensure_fraud_schema(db(),bool(DATABASE_URL));print("Database initialized")
 @app.cli.command("create-admin")
 def create_admin():
  import getpass
@@ -166,9 +167,22 @@ def submit(task_id):
  if g.user["role"]!="user":abort(403)
  evidence=request.form.get("evidence","").strip()
  if not 10<=len(evidence)<=2000:abort(400)
- if not db().execute("SELECT 1 FROM tasks WHERE id=? AND active=1",(task_id,)).fetchone():abort(404)
- try:db().execute("INSERT INTO submissions(user_id,task_id,evidence) VALUES(?,?,?)",(g.user["id"],task_id,evidence));flash("Đã gửi bằng chứng.")
- except sqlite3.IntegrityError:flash("Bạn đã gửi nhiệm vụ này.")
+ c=db()
+ ensure_fraud_schema(c,bool(DATABASE_URL))
+ try:
+  c.execute("BEGIN IMMEDIATE")
+  if not c.execute("SELECT 1 FROM tasks WHERE id=? AND active=1",(task_id,)).fetchone():abort(404)
+  sid=c.execute("INSERT INTO submissions(user_id,task_id,evidence) VALUES(?,?,?)",(g.user["id"],task_id,evidence)).lastrowid
+  record_signal(c,g.user["id"],"submission",sid,evidence_digest(app.secret_key,evidence),
+                "duplicate_evidence","Bằng chứng giống một tài khoản khác; cần đối chiếu thủ công.",80)
+  c.execute("COMMIT")
+  flash("Đã gửi bằng chứng.")
+ except (sqlite3.IntegrityError,psycopg.IntegrityError):
+  if c.in_transaction:c.execute("ROLLBACK")
+  flash("Bạn đã gửi nhiệm vụ này.")
+ except Exception:
+  if c.in_transaction:c.execute("ROLLBACK")
+  raise
  return redirect(url_for("dashboard"))
 @app.route("/withdraw",methods=["GET","POST"])
 @member
@@ -178,12 +192,15 @@ def withdraw():
   n=amount(request.form.get("amount"));bank=request.form.get("bank","").strip();holder=request.form.get("holder","").strip();account=request.form.get("account","").strip()
   if not (2<=len(bank)<=80 and 2<=len(holder)<=100 and 5<=len(account)<=40 and account.isalnum()):abort(400)
   c=db()
+  ensure_fraud_schema(c,bool(DATABASE_URL))
   try:
    c.execute("BEGIN IMMEDIATE")
    lock_balance_owner(c,g.user["id"])
    if balance(g.user["id"])<n:c.execute("ROLLBACK");flash("Số dư không đủ.");return redirect(url_for("withdraw"))
    w=c.execute("INSERT INTO withdrawals(user_id,amount,bank,holder,account) VALUES(?,?,?,?,?)",(g.user["id"],n,bank,holder,account)).lastrowid
    c.execute("INSERT INTO ledger(user_id,amount,kind,reference_id) VALUES(?,?,'hold',?)",(g.user["id"],-n,w))
+   record_signal(c,g.user["id"],"withdrawal",w,payout_digest(app.secret_key,bank,account),
+                 "shared_payout_account","Thông tin tài khoản nhận tiền trùng với một thành viên khác.",85)
    c.execute("COMMIT")
   except Exception:
    if c.in_transaction:c.execute("ROLLBACK")
@@ -277,11 +294,16 @@ def payout(wid,decision):
  if decision not in ("paid","rejected"):abort(404)
  c=db()
  ensure_audit_table()
+ ensure_fraud_schema(c,bool(DATABASE_URL))
  try:
   c.execute("BEGIN IMMEDIATE")
-  w=c.execute("SELECT * FROM withdrawals WHERE id=?",(wid,)).fetchone()
+  w=c.execute("SELECT * FROM withdrawals WHERE id=?"+(" FOR UPDATE" if DATABASE_URL else ""),(wid,)).fetchone()
   if not w:abort(404)
   if w["status"]=="pending":
+   if decision=="paid" and has_open_high_alert(c,w["user_id"],wid):
+    c.execute("ROLLBACK")
+    flash("Không thể xác nhận đã chuyển: tài khoản có cảnh báo rủi ro cao đang chờ Admin xem xét.")
+    return redirect(url_for("admin_fraud")+"?user_id="+str(w["user_id"]))
    c.execute("UPDATE withdrawals SET status=? WHERE id=?",(decision,wid))
    if decision=="rejected":c.execute("INSERT INTO ledger(user_id,amount,kind,reference_id) VALUES(?,?,'refund',?)",(w["user_id"],w["amount"],wid))
    audit(c,"withdrawal_"+decision,"withdrawal",wid,"Thành viên "+str(w["user_id"])+"; số tiền "+str(w["amount"]))
@@ -429,5 +451,48 @@ def admin_audit():
  where="WHERE a.action=?" if action else ""
  data=paged("""SELECT a.*,u.username FROM admin_audit a JOIN users u ON u.id=a.admin_id """+where+" ORDER BY a.id DESC",(action,) if action else ())
  return render_template("admin_audit.html",data=data,action=action,actions=allowed)
+
+
+@app.get("/admin/fraud")
+@admin
+def admin_fraud():
+ ensure_fraud_schema(db(),bool(DATABASE_URL))
+ status=request.args.get("status","open")
+ if status not in ("open","cleared","confirmed","all"):status="open"
+ where="" if status=="all" else " WHERE f.status=?"
+ data=paged("""SELECT f.*,u.username FROM fraud_alerts f
+ JOIN users u ON u.id=f.user_id"""+where+" ORDER BY f.severity DESC,f.id DESC",
+ (status,) if where else (),name="page")
+ # Optional member filter is applied on a dedicated detail page, not interpolated into SQL.
+ user_id=request.args.get("user_id","").strip()
+ return render_template("admin_fraud.html",data=data,status=status,user_id=user_id)
+
+@app.post("/admin/fraud/<int:alert_id>/review")
+@admin
+def admin_review_fraud(alert_id):
+ decision=request.form.get("decision","")
+ reason=request.form.get("reason","").strip()
+ if decision not in ("cleared","confirmed") or not 10<=len(reason)<=500:abort(400)
+ c=db()
+ ensure_fraud_schema(c,bool(DATABASE_URL))
+ ensure_audit_table()
+ try:
+  c.execute("BEGIN IMMEDIATE")
+  alert=c.execute("SELECT * FROM fraud_alerts WHERE id=?"+(" FOR UPDATE" if DATABASE_URL else ""),(alert_id,)).fetchone()
+  if not alert:abort(404)
+  if alert["status"]!="open":
+   c.execute("ROLLBACK")
+   flash("Cảnh báo này đã được xử lý.")
+   return redirect(url_for("admin_fraud"))
+  c.execute("""UPDATE fraud_alerts
+  SET status=?,reviewed_by=?,review_reason=?,reviewed_at=CURRENT_TIMESTAMP
+  WHERE id=?""",(decision,g.user["id"],reason,alert_id))
+  audit(c,"fraud_"+decision,"fraud_alert",alert_id,"Thành viên "+str(alert["user_id"])+"; lý do: "+reason)
+  c.execute("COMMIT")
+ except Exception:
+  if c.in_transaction:c.execute("ROLLBACK")
+  raise
+ flash("Đã lưu quyết định vào nhật ký Admin.")
+ return redirect(url_for("admin_fraud"))
 
 if __name__=="__main__":app.run(debug=not production and os.getenv("FLASK_DEBUG")=="1")
