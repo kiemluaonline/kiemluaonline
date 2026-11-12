@@ -446,7 +446,7 @@ def paged(sql,params=(),name="page",size=15):
 def admin_audit():
  ensure_audit_table()
  action=request.args.get("action","").strip()
- allowed=("task_create","task_toggle","task_edit","submission_approved","submission_rejected","withdrawal_paid","withdrawal_rejected","balance_adjust")
+ allowed=("task_create","task_toggle","task_edit","submission_approved","submission_rejected","withdrawal_paid","withdrawal_rejected","balance_adjust","fraud_cleared","fraud_confirmed")
  if action not in allowed:action=""
  where="WHERE a.action=?" if action else ""
  data=paged("""SELECT a.*,u.username FROM admin_audit a JOIN users u ON u.id=a.admin_id """+where+" ORDER BY a.id DESC",(action,) if action else ())
