@@ -192,7 +192,10 @@ const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
    (SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
     WHERE c.ip=? AND c.user_id<>? AND t.category='link'
      AND c.status IN ('pending','approved')
-     AND c.created_at>=datetime('now','-24 hours')))`;
+     AND c.created_at>=datetime('now','-24 hours')))
+ AND (?=0 OR
+  (SELECT COUNT(*) FROM task_completions WHERE user_id=? AND task_id=?
+    AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours'))<?)`;
 
 /* IP Cloudflare, không dùng IPv4 người dùng tự dán. Cửa sổ đúng 24 giờ gần nhất.
  Pending giữ chỗ cho tới khi được duyệt/từ chối, rejected không giữ quota. */
@@ -206,22 +209,33 @@ async function linkIPUsage(env,ip,userId){
  ).bind(userId,ip).first();
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
+
+async function linkTaskPerAccountLimit(env,task){
+ if(task.category!=='link')return 1;
+ const limit=await env.DB.prepare('SELECT value FROM settings WHERE key=?')
+  .bind('link_task_limit:'+task.id).first();
+ return Math.max(1,Math.min(20,int(limit?.value,1)));
+}
 async function linkIPQuota(env,req,userId,task,settings){
- if(task.category!=='link')return {enabled:0,owner:0,limit:0,ip:''};
+ if(task.category!=='link')return {enabled:0,owner:0,limit:0,ip:'',perTask:0};
  const ip=clientIP(req);
  if(ip==='unknown'||ip==='local')fail(429,'Không xác minh được IP mạng cho nhiệm vụ link. Vui lòng thử lại.',{quota_scope:'link_missing_ip'});
  const limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
  const exclusive=settings.quota_link_ip_exclusive!=='0';
  const used=await linkIPUsage(env,ip,userId);
- const denied=exclusive&&used.other>0?'link_owner':limit>0&&used.total>=limit?'link_limit':null;
+ const perTaskLimit=await linkTaskPerAccountLimit(env,task);
+ const own=await env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND task_id=? AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours')")
+   .bind(userId,task.id).first();
+ const denied=exclusive&&used.other>0?'link_owner':limit>0&&used.total>=limit?'link_limit':perTaskLimit>1&&Number(own.n)>=perTaskLimit?'link_task_limit':null;
  if(denied){
   await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id);
   fail(429,denied==='link_owner'
    ?'IP này đã thực hiện nhiệm vụ link bằng tài khoản khác trong 24 giờ qua. Vui lòng chờ đủ 24 giờ hoặc liên hệ Admin.'
-   :'IP này đã đủ lượt nhiệm vụ link trong 24 giờ qua. Vui lòng chờ các lượt cũ hết hạn.',
+   :denied==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong 24 giờ qua. Vui lòng chờ các lượt cũ hết hạn.'
+   :'Tài khoản đã đủ lượt của nhiệm vụ link này trong 24 giờ qua.',
    {quota_scope:denied});
  }
- return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip};
+ return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip,perTask:perTaskLimit>1?perTaskLimit:0};
 }
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
@@ -234,7 +248,9 @@ function validateTaskBody(b) {
   if (!positive(reward)) fail(400, 'Thưởng nhiệm vụ phải là số nguyên dương.');
   if (!Number.isInteger(minSeconds) || minSeconds < 5 || minSeconds > 3600) fail(400, 'Thời gian thực hiện từ 5–3600 giây.');
   if (!['manual', 'auto'].includes(review) || !['once', 'daily'].includes(repeat)) fail(400, 'Cấu hình nhiệm vụ không hợp lệ.');
-  return { title, description, category, url, reward, minSeconds, review, repeat, active: b.is_active ? 1 : 0 };
+  const linkLimit=int(b.link_24h_limit,1);
+  if(!Number.isInteger(linkLimit)||linkLimit<1||linkLimit>20)fail(400,'Số lượt link/tài khoản/24 giờ phải từ 1 đến 20.');
+  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit};
 }
 const isPath = (p, prefix) => p.startsWith(prefix);
 async function handler(req, env) {
@@ -332,9 +348,21 @@ async function handler(req, env) {
     const used=await linkIPUsage(env,ip,me.id),limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
     const denied=settings.quota_link_ip_exclusive!=='0'&&used.other>0?'link_owner':
       limit>0&&used.total>=limit?'link_limit':null;
-    return json({tasks:results.results.map(t=>({...t,link_blocked:t.category==='link'?denied:null})),
-      link_quota:{limit,used:used.total,blocked:denied,
-        exclusive:settings.quota_link_ip_exclusive!=='0',rolling_hours:24}});
+    const [overrides,counts]=await Promise.all([
+      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%'").all(),
+      env.DB.prepare("SELECT task_id,COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours') GROUP BY task_id").bind(me.id).all()
+    ]);
+    const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
+    const done=new Map(counts.results.map(r=>[r.task_id,Number(r.n)]));
+    const tasks=results.results.map(t=>{
+      const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
+      const used=done.get(t.id)||0;
+      const blocked=t.category==='link'?(denied||(max>1&&used>=max?'link_task_limit':null)):null;
+      return {...t,link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
+        my_status:t.category==='link'&&max>1?(used>=max?'approved':null):t.my_status};
+    });
+    return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
+      exclusive:settings.quota_link_ip_exclusive!=='0',rolling_hours:24}});
   }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
@@ -355,8 +383,11 @@ async function handler(req, env) {
   if (m === 'POST' && startMatch) {
     const me = await auth(req, env), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(startMatch[1]).first();
     if (!task) fail(404, 'Nhiệm vụ không còn hoạt động.');
-    const existing = await env.DB.prepare('SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND period_key=?').bind(me.id, task.id, period(task)).first();
-    if (existing) fail(409, 'Bạn đã nhận hoặc gửi yêu cầu cho nhiệm vụ này trong kỳ.');
+    if(await linkTaskPerAccountLimit(env,task)<=1){
+      const existing=await env.DB.prepare('SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND period_key=?')
+        .bind(me.id,task.id,period(task)).first();
+      if(existing)fail(409,'Bạn đã nhận hoặc gửi yêu cầu cho nhiệm vụ này trong kỳ.');
+    }
     const settings=await getSettings(env);
     await taskQuota(env,req,me.id,settings);
     await linkIPQuota(env,req,me.id,task,settings);
@@ -392,6 +423,7 @@ async function handler(req, env) {
     const link=await linkIPQuota(env,req,me.id,task,settings);
     const completionId = id();
     const status = task.review_mode === 'manual' ? 'pending' : 'approved';
+    const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
     const batch = await env.DB.batch([
       env.DB.prepare(TASK_CLAIM_UPDATE)
         .bind(completionId, attempt.id, me.id, now(), now(),
@@ -399,12 +431,13 @@ async function handler(req, env) {
           quota.maxIP,quota.ip,me.id,quota.day,quota.maxIP,
           quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice,
           link.enabled,link.ip,link.limit,
-          link.owner,link.ip,me.id),
+          link.owner,link.ip,me.id,
+          link.perTask,me.id,task.id,link.perTask),
       env.DB.prepare(`INSERT OR IGNORE INTO task_completions
         (id,user_id,task_id,period_key,status,reward,evidence,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? FROM task_attempts
         WHERE id=? AND user_id=? AND consumed_by=?`)
-        .bind(completionId, me.id, task.id, period(task), status, task.reward, evidence,
+        .bind(completionId, me.id, task.id, completionPeriod, status, task.reward, evidence,
           clientIP(req), await deviceCode(req, env), attempt.id, me.id, completionId),
       env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
         SELECT ?,?,?,?,'task',? WHERE EXISTS
@@ -491,22 +524,34 @@ async function handler(req, env) {
         pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n });
     }
     if (m === 'GET' && p === '/api/admin/tasks') {
-      return json({ tasks: (await env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all()).results });
+      const [rows,settings]=await Promise.all([
+        env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
+        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%'").all()
+      ]);
+      const limits=new Map(settings.results.map(r=>[r.key,int(r.value,1)]));
+      return json({tasks:rows.results.map(t=>({...t,link_24h_limit:limits.get('link_task_limit:'+t.id)||1}))});
     }
     if (m === 'POST' && p === '/api/admin/tasks') {
       const t = validateTaskBody(await readBody(req)), taskId = id();
-      await env.DB.prepare(`INSERT INTO tasks(id,title,description,category,url,reward,min_seconds,review_mode,repeat_policy,is_active)
-        VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId, t.title, t.description, t.category, t.url, t.reward,
-        t.minSeconds, t.review, t.repeat, t.active).run();
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO tasks(id,title,description,category,url,reward,min_seconds,review_mode,repeat_policy,is_active)
+          VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId,t.title,t.description,t.category,t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active),
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_task_limit:'+taskId,String(t.linkLimit))
+      ]);
       return json({ ok: true, id: taskId }, 201);
     }
     const taskEdit = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
     if (m === 'PATCH' && taskEdit) {
       const t = validateTaskBody(await readBody(req));
-      const result = await env.DB.prepare(`UPDATE tasks SET title=?,description=?,category=?,url=?,reward=?,min_seconds=?,
-       review_mode=?,repeat_policy=?,is_active=? WHERE id=?`).bind(t.title, t.description, t.category, t.url,
-        t.reward, t.minSeconds, t.review, t.repeat, t.active, taskEdit[1]).run();
-      if (!result.meta?.changes) fail(404, 'Không tìm thấy nhiệm vụ.');
+      const exists=await env.DB.prepare('SELECT id FROM tasks WHERE id=?').bind(taskEdit[1]).first();
+      if(!exists)fail(404,'Không tìm thấy nhiệm vụ.');
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE tasks SET title=?,description=?,category=?,url=?,reward=?,min_seconds=?,
+          review_mode=?,repeat_policy=?,is_active=? WHERE id=?`)
+          .bind(t.title,t.description,t.category,t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active,taskEdit[1]),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+          .bind('link_task_limit:'+taskEdit[1],String(t.linkLimit))
+      ]);
       return json({ ok: true });
     }
     if (m === 'GET' && p === '/api/admin/users') {
