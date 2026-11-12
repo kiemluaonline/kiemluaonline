@@ -362,16 +362,16 @@ async function handler(req, env) {
       limit>0&&used.total>=limit?'link_limit':null;
     const [overrides,counts]=await Promise.all([
       env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%'").all(),
-      env.DB.prepare("SELECT task_id,COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours') GROUP BY task_id").bind(me.id).all()
+      env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND created_at>=datetime('now','-24 hours') GROUP BY task_id").bind(me.id).all()
     ]);
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
-    const done=new Map(counts.results.map(r=>[r.task_id,Number(r.n)]));
+    const done=new Map(counts.results.map(r=>[r.task_id,{n:Number(r.n),pending:Number(r.pending||0)}]));
     const tasks=results.results.map(t=>{
       const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
-      const used=done.get(t.id)||0;
+      const entry=done.get(t.id)||{n:0,pending:0},used=entry.n;
       const blocked=t.category==='link'?(denied||(max>1&&used>=max?'link_task_limit':null)):null;
       return {...t,link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
-        my_status:t.category==='link'&&max>1?(used>=max?'approved':null):t.my_status};
+        my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
       exclusive:settings.quota_link_ip_exclusive!=='0',rolling_hours:24}});
