@@ -187,7 +187,7 @@ function taskDashboardCard(d){
   <button class="task-ip-btn" type="button" data-action="copy-ip" data-value="${esc(d.ip)}">Sao chép IPv6</button>
  </div>
  <details class="task-ip-full"><summary>Xem IPv6 đầy đủ</summary><code>${esc(d.ip)}</code></details>
- <p class="task-ip-helper" id="taskIPv4Help">Kiểm tra IPv4 sẽ kết nối tới dịch vụ ipify. IPv4 nếu có có thể khác IP Cloudflare nhận được.</p>`:''}
+ <p class="task-ip-helper" id="taskIPv4Help">Website tự kiểm tra IPv4 qua dịch vụ ipify; nếu có sẽ ưu tiên hiển thị IPv4. IPv6 Cloudflare vẫn được giữ để kiểm tra bảo mật.</p>`:''}
    <div class="task-device-tag">
     <svg class="task-phone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M10.5 18.5h3"/></svg>
     <div><strong>${d.device_registered?'Đã nhận diện trình duyệt':'Nhận diện tạm thời'}</strong><span>${esc(d.device_code||'—')}</span></div>
@@ -196,6 +196,57 @@ function taskDashboardCard(d){
   </section>
  </div>`;
 }
+
+async function detectPublicIPv4(button,silent=false){
+ if(!button?.isConnected||button.disabled)return;
+ const ipElement=document.getElementById('taskDisplayIP');
+ if(!ipElement)return;
+ button.disabled=true;
+ button.textContent='Đang tìm IPv4…';
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6500);
+ try{
+  // Yêu cầu trực tiếp từ trình duyệt đến điểm cuối IPv4-only; không thể thay IPv6 của Cloudflare.
+  const response=await fetch('https://api.ipify.org?format=json',{
+   mode:'cors',cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',signal:controller.signal
+  });
+  if(!response.ok)throw new Error('IPv4 endpoint unavailable');
+  const json=await response.json();
+  const ip=String(json?.ip||'');
+  if(!isIPv4(ip))throw new Error('No actual public IPv4 returned');
+  const currentIP=document.getElementById('taskDisplayIP');
+  const label=document.getElementById('taskIPLabel');
+  if(!button.isConnected||!currentIP||!label||state.view!=='tasks')return;
+  currentIP.textContent=ip;
+  label.textContent='IPv4 công khai • tự động phát hiện';
+  const note=document.getElementById('taskIPv4Help');
+  if(note)note.textContent='IPv4 do ipify đo từ đường kết nối hiện tại. Cloudflare có thể nhận IPv6 khác; mã IP không phải định danh thiết bị.';
+  button.textContent='Kiểm tra lại IPv4';
+  let copy=document.getElementById('taskCopyIPv4');
+  if(!copy){
+   copy=document.createElement('button');
+   copy.id='taskCopyIPv4';copy.type='button';copy.className='task-ip-btn';
+   copy.dataset.action='copy-ip';
+   button.parentNode?.insertBefore(copy,button.nextSibling);
+  }
+  copy.dataset.value=ip;copy.textContent='Sao chép IPv4';
+  if(!silent)toast('Đã phát hiện IPv4 công khai.');
+ }catch(error){
+  if(button.isConnected&&state.view==='tasks'){
+   const label=document.getElementById('taskIPLabel');
+   if(label)label.textContent='IPv6 • chưa lấy được IPv4 công khai';
+   const note=document.getElementById('taskIPv4Help');
+   if(note)note.textContent='Không lấy được IPv4 trên kết nối này. Bạn vẫn có thể xem IPv6 thật hoặc thử lại. Việc kiểm tra dùng dịch vụ ipify.';
+   if(!silent)toast('Chưa lấy được IPv4. Hãy thử đổi mạng hoặc kiểm tra lại.',true);
+  }
+ }finally{
+  clearTimeout(timer);
+  if(button.isConnected){
+   button.disabled=false;
+   if(button.textContent==='Đang tìm IPv4…')button.textContent='Thử lại IPv4';
+  }
+ }
+}
+
 function startTaskResetTimer(){
  const el=document.getElementById('taskResetCountdown');
  if(!el)return;
@@ -210,6 +261,7 @@ function startTaskResetTimer(){
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
  setTimeout(startTaskResetTimer,0);
+ if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
  ${taskDashboardCard(stats)}<h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
  ${data.tasks.length?`<div class="grid">${data.tasks.map(t=>`<article class="card task-card">
@@ -394,30 +446,7 @@ app.addEventListener('click',async e=>{
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
-  if(act==='check-ipv4'){
-   el.disabled=true;el.textContent='Đang kiểm tra…';
-   const controller=new AbortController(),limit=setTimeout(()=>controller.abort(),6500);
-   try{
-    const res=await fetch('https://api.ipify.org?format=json',{mode:'cors',cache:'no-store',credentials:'omit',signal:controller.signal});
-    if(!res.ok)throw Error('Không lấy được IPv4');
-    const response=await res.json(),ip=String(response?.ip||'');
-    if(!isIPv4(ip))throw Error('Phản hồi không phải IPv4');
-    const ipElement=document.getElementById('taskDisplayIP'),label=document.getElementById('taskIPLabel');
-    if(ipElement&&label&&el.isConnected){
-     ipElement.textContent=ip;
-     label.textContent='IPv4 công khai (qua ipify)';
-     const note=document.getElementById('taskIPv4Help');
-     if(note)note.textContent='IPv4 của đường kết nối tới ipify. Cloudflare có thể nhận IPv6 khác; các địa chỉ này không phải định danh thiết bị.';
-     el.textContent='Kiểm tra lại IPv4';
-    }
-   }catch(error){
-    if(el.isConnected)toast('Không lấy được IPv4 trên kết nối này. Bạn vẫn có thể xem hoặc sao chép IPv6 đầy đủ.',true);
-   }finally{
-    clearTimeout(limit);el.disabled=false;
-    if(el.isConnected&&el.textContent==='Đang kiểm tra…')el.textContent='Kiểm tra IPv4';
-   }
-   return;
-  }
+  if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
 
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}

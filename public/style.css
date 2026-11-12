@@ -153,3 +153,8 @@
 .task-ip-btn{min-height:36px}
 .task-device-card .task-ip-heading h3{font-size:18px}
 }
+
+/* Auto IPv4-first display; keep original v6 accessible. */
+.task-ip-tools{align-items:center}
+.task-ip-tools .task-ip-btn{font-size:12px}
+.task-ip-type{max-width:100%;line-height:1.4}
