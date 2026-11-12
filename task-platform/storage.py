@@ -94,7 +94,7 @@ class PgConnection:
    # columns on Postgres for tables created by the legacy ensure_* helpers.
    statement=re.sub(r"\bid INTEGER PRIMARY KEY\b","id BIGSERIAL PRIMARY KEY",statement,flags=re.I)
    statement=statement.replace("?","%s")
-  wants_id=bool(re.match(r"INSERT\s+INTO\s+(tasks|withdrawals|admin_adjustments)\b",statement,re.I))
+  wants_id=bool(re.match(r"INSERT\s+INTO\s+(tasks|withdrawals|admin_adjustments|submissions)\b",statement,re.I))
   if wants_id and "RETURNING" not in statement.upper():
    statement+=" RETURNING id"
   cur=self._connection.execute(statement,params)
