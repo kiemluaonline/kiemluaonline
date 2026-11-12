@@ -70,17 +70,35 @@ function renderAuth(){
  <p>${active==='setup'?'Chỉ dành cho chủ website.':active==='register'?'Nhập thông tin để bắt đầu tích Lúa.':'Đăng nhập để tiếp tục nhiệm vụ.'}</p>
  ${form}</section></div>`;
 }
+
+function setMenuOpen(open,restoreFocus=false){
+ const shell=app.querySelector('.layout');
+ const menu=document.getElementById('site-menu'),trigger=document.getElementById('menu-toggle');
+ if(!shell||!menu||!trigger)return;
+ const mobile=window.matchMedia('(max-width:730px)').matches;
+ const visible=mobile&&Boolean(open);
+ shell.classList.toggle('menu-open',visible);
+ document.body.classList.toggle('menu-active',visible);
+ trigger.setAttribute('aria-expanded',String(visible));
+ trigger.setAttribute('aria-label',visible?'Đóng menu':'Mở menu');
+ menu.inert=mobile&&!visible;
+ if(mobile)menu.setAttribute('aria-hidden',String(!visible));
+ else menu.removeAttribute('aria-hidden');
+ if(visible)menu.querySelector('.sidebar-close')?.focus();
+ else if(restoreFocus&&mobile)trigger.focus();
+}
 function renderShell(){
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
  const user=state.me.user;
- app.className='';app.innerHTML=`<div class="layout"><aside class="sidebar">
-  <div class="side-brand"><span class="brand-mark">🌾</span><span>${esc(state.meta.site_name)}</span></div>
+ app.className='';app.innerHTML=`<div class="layout"><aside class="sidebar" id="site-menu" aria-label="Menu điều hướng">
+  <div class="side-header"><div class="side-brand"><span class="brand-mark">🌾</span><span>${esc(state.meta.site_name)}</span></div><button type="button" class="sidebar-close" data-action="close-menu" aria-label="Đóng menu">×</button></div>
   <div class="side-kicker">${user.role==='admin'?'BẢNG QUẢN TRỊ':'KHÔNG GIAN THÀNH VIÊN'}</div>
   <nav class="nav">${nav.map(([key,symbol,name])=>`<button data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`).join('')}</nav>
   <div class="sidebar-bottom"><strong>${esc(user.name)}</strong>${esc(user.email)}<button data-action="logout">Đăng xuất ↗</button></div>
- </aside><section class="main-area"><header class="topbar"><div><h1 id="topTitle">Bảng điều khiển</h1><p>Quản lý minh bạch • Cập nhật theo dữ liệu thật</p></div>
+ </aside><button type="button" class="menu-backdrop" tabindex="-1" data-action="close-menu" aria-label="Đóng menu"></button><section class="main-area"><header class="topbar"><div class="topbar-leading"><button type="button" class="menu-toggle" id="menu-toggle" data-action="toggle-menu" aria-controls="site-menu" aria-expanded="false" aria-label="Mở menu"><span aria-hidden="true">☰</span></button><div class="topbar-title"><h1 id="topTitle">Bảng điều khiển</h1><p>Quản lý minh bạch • Cập nhật theo dữ liệu thật</p></div></div>
  <div class="top-right"><span class="balance-pill" id="topBalance">🌾 ${fmt(state.me.balance)} Lúa</span><span class="avatar" title="${esc(user.name)}">${esc(user.name[0]?.toUpperCase()||'T')}</span></div></header>
- <main class="content" id="viewContent"></main></section></div><nav class="mobile-nav">${nav.map(([k,symbol,name])=>`<button data-go="${k}" class="${state.view===k?'active':''}"><span class="symbol">${symbol}</span><span>${esc(name.replace('Quản lý ','').replace('Tổng quan Admin','Tổng quan'))}</span></button>`).join('')}</nav><div id="modal-root"></div>`;
+ <main class="content" id="viewContent"></main></section></div><div id="modal-root"></div>`;
+ setMenuOpen(false);
 }
 async function refreshMe(){await loadMe();if(!state.me){renderAuth();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
 async function navigate(view){
@@ -270,13 +288,29 @@ function renderAttemptModal(){
  <p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p></form></section></div>`;
 }
 async function afterAction(view=state.view){await refreshMe();if(state.me)await navigate(view);}
+
+window.addEventListener('resize',()=>{
+ if(app.querySelector('.layout'))setMenuOpen(false);
+});
+app.addEventListener('keydown',e=>{
+ if(!app.querySelector('.layout.menu-open'))return;
+ if(e.key==='Escape'){e.preventDefault();setMenuOpen(false,true);return;}
+ if(e.key!=='Tab')return;
+ const buttons=[...app.querySelectorAll('#site-menu button:not([disabled])')];
+ if(!buttons.length)return;
+ const first=buttons[0],last=buttons[buttons.length-1];
+ if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+ else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+});
 app.addEventListener('click',async e=>{
  const el=e.target.closest('button[data-go],button[data-auth],button[data-action]');if(!el)return;
  if(el.dataset.auth){state.authMode=el.dataset.auth;renderAuth();return;}
- if(el.dataset.go){if(!state.me)return;await navigate(el.dataset.go);return;}
+ if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
-  if(act==='logout'){await api('/api/auth/logout','POST',{});state.me=null;state.authMode='login';renderAuth();return;}
+  if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
+  if(act==='close-menu'){setMenuOpen(false,true);return;}
+  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.authMode='login';renderAuth();return;}
   if(act==='start-task'){await startTask(el.dataset.id);return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
