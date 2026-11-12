@@ -52,6 +52,17 @@ CREATE INDEX IF NOT EXISTS submissions_status_id ON submissions(status,id DESC);
 CREATE INDEX IF NOT EXISTS withdrawals_status_id ON withdrawals(status,id DESC);
 CREATE INDEX IF NOT EXISTS ledger_user_id ON ledger(user_id,id DESC);
 CREATE INDEX IF NOT EXISTS audit_action_id ON admin_audit(action,id DESC);
+-- Supabase exposes the public schema through Data API. Block anonymous and
+-- authenticated client roles. The Flask backend uses server-only DB access.
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_adjustments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_audit ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE users,tasks,submissions,ledger,withdrawals,admin_adjustments,admin_audit,login_attempts FROM anon,authenticated;
 """
 
 class QueryResult:
