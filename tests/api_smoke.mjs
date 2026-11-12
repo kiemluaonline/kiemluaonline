@@ -210,6 +210,56 @@ assert.equal(exceeded2.data.quota_scope,'link_limit');
 // Đúng 24 giờ: sau khi các lượt trên IP đều đã cũ, tài khoản thứ hai có thể thực hiện.
 sqlite.prepare("UPDATE task_completions SET created_at=datetime('now','-25 hours') WHERE ip=?").run(linkIp);
 assert.equal((await claimFor(user3.cookie,linkC.data.id,linkIp,user3Device)).status,200);
+// Hai điện thoại cùng một dải IPv6 /64 (host khác nhau) vẫn bị giới hạn cùng IP mạng.
+const v6Task1=await call('/api/admin/tasks','POST',{
+ title:'Kiểm tra IPv6 A',description:'Một thiết bị A dùng IPv6',
+ category:'link',url:'https://example.com/ipv6-a',reward:10,min_seconds:5,
+ review_mode:'auto',repeat_policy:'once',is_active:true
+},admCookie);
+const v6Task2=await call('/api/admin/tasks','POST',{
+ title:'Kiểm tra IPv6 B',description:'Một thiết bị B dùng IPv6',
+ category:'link',url:'https://example.com/ipv6-b',reward:10,min_seconds:5,
+ review_mode:'auto',repeat_policy:'once',is_active:true
+},admCookie);
+assert.equal(v6Task1.status,201);assert.equal(v6Task2.status,201);
+const v6IPa='2401:d800:f641:5dcd:b19f:6845:c9c4:af71';
+const v6IPb='2401:d800:f641:5dcd:abcd:1234:5678:9abc';
+assert.equal((await claimFor(user2.cookie,v6Task1.data.id,v6IPa,user2Device)).status,200);
+const sharedV6=await call('/api/tasks/'+v6Task2.data.id+'/start','POST',{},user3.cookie,v6IPb,user3Device);
+assert.equal(sharedV6.status,429,JSON.stringify(sharedV6));
+assert.equal(sharedV6.data.quota_scope,'link_owner');
+// Dải IPv6 /64 khác có thể bắt đầu lại, vẫn chịu các quota toàn hệ thống.
+const differentV6='2401:d800:f641:5dce:abcd:1234:5678:9abc';
+assert.equal((await claimFor(user3.cookie,v6Task2.data.id,differentV6,user3Device)).status,200);
+// Khi đang chờ duyệt, một tài khoản khác dùng cùng IP tạm thời cũng không được gửi.
+const pendingTask=await call('/api/admin/tasks','POST',{
+ title:'Link cần duyệt thủ công',description:'Chờ Admin xét bằng chứng',
+ category:'link',url:'https://example.com/manual-ip',reward:10,min_seconds:5,
+ review_mode:'manual',repeat_policy:'once',is_active:true
+},admCookie);
+const pendingTask2=await call('/api/admin/tasks','POST',{
+ title:'Link cho người khác',description:'Kiểm tra giữ chỗ khi chờ duyệt',
+ category:'link',url:'https://example.com/after-pending',reward:10,min_seconds:5,
+ review_mode:'auto',repeat_policy:'once',is_active:true
+},admCookie);
+assert.equal(pendingTask.status,201);assert.equal(pendingTask2.status,201);
+const pendingIP='198.51.100.240';
+const pendingStart=await call('/api/tasks/'+pendingTask.data.id+'/start','POST',{},user2.cookie,pendingIP,user2Device);
+assert.equal(pendingStart.status,200);
+sqlite.prepare('UPDATE task_attempts SET available_at=0 WHERE id=?').run(pendingStart.data.attempt_id);
+const pendingSubmit=await call('/api/tasks/'+pendingTask.data.id+'/submit','POST',{
+ attempt_id:pendingStart.data.attempt_id,answer:pendingStart.data.a+pendingStart.data.b,
+ evidence:'Bằng chứng kiểm thử bằng liên kết https://example.com/test-pending'
+},user2.cookie,pendingIP,user2Device);
+assert.equal(pendingSubmit.status,200,JSON.stringify(pendingSubmit));
+assert.equal(pendingSubmit.data.status,'pending');
+const pendingBlocked=await call('/api/tasks/'+pendingTask2.data.id+'/start','POST',{},user3.cookie,pendingIP,user3Device);
+assert.equal(pendingBlocked.status,429);
+assert.equal(pendingBlocked.data.quota_scope,'link_owner');
+const pendingRecord=sqlite.prepare('SELECT id FROM task_completions WHERE user_id=(SELECT user_id FROM task_completions WHERE task_id=? LIMIT 1) AND task_id=? ORDER BY created_at DESC LIMIT 1').get(pendingTask.data.id,pendingTask.data.id);
+const rejection=await call('/api/admin/reviews/'+pendingRecord.id,'POST',{status:'rejected'},admCookie);
+assert.equal(rejection.status,200);
+assert.equal((await claimFor(user3.cookie,pendingTask2.data.id,pendingIP,user3Device)).status,200);
 // Kiểm thử Admin đặt một nhiệm vụ link cho cùng tài khoản làm 2 lần trong 24 giờ.
 assert.equal((await call('/api/admin/settings','PUT',{quota_link_tasks_ip_24h:'4'},admCookie)).status,200);
 const twice=await call('/api/admin/tasks','POST',{
