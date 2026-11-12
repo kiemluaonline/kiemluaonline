@@ -7,7 +7,8 @@ const encoder = new TextEncoder();
 const DEFAULTS = {
   site_name: 'Trạm Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
-  withdrawals_enabled: '0', announcement: ''
+  withdrawals_enabled: '0', announcement: '',
+  quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6'
 };
 const HEADERS = {
   'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
@@ -146,6 +147,42 @@ async function registerUser(env, params) {
     await passwordDigest(params.password, salt), salt, params.role || 'member', referralCode(), params.referredBy || null, params.ip, params.role === 'admin' ? null : new Date().toISOString()).run();
   return userId;
 }
+
+// Quota được đếm theo ngày Việt Nam trên D1, không dựa vào số liệu trình duyệt.
+// Mã trình duyệt do phía người dùng tự tạo: chỉ hỗ trợ hạn chế lạm dụng phổ thông.
+const quotaNumber=(s,k)=>Math.max(0,Math.min(100,int(s[k],int(DEFAULTS[k]))));
+async function taskQuota(env,req,userId,settings){
+ const day=vnDay(),ip=clientIP(req),device=browserDeviceId(req)?await deviceCode(req,env):'';
+ const maxUser=quotaNumber(settings,'quota_user_tasks_daily');
+ const maxDevice=device?quotaNumber(settings,'quota_device_accounts_daily'):0;
+ const maxIP=(ip!=='unknown'&&ip!=='local')?quotaNumber(settings,'quota_ip_accounts_daily'):0;
+ const [mine,devices,ips]=await Promise.all([
+  env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(userId,day).first(),
+  maxDevice?env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM task_completions WHERE device_code=? AND user_id<>? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(device,userId,day).first():Promise.resolve({n:0}),
+  maxIP?env.DB.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM task_completions WHERE ip=? AND user_id<>? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(ip,userId,day).first():Promise.resolve({n:0})
+ ]);
+ const denied=maxUser&&mine.n>=maxUser?'user':maxDevice&&devices.n>=maxDevice?'device':maxIP&&ips.n>=maxIP?'ip':null;
+ if(denied){
+  await event(env,req,'task_quota_denied',userId,denied+':'+day);
+  const msg=denied==='user'?'Tài khoản đã đạt giới hạn nhiệm vụ hôm nay.':
+   denied==='device'?'Trình duyệt đã đạt giới hạn tài khoản nhận nhiệm vụ hôm nay.':
+   'Địa chỉ IP đã đạt giới hạn tài khoản nhận nhiệm vụ hôm nay.';
+  fail(429,msg+' Nếu dùng mạng hoặc thiết bị chung, hãy liên hệ Admin để được xem xét.',{quota_scope:denied});
+ }
+ return {day,ip,device,maxUser,maxDevice,maxIP};
+}
+// Điều kiện được kiểm tra lại trong cùng transaction ghi nhận nhiệm vụ, tránh vượt
+// quota khi nhiều yêu cầu đồng thời. Không ghi nhiệm vụ thì không cộng Lúa.
+const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
+ WHERE id=? AND user_id=? AND consumed_by IS NULL AND expires_at>? AND available_at<=?
+ AND (?=0 OR
+  (SELECT COUNT(*) FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)
+ AND (?=0 OR
+  (SELECT COUNT(DISTINCT user_id) FROM task_completions WHERE ip=? AND user_id<>?
+   AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)
+ AND (?=0 OR
+  (SELECT COUNT(DISTINCT user_id) FROM task_completions WHERE device_code=? AND user_id<>?
+   AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?)<?)`;
 function period(task) { return task.repeat_policy === 'daily' ? vnDay() : '*'; }
 function validateTaskBody(b) {
   const title = str(b.title, 120), description = str(b.description, 1200), category = str(b.category, 20);
@@ -274,6 +311,7 @@ async function handler(req, env) {
     if (!task) fail(404, 'Nhiệm vụ không còn hoạt động.');
     const existing = await env.DB.prepare('SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND period_key=?').bind(me.id, task.id, period(task)).first();
     if (existing) fail(409, 'Bạn đã nhận hoặc gửi yêu cầu cho nhiệm vụ này trong kỳ.');
+    await taskQuota(env,req,me.id,await getSettings(env));
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
     const a = rand(), b = rand(), attempt = id(), available = now() + task.min_seconds * 1000;
@@ -299,11 +337,15 @@ async function handler(req, env) {
     }
     const evidence = str(body.evidence, 2000);
     if (task.review_mode === 'manual' && evidence.length < 12) fail(400, 'Nhiệm vụ này cần bằng chứng ít nhất 12 ký tự.');
+    const quota=await taskQuota(env,req,me.id,await getSettings(env));
     const completionId = id();
     const status = task.review_mode === 'manual' ? 'pending' : 'approved';
     const batch = await env.DB.batch([
-      env.DB.prepare('UPDATE task_attempts SET consumed_by=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND expires_at>? AND available_at<=?')
-        .bind(completionId, attempt.id, me.id, now(), now()),
+      env.DB.prepare(TASK_CLAIM_UPDATE)
+        .bind(completionId, attempt.id, me.id, now(), now(),
+          quota.maxUser,me.id,quota.day,quota.maxUser,
+          quota.maxIP,quota.ip,me.id,quota.day,quota.maxIP,
+          quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice),
       env.DB.prepare(`INSERT OR IGNORE INTO task_completions
         (id,user_id,task_id,period_key,status,reward,evidence,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? FROM task_attempts
@@ -503,6 +545,8 @@ async function handler(req, env) {
         if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
+        if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily'].includes(key)
+            && (!/^\d+$/.test(value) || Number(value)>100)) fail(400, `${key}: chỉ số nguyên từ 0 đến 100; 0 để tắt.`);
         if (key === 'site_name' && value.length < 2) fail(400, 'Tên website quá ngắn.');
         entries.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, value));
       }

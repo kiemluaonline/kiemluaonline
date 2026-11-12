@@ -500,6 +500,12 @@ async function adminSettings(){
  ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}</div>
  <div class="form-row">${field('min_withdraw_lua','Tối thiểu rút (Lúa)',s.min_withdraw_lua,'type="number" min="0" max="10000000" required')}
  ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}</div>
+ <h3>🛡️ Quota chống lạm dụng</h3>
+ <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
+ <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
+ ${field('quota_device_accounts_daily','Tài khoản/mã trình duyệt/ngày',s.quota_device_accounts_daily,'type="number" min="0" max="100" required')}</div>
+ <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
+ <p class="note">Không tự khóa tài khoản. IP có thể dùng chung và mã trình duyệt có thể bị xóa/giả mạo; Admin kiểm tra nhật ký “task_quota_denied” nếu có khiếu nại.</p>
  <button class="btn" type="submit">Lưu cài đặt</button></form>
  <section class="card"><h3>⚠ Cần thiết lập trước khi mở rút</h3><p>Đặt tỷ giá Lúa/VNĐ và chuẩn bị nguồn chi trả thực tế. Mặc định chức năng rút bị tắt để tránh cam kết thanh toán sai.</p>
  <p>Admin duyệt nhiệm vụ có thể cộng Lúa; Admin từ chối yêu cầu rút sẽ tự hoàn Lúa vào ví.</p>
