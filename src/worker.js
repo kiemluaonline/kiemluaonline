@@ -638,7 +638,25 @@ async function handler(req, env) {
         if(!found||found.status!=='active')fail(403,'Tài khoản đã tạm khóa.',{auth_code:'suspended'});
         userId=found.id;
       }else{
-        if(flow.intent==='login'){
+        // Gmail đã dùng đăng ký mật khẩu: Google chứng minh quyền sở hữu hộp thư.
+        // Chỉ tự liên kết tài khoản thành viên, không tự giành quyền Admin,
+        // và không ghép tài khoản Google của tên miền email bên thứ ba.
+        if(flow.intent==='login'&&gmailDomain(identity.email.split('@')[1])){
+          const matched=await registeredEmail(env,identity.email);
+          if(matched){
+            const existing=await env.DB.prepare('SELECT id,role,status FROM users WHERE id=?').bind(matched.id).first();
+            if(!existing||existing.status!=='active')
+              fail(403,'Tài khoản đã bị tạm khóa.',{auth_code:'suspended'});
+            if(existing.role!=='member')
+              fail(409,'Tài khoản quản trị cần liên kết Google trong Hồ sơ.',{auth_code:'email_exists'});
+            const attached=await googleForUser(env,existing.id);
+            if(attached&&attached.value!==identity.sub)
+              fail(409,'Tài khoản đã liên kết Google khác.',{auth_code:'email_exists'});
+            await connectGoogleIdentity(env,identity.sub,existing.id);
+            userId=existing.id;
+          }
+        }
+        if(!userId&&flow.intent==='login'){
           if(await registeredEmail(env,identity.email))
             fail(409,'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi liên kết Google.',{auth_code:'email_exists'});
           const currentSettings=await getSettings(env);
@@ -652,18 +670,20 @@ async function handler(req, env) {
             })).run();
           return googleReturn(req,'','',signupToken);
         }
-        const settings=await getSettings(env);
-        if(settings.signup_enabled!=='1')fail(403,'Hệ thống đã tắt đăng ký.',{auth_code:'signup_closed'});
-        if(await registeredEmail(env,identity.email))
-          fail(409,'Email đã có tài khoản. Hãy đăng nhập mật khẩu và liên kết Google.',{auth_code:'email_exists'});
-        await signupRateLimit(env,req,identity.email);
-        let referredBy=null;
-        if(flow.ref){
-          const inviter=await env.DB.prepare("SELECT id FROM users WHERE referral_code=? AND status='active'").bind(flow.ref).first();
-          if(!inviter)fail(400,'Mã giới thiệu không hợp lệ.',{auth_code:'bad_ref'});
-          referredBy=inviter.id;
+        if(!userId){
+          const settings=await getSettings(env);
+          if(settings.signup_enabled!=='1')fail(403,'Hệ thống đã tắt đăng ký.',{auth_code:'signup_closed'});
+          if(await registeredEmail(env,identity.email))
+            fail(409,'Email đã có tài khoản. Hãy đăng nhập mật khẩu và liên kết Google.',{auth_code:'email_exists'});
+          await signupRateLimit(env,req,identity.email);
+          let referredBy=null;
+          if(flow.ref){
+            const inviter=await env.DB.prepare("SELECT id FROM users WHERE referral_code=? AND status='active'").bind(flow.ref).first();
+            if(!inviter)fail(400,'Mã giới thiệu không hợp lệ.',{auth_code:'bad_ref'});
+            referredBy=inviter.id;
+          }
+          userId=await registerGoogleMember(env,req,identity,referredBy);
         }
-        userId=await registerGoogleMember(env,req,identity,referredBy);
       }
       return googleReturn(req,'',await createSession(req,env,userId));
     }catch(err){
