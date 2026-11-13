@@ -1279,7 +1279,7 @@ async function handler(req, env) {
     const [walletEntries, completionRows, withdrawals] = await Promise.all([
       env.DB.prepare('SELECT * FROM wallet_entries WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all(),
       env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
-            CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN '[Ảnh bằng chứng đã gửi]' ELSE c.evidence END AS evidence,
+            CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN '[Ảnh bằng chứng đã gửi]' WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN '[Bằng chứng đã xóa sau xét duyệt]' ELSE c.evidence END AS evidence,
             c.ip,c.device_code,c.created_at,c.reviewed_at,t.title FROM task_completions c JOIN tasks t ON t.id=c.task_id
           WHERE c.user_id=? ORDER BY c.created_at DESC LIMIT 80`).bind(me.id).all(),
       env.DB.prepare('SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all()
@@ -1489,7 +1489,8 @@ async function handler(req, env) {
       const binary = atob(proof.base64);
       const bytes = Uint8Array.from(binary, char=>char.charCodeAt(0));
       return new Response(bytes, { headers: { ...HEADERS, 'Content-Type':'image/jpeg',
-        'Content-Disposition':'inline; filename="tram-lua-app-proof.jpg"' } });
+        'Content-Disposition':'inline; filename="tram-lua-app-proof.jpg"',
+        'Cache-Control':'private, no-store' } });
     }
     const review = p.match(/^\/api\/admin\/reviews\/([^/]+)$/);
     if (m === 'POST' && review) {
