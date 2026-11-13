@@ -720,9 +720,11 @@ async function adminUsers(){
 async function adminReviews(){
  const d=await api('/api/admin/reviews');
  return `${heading('Duyệt bằng chứng','Chỉ khi duyệt thành công, Lúa mới được ghi vào ví thành viên.')}
- <section class="card">${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Kiểm tra','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
- <td style="max-width:270px;white-space:pre-wrap">${c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved">Duyệt</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:''}</td></tr>`))}</section>`;
+ <div class="callout section"><strong>Quản lý dung lượng bằng chứng:</strong> Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.
+ <div class="section"><button type="button" class="btn danger sm" data-action="erase-all-processed-evidence">🗑 Xóa tất cả bằng chứng đã xử lý</button></div></div>
+ <section class="card section">${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Kiểm tra','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
+ <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved">Duyệt</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
@@ -1077,6 +1079,19 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='review'){
    if(!confirm(el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status});toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
+  }
+  if(act==='erase-evidence'){
+    if(!confirm('Bạn muốn XÓA VĨNH VIỄN ảnh/nội dung bằng chứng đã duyệt hoặc từ chối này? Không thể khôi phục bằng chứng. Lịch sử nhiệm vụ và Lúa của khách vẫn được giữ nguyên.'))return;
+    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id)+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'});
+    toast('Đã xóa bằng chứng. Vẫn giữ kết quả duyệt và Lúa của thành viên.');
+    await afterAction('admin-reviews');return;
+  }
+  if(act==='erase-all-processed-evidence'){
+    if(!confirm('XÓA TẤT CẢ bằng chứng của nhiệm vụ ĐÃ DUYỆT hoặc TỪ CHỐI? Không thể khôi phục. Bằng chứng đang chờ duyệt và lịch sử Lúa không bị ảnh hưởng.'))return;
+    const answer=prompt('Để xác nhận xóa hàng loạt, nhập XOA:','');
+    if(answer!=='XOA'){toast('Đã hủy vì chưa nhập đúng XOA.',true);return;}
+    const result=await api('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE'});
+    toast(result.message);await afterAction('admin-reviews');return;
   }
   if(act==='withdraw-admin'){
    let note='',riskOverride='';
