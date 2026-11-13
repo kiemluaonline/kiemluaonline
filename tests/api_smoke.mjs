@@ -30,6 +30,33 @@ async function call(path,method='GET',body, cookie='',ip='192.0.2.15',device='11
  let data;try{data=await r.json();}catch{data={};}
  return {status:r.status, data, cookie:r.headers.get('Set-Cookie')?.split(';')[0]||''};
 }
+// Trang chủ mới là HTML công khai (Google đọc được ngay cả trước khi chạy JS).
+const publicHomepage=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+const frontendForWelcome=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+assert.match(publicHomepage,/<title>Trạm Có Lúa/);
+assert.match(publicHomepage,/<meta name="description"/);
+assert.match(publicHomepage,/rel="canonical" href="https:\/\/nhiemvu\.click\/"/);
+assert.match(publicHomepage,/<main>/);
+assert.match(publicHomepage,/data-action="open-auth" data-auth-mode="register"/);
+assert.match(publicHomepage,/data-action="open-auth" data-auth-mode="login"/);
+assert.match(publicHomepage,/href="\/terms\.html"/);
+assert.match(publicHomepage,/href="\/privacy\.html"/);
+assert.match(publicHomepage,/<section id="nhiem-vu"/);
+assert.match(frontendForWelcome,/const publicHomeHTML = app\.innerHTML;/);
+assert.match(frontendForWelcome,/function renderHome\(\)/);
+assert.match(frontendForWelcome,/if\(act==='open-auth'\)/);
+assert.match(frontendForWelcome,/if\(act==='back-home'\)/);
+assert.match(frontendForWelcome,/data-action="back-home"/);
+const brandMeta=await call('/api/meta');
+assert.equal(brandMeta.status,200);
+assert.equal(brandMeta.data.site_name,'Trạm Có Lúa');
+sqlite.prepare("UPDATE settings SET value='Trạm Lúa' WHERE key='site_name'").run();
+const migratedBrandMeta=await call('/api/meta');
+assert.equal(migratedBrandMeta.data.site_name,'Trạm Có Lúa',
+ 'Existing D1 old brand must render the new name automatically');
+sqlite.prepare("UPDATE settings SET value='Trạm Có Lúa' WHERE key='site_name'").run();
+console.log('PASS: public crawlable landing page, auth navigation hooks, legal links, new brand and legacy D1 name compatibility.');
+
 // POST từ nguồn ngoài hoặc thiếu header không được truy cập.
 const csrf=await call('/api/auth/register','POST',{name:'A',email:'a@example.com',password:'passpasspass'});
 assert.equal(csrf.status,400); // Có header CSRF, nhưng chưa chấp nhận điều khoản.
