@@ -69,6 +69,54 @@ let rsp=await call('/api/admin/tasks','POST',{title:'Nhiệm vụ kiểm tra li�
 assert.equal(rsp.status,201,JSON.stringify(rsp));const taskId=rsp.data.id;
 const referralUser=await call('/api/auth/register','POST',{name:'Người giới thiệu',email:'ref@example.com',password:'test-password-2026',accept_terms:'yes'});
 assert.equal(referralUser.status,201,JSON.stringify(referralUser));const refCookie=referralUser.cookie;
+
+const chosenUsername='luaxanh2026';
+const newSignup=await call('/api/auth/register','POST',{
+ username:chosenUsername,email:'luaxanh2026@example.com',password:'A1234567',accept_terms:'yes'
+},'','198.51.100.211','abcddddd-2222-4333-8444-555555555555');
+assert.equal(newSignup.status,201,JSON.stringify(newSignup));
+assert.equal(sqlite.prepare("SELECT name FROM users WHERE email=?").get('luaxanh2026@example.com').name,chosenUsername);
+assert.equal(sqlite.prepare('SELECT value FROM settings WHERE key=?')
+ .get('login_username:'+chosenUsername).value,
+ sqlite.prepare("SELECT id FROM users WHERE email=?").get('luaxanh2026@example.com').id);
+const unameLogin=await call('/api/auth/login','POST',{
+ email:'LuaXanh2026',password:'A1234567'
+},'','198.51.100.212');
+assert.equal(unameLogin.status,200,JSON.stringify(unameLogin));
+const emailForUnameLogin=await call('/api/auth/login','POST',{
+ email:'luaxanh2026@example.com',password:'A1234567'
+},'','198.51.100.213');
+assert.equal(emailForUnameLogin.status,200,JSON.stringify(emailForUnameLogin));
+const unameWrongPassword=await call('/api/auth/login','POST',{
+ email:chosenUsername,password:'wrong-password'
+},'','198.51.100.214');
+assert.equal(unameWrongPassword.status,401);
+const unameDuplicate=await call('/api/auth/register','POST',{
+ username:chosenUsername,email:'another-username@example.com',password:'A1234567',accept_terms:'yes'
+},'','198.51.100.215');
+assert.equal(unameDuplicate.status,409,JSON.stringify(unameDuplicate));
+const unameInvalid=await call('/api/auth/register','POST',{
+ username:'ten_co_dau',email:'invalid-username@example.com',password:'A1234567',accept_terms:'yes'
+},'','198.51.100.216');
+assert.equal(unameInvalid.status,400);
+const tooShortPassword=await call('/api/auth/register','POST',{
+ username:'luamoi2026',email:'short-password@example.com',password:'1234567',accept_terms:'yes'
+},'','198.51.100.217');
+assert.equal(tooShortPassword.status,400);
+assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM users WHERE email='short-password@example.com'").get().n,0);
+const newBrandClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const svgBrand=readFileSync(new URL('../public/logo.svg',import.meta.url),'utf8');
+assert.match(newBrandClient,/authField\('username','Tên đăng nhập','4–20 ký tự, a-z, 0-9'/);
+assert.match(newBrandClient,/authField\('email','Email','you@example\.com'/);
+assert.match(newBrandClient,/authField\('password','Mật khẩu','Ít nhất 8 ký tự'/);
+assert.match(newBrandClient,/Ví dụ: A1B2C3D4E5 \(10 ký tự\)/);
+assert.match(newBrandClient,/if\(act==='toggle-password'\)/);
+assert.match(newBrandClient,/data-action="google-register"/);
+assert.match(publicHomepage,/href="\/logo\.svg"/);
+assert.match(svgBrand,/<svg/);
+assert.match(svgBrand,/Biểu tượng Trạm Có Lúa/);
+console.log('PASS: distinct real usernames, email/username sign-in, 8+ password validation, dark auth placeholders and new vector logo.');
+
 const refMe=await call('/api/me','GET',undefined,refCookie);
 assert.equal(refMe.status,200);
 const code=refMe.data.user.referral_code;
