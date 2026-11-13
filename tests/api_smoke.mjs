@@ -650,3 +650,53 @@ assert.equal((await call('/api/admin/withdrawals/'+heldWithdrawal.data.id,'POST'
 assert.equal((await call('/api/me','GET',undefined,heldMember.cookie)).data.balance,10);
 console.log('PASS: IPv4 and IPv6 /64 severity alerts, unverified IPv4 limited, suspended status, unpaid withdrawals held, reactivation restores payout flow.');
 
+// Hai quyết định Admin được lưu riêng: xác minh / vi phạm nghiêm trọng.
+const stageMember=networkMembers[1];
+const stageReview=await call('/api/admin/users/'+stageMember.id,'PATCH',{
+ status:'suspended',suspension_type:'review',
+ suspension_reason:'Hoạt động bất thường cần kiểm tra trước khi kết luận.'
+},admCookie);
+assert.equal(stageReview.status,200,JSON.stringify(stageReview));
+assert.equal(stageReview.data.suspension_type,'review');
+const reviewCustomer=await call('/api/account-status','GET',undefined,stageMember.cookie);
+assert.equal(reviewCustomer.data.suspension_type,'review');
+assert.equal(reviewCustomer.data.account_status,'suspended');
+const invalidSerious=await call('/api/admin/users/'+stageMember.id,'PATCH',{
+ status:'suspended',suspension_type:'confirmed',
+ suspension_reason:'Vi phạm nghiêm trọng quy định chống gian lận.'
+},admCookie);
+assert.equal(invalidSerious.status,400,'Cannot permanently ban without specific confirmed evidence.');
+const invalidEvidence=await call('/api/admin/users/'+stageMember.id,'PATCH',{
+ status:'suspended',suspension_type:'confirmed',
+ suspension_reason:'Vi phạm nghiêm trọng quy định chống gian lận.',
+ suspension_evidence:'trùng IP'
+},admCookie);
+assert.equal(invalidEvidence.status,400,'Shared IP by itself is not verified evidence.');
+const serious=await call('/api/admin/users/'+stageMember.id,'PATCH',{
+ status:'suspended',suspension_type:'confirmed',
+ suspension_reason:'Tài khoản vi phạm nghiêm trọng điều khoản chương trình.',
+ suspension_evidence:'Đã đối chiếu bằng chứng nhiệm vụ trùng nhau và kết quả kiểm tra giao dịch.'
+},admCookie);
+assert.equal(serious.status,200,JSON.stringify(serious));
+assert.equal(serious.data.suspension_type,'confirmed');
+const seriousCustomer=await call('/api/account-status','GET',undefined,stageMember.cookie);
+assert.equal(seriousCustomer.data.suspension_type,'confirmed');
+assert.equal(seriousCustomer.data.account_status,'suspended');
+assert.equal(seriousCustomer.data.suspension_evidence,undefined,'Private Admin evidence never disclosed to members.');
+const seriousLogin=await call('/api/auth/login','POST',{
+ email:'network-member-1@example.com',password:'network-test-password-2026'
+});
+assert.equal(seriousLogin.status,403);
+assert.equal(seriousLogin.data.suspension_type,'confirmed');
+const holdsAdmin=await call('/api/admin/users','GET',undefined,admCookie);
+const rowSerious=holdsAdmin.data.users.find(x=>x.id===stageMember.id);
+assert.equal(rowSerious.suspension_type,'confirmed');
+assert.match(rowSerious.suspension_evidence,/bằng chứng nhiệm vụ/);
+assert.equal((await call('/api/admin/users/'+stageMember.id,'PATCH',{status:'active'},admCookie)).status,200);
+const reviewCleared=await call('/api/admin/users','GET',undefined,admCookie);
+assert.equal(reviewCleared.data.users.find(x=>x.id===stageMember.id).suspension_type,null);
+assert.equal(reviewCleared.data.users.find(x=>x.id===stageMember.id).suspension_evidence,'');
+assert.equal((await call('/api/account-status','GET',undefined,stageMember.cookie)).data.account_status,'active');
+console.log('PASS: Admin chooses review or confirmed fraud lock, evidence is required and private, member sees selected type, unlock removes decision.');
+
+
