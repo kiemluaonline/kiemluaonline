@@ -92,7 +92,7 @@ function langButton(language){
 }
 selectedVi=langButton('vi');selectedHm=langButton('hmn');
 const textNode={nodeType:3,nodeValue:'Đăng nhập',parentElement:{closest(){return null;}}};
-const mockBody={nodeType:1,querySelectorAll(sel){
+const mockBody={nodeType:1,hasAttribute(){return false;},querySelectorAll(sel){
  return sel==='[data-language]'?[selectedVi,selectedHm]:[];
 }};
 const mockDoc={readyState:'complete',body:mockBody,documentElement:{lang:'vi'},
