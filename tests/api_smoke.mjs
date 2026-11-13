@@ -812,5 +812,46 @@ assert.ok(overrideEvents.data.events.some(e=>e.event_type==='fraud_payout_overri
 assert.equal(sqlite.prepare('SELECT status FROM withdrawals WHERE id=?').get(antiWD.data.id).status,'paid');
 console.log('PASS: free anti-fraud score independent signals, safe member access, guarded withdrawals, verified Admin override and auditable payments.');
 
+// Cảnh báo theo từng tài khoản: chung IP có nhiều mã trình duyệt và
+// chung mã trình duyệt có nhiều tài khoản. Không đồng nhất mã với IMEI.
+const publicIPForTest='125.235.15.67';
+const otherBrowser='f8888888-2222-4333-8444-555555555555';
+const browserA=await call('/api/me','GET',undefined,antiA.cookie,publicIPForTest,antiBrowser);
+const browserB=await call('/api/me','GET',undefined,antiB.cookie,publicIPForTest,antiBrowser);
+const browserC=await call('/api/me','GET',undefined,networkMembers[2].cookie,publicIPForTest,otherBrowser);
+assert.equal(browserA.status,200);assert.equal(browserB.status,200);assert.equal(browserC.status,200);
+assert.equal(browserA.data.device_code,browserB.data.device_code,'Same browser ID yields same server identifier');
+assert.notEqual(browserA.data.device_code,browserC.data.device_code,'Different browser IDs yield different identifiers');
+const accountRiskList=await call('/api/admin/fraud-scores','GET',undefined,admCookie);
+assert.equal(accountRiskList.status,200,JSON.stringify(accountRiskList));
+assert.equal(accountRiskList.data.rules_version,'d1-multi-signal-v2');
+const pA=accountRiskList.data.profiles.find(x=>x.user_id===antiA.id);
+assert.ok(pA,'Each registered member must be shown, not only accounts score >= 25');
+assert.ok(pA.ip_count>=1&&pA.device_count>=1,JSON.stringify(pA));
+assert.ok(pA.shared_device_accounts>=1,'Several member accounts share one browser identifier');
+assert.ok(pA.shared_ip_accounts>=2,'Different members share public IPv4 in observed sessions');
+assert.ok(pA.max_devices_same_ip>=2,'An IP can be used by distinct browser identifiers');
+assert.ok(pA.related_accounts.some(x=>x.user_id===antiB.id&&x.reasons.includes('Chung mã trình duyệt')));
+assert.ok(pA.related_accounts.some(x=>x.user_id===networkMembers[2].id&&x.reasons.includes('Chung IP/dải mạng')));
+const deviceShared=accountRiskList.data.shared_browsers.find(x=>x.device_code===browserA.data.device_code);
+assert.ok(deviceShared&&deviceShared.account_count>=2,JSON.stringify(accountRiskList.data.shared_browsers));
+const ipDevices=accountRiskList.data.shared_networks.find(x=>x.ip_type==='IPv4'&&x.address===publicIPForTest);
+assert.ok(ipDevices&&ipDevices.device_count>=2&&ipDevices.account_count>=3,JSON.stringify(accountRiskList.data.shared_networks));
+assert.ok(accountRiskList.data.shared_networks.some(x=>x.ip_type==='IPv6 /64'&&x.device_count>=2),
+ 'IPv6 /64 groups should list distinct browser identifiers without inventing IPv4');
+const perMember=await call('/api/admin/fraud-account/'+antiA.id,'GET',undefined,admCookie);
+assert.equal(perMember.status,200,JSON.stringify(perMember));
+assert.equal(perMember.data.profile.user_id,antiA.id);
+assert.equal(perMember.data.profile.shared_device_accounts,pA.shared_device_accounts);
+assert.ok(perMember.data.profile.networks.some(x=>x.address===publicIPForTest));
+assert.ok(perMember.data.profile.browsers.some(x=>x.device_code===browserA.data.device_code));
+assert.equal((await call('/api/admin/fraud-account/'+antiA.id,'GET',undefined,antiA.cookie)).status,403,
+ 'Individual fraud details must only be available to Admin');
+assert.equal((await call('/api/admin/fraud-account/nonexistent-id','GET',undefined,admCookie)).status,404);
+const stillActive=await call('/api/me','GET',undefined,networkMembers[2].cookie,publicIPForTest,otherBrowser);
+assert.equal(stillActive.status,200,'Shared Wi-Fi never automatically suspends a member');
+console.log('PASS: per-member fraud statistics, shared IPv4 or IPv6 devices, multiple accounts per browser and Admin-only detailed drilldown.');
+
+
 
 
