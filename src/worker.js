@@ -47,9 +47,16 @@ const int = (v, defaultNum = 0) => /^-?\d+$/.test(String(v)) ? Number(v) : defau
 const positive = (v, max = 10000000) => Number.isSafeInteger(Number(v)) && Number(v) > 0 && Number(v) <= max;
 const isLocal = req => ['localhost', '127.0.0.1'].includes(new URL(req.url).hostname);
 // IP công khai do Cloudflare cung cấp ở edge; không lấy từ biểu mẫu người dùng.
-// Nếu Cloudflare ở chế độ Pseudo IPv4/Overwrite, địa chỉ IPv6 thật nằm trong CF-Connecting-IPv6.
-// Ưu tiên IPv6 thật để không nhầm địa chỉ Pseudo IPv4 với IP thật.
-const clientIP = req => str(req.headers.get('CF-Connecting-IPv6') || req.headers.get('CF-Connecting-IP') || (isLocal(req) ? 'local' : 'unknown'), 60);
+// Chỉ lấy CF-Connecting-IPv6 khi CF-Connecting-IP nằm trong lớp E (IPv4 giả của Cloudflare).
+// Không tin CF-Connecting-IPv6 nếu kết nối thông thường có IPv4/IPv6 thật.
+const clientIP = req => {
+ const observed=str(req.headers.get('CF-Connecting-IP') || (isLocal(req)?'local':'unknown'),60);
+ const originalIPv6=str(req.headers.get('CF-Connecting-IPv6'),60);
+ if (/^2(?:4[0-9]|5[0-5])\./.test(observed)
+     && originalIPv6.includes(':') && /^[a-f0-9:]+$/i.test(originalIPv6))
+   return originalIPv6;
+ return observed;
+};
 // Địa chỉ IPv4 công khai từ bên ngoài: validate để không lưu dữ liệu rác.
 // IPv4 do trình duyệt gửi lên KHÔNG được dùng làm chứng cứ duy nhất để xử lý gian lận.
 function isPublicIPv4(value){
