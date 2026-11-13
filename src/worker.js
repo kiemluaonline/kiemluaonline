@@ -1191,7 +1191,7 @@ async function handler(req, env) {
       return json({ ok: true });
     }
     if (m === 'GET' && p === '/api/admin/withdrawals') {
-      const rows = await env.DB.prepare(`SELECT w.*,u.email,u.name FROM withdrawals w JOIN users u ON u.id=w.user_id
+      const rows = await env.DB.prepare(`SELECT w.*,u.email,u.name,u.status AS account_status FROM withdrawals w JOIN users u ON u.id=w.user_id
         ORDER BY CASE WHEN w.status='pending' THEN 0 ELSE 1 END,w.created_at DESC LIMIT 150`).all();
       return json({ withdrawals: rows.results.map(presentWithdrawal) });
     }
