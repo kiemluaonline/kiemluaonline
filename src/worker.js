@@ -210,9 +210,10 @@ async function auth(req, env, role = null) {
 // Thông tin tài khoản bị khóa chỉ dành cho phiên của chính thành viên hoặc
 // người đã nhập đúng mật khẩu. Việc khóa không tự hủy các khoản Lúa đã ghi.
 async function suspendedInfo(env, userId) {
- const [reason,rows]=await Promise.all([
+ const [reason,rows,count]=await Promise.all([
    env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('account_hold:'+userId).first(),
-   env.DB.prepare('SELECT id,amount,vnd_amount,status,admin_note,created_at FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 5').bind(userId).all()
+   env.DB.prepare('SELECT id,amount,vnd_amount,status,admin_note,created_at FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 5').bind(userId).all(),
+   env.DB.prepare("SELECT COUNT(*) AS n FROM withdrawals WHERE user_id=? AND status='pending'").bind(userId).first()
  ]);
  const withdrawals=rows.results.map(row=>{
    const w=presentWithdrawal(row);
@@ -220,7 +221,7 @@ async function suspendedInfo(env, userId) {
     admin_note:w.admin_note,created_at:w.created_at};
  });
  return {account_status:'suspended',reason:reason?.value||'Tài khoản cần được xác minh thêm.',
-   pending_withdrawals:withdrawals.filter(w=>w.status==='pending'||w.status==='approved').length,
+   pending_withdrawals:count?.n||0,
    withdrawals};
 }
 async function createSession(req, env, userId) {
