@@ -1,4 +1,4 @@
-// Trạm Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
+// Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
 // Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
@@ -18,7 +18,7 @@ function presentWithdrawal(w) {
   return { ...w, payment_method: method };
 }
 const DEFAULTS = {
-  site_name: 'Trạm Lúa', signup_enabled: '1', checkin_reward: '0',
+  site_name: 'Trạm Có Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
   withdrawals_enabled: '0', announcement: '',
   quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6',
@@ -479,7 +479,10 @@ async function getSettings(env) {
   const keys=Object.keys(DEFAULTS);
   const rows=await env.DB.prepare('SELECT key,value FROM settings WHERE key IN ('+keys.map(()=>'?').join(',')+')').bind(...keys).all();
   // Legacy total caps are retired, including values saved before this update.
-  return {...DEFAULTS,...Object.fromEntries(rows.results.map(r=>[r.key,r.value])),quota_link_tasks_ip_24h:'0',quota_link_tasks_device_24h:'0'};
+  const settings={...DEFAULTS,...Object.fromEntries(rows.results.map(r=>[r.key,r.value])),quota_link_tasks_ip_24h:'0',quota_link_tasks_device_24h:'0'};
+  // Tên cũ trong D1 đang chạy được hiển thị theo thương hiệu mới, không xóa cấu hình khác.
+  if(settings.site_name==='Trạm Lúa')settings.site_name='Trạm Có Lúa';
+  return settings;
 }
 async function wallet(env, userId) {
   const v = await env.DB.prepare('SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_entries WHERE user_id=?').bind(userId).first();
@@ -632,8 +635,8 @@ const googleIdentity=(env,sub)=>env.DB.prepare('SELECT value FROM settings WHERE
 const googleForUser=(env,userId)=>env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('google_user:'+userId).first();
 async function connectGoogleIdentity(env,sub,userId){
  const current=await googleIdentity(env,sub), linked=await googleForUser(env,userId);
- if(current&&current.value!==userId)fail(409,'Google này đã liên kết tài khoản Trạm Lúa khác.');
- if(linked&&linked.value!==sub)fail(409,'Tài khoản Trạm Lúa đã liên kết Google khác.');
+ if(current&&current.value!==userId)fail(409,'Google này đã liên kết tài khoản Trạm Có Lúa khác.');
+ if(linked&&linked.value!==sub)fail(409,'Tài khoản Trạm Có Lúa đã liên kết Google khác.');
  const changes=[];
  if(!current)changes.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_sub:'+sub,userId));
  if(!linked)changes.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_user:'+userId,sub));
@@ -970,7 +973,7 @@ async function handler(req, env) {
         const me=await auth(req,env);
         if(flow.linkingId!==me.id)fail(403,'Tài khoản đăng nhập đã thay đổi.',{auth_code:'expired'});
         if(canonicalEmail(me.email)!==canonicalEmail(identity.email))
-          fail(409,'Email Google phải trùng email tài khoản Trạm Lúa.',{auth_code:'email_mismatch'});
+          fail(409,'Email Google phải trùng email tài khoản Trạm Có Lúa.',{auth_code:'email_mismatch'});
         await connectGoogleIdentity(env,identity.sub,me.id);
         userId=me.id;
       }else if(mapped){
