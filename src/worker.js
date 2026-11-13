@@ -342,7 +342,7 @@ async function loadFraudProfiles(env,targetId=null){
  // Các giới hạn bảo vệ D1 Free: không quét toàn bộ lịch sử của site.
  // Khi chấm điểm cho một yêu cầu rút, luôn nạp đúng tài khoản đích dù cũ.
  const [users,events,withdrawals,completions,selected]=await Promise.all([
-  env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE role='member' ORDER BY created_at DESC LIMIT 250").all(),
+  env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE role='member' ORDER BY created_at DESC LIMIT 1000").all(),
   env.DB.prepare("SELECT user_id,event_type,detail,ip,device_code FROM risk_events WHERE user_id IS NOT NULL AND created_at>=datetime('now','-14 days') ORDER BY created_at DESC LIMIT 5000").all(),
   env.DB.prepare("SELECT user_id,bank_name,bank_account FROM withdrawals WHERE status IN ('pending','paid') AND created_at>=datetime('now','-90 days') ORDER BY created_at DESC LIMIT 3000").all(),
   env.DB.prepare("SELECT user_id,created_at FROM task_completions WHERE created_at>=datetime('now','-1 hour') ORDER BY created_at DESC LIMIT 2000").all(),
@@ -1522,13 +1522,37 @@ async function handler(req, env) {
       return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu thanh toán. Giao dịch đã được đối chiếu.' : status === 'invalid_account' ? 'Đã báo thông tin nhận tiền không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
     }
     if (m === 'GET' && p === '/api/admin/fraud-scores') {
-      const profiles=await loadFraudProfiles(env);
-      return json({profiles,summary:{
-        serious:profiles.filter(x=>x.level==='serious').length,
-        review:profiles.filter(x=>x.level==='review').length,
-        low:profiles.filter(x=>x.level==='low').length,
-        checked_accounts:profiles.length
-      },rules_version:'d1-multi-signal-v1',audit_only:true});
+      const [profiles,links]=await Promise.all([loadFraudProfiles(env),loadFraudConnections(env)]);
+      const accountProfiles=profiles.map(p=>({
+        ...p,
+        ...(links.by_account[p.user_id]||{
+          ip_count:0,device_count:0,shared_ip_accounts:0,shared_device_accounts:0,
+          max_devices_same_ip:0,networks:[],browsers:[],related_accounts:[]
+        })
+      }));
+      return json({profiles:accountProfiles,
+        shared_networks:links.shared_networks,shared_browsers:links.shared_browsers,
+        summary:{
+          serious:accountProfiles.filter(x=>x.level==='serious').length,
+          review:accountProfiles.filter(x=>x.level==='review').length,
+          low:accountProfiles.filter(x=>x.level==='low').length,
+          checked_accounts:accountProfiles.length,
+          seen_accounts_30d:links.observed_accounts
+        },rules_version:'d1-multi-signal-v2',audit_only:true,
+        limits:{member_rows:1000,event_rows:5000,window_days:30}});
+    }
+    const fraudDetail=p.match(/^\/api\/admin\/fraud-account\/([^/]+)$/);
+    if(m==='GET'&&fraudDetail){
+      const userId=fraudDetail[1];
+      const [profiles,links]=await Promise.all([
+        loadFraudProfiles(env,userId),loadFraudConnections(env)
+      ]);
+      const profile=profiles.find(x=>x.user_id===userId);
+      if(!profile||profile.status===undefined)fail(404,'Không tìm thấy thành viên.');
+      return json({profile:{...profile,...(links.by_account[userId]||{
+         ip_count:0,device_count:0,shared_ip_accounts:0,shared_device_accounts:0,
+         max_devices_same_ip:0,networks:[],browsers:[],related_accounts:[]
+       })},window_days:30});
     }
     if (m === 'GET' && p === '/api/admin/risk-events') {
       const risks = await env.DB.prepare('SELECT r.*,u.email,u.name FROM risk_events r LEFT JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC LIMIT 150').all();
