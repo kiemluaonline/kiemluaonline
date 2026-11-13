@@ -48,6 +48,19 @@ const positive = (v, max = 10000000) => Number.isSafeInteger(Number(v)) && Numbe
 const isLocal = req => ['localhost', '127.0.0.1'].includes(new URL(req.url).hostname);
 // IP công khai do Cloudflare cung cấp ở edge; không lấy từ biểu mẫu người dùng.
 const clientIP = req => str(req.headers.get('CF-Connecting-IP') || (isLocal(req) ? 'local' : 'unknown'), 60);
+// Địa chỉ IPv4 công khai từ bên ngoài: validate để không lưu dữ liệu rác.
+// IPv4 do trình duyệt gửi lên KHÔNG được dùng làm chứng cứ duy nhất để xử lý gian lận.
+function isPublicIPv4(value){
+ const parts=String(value||'').split('.');
+ if(parts.length!==4||parts.some(p=>!/^(0|[1-9][0-9]{0,2})$/.test(p)||Number(p)>255))return false;
+ const [a,b]=parts.map(Number);
+ return a>=1&&a<=223&&a!==10&&a!==127&&a!==0
+  && !(a===100&&b>=64&&b<=127) && !(a===169&&b===254)
+  && !(a===172&&b>=16&&b<=31) && !(a===192&&b===168)
+  && !(a===192&&b===0) && !(a===192&&b===88) && !(a===198&&[18,19].includes(b))
+  && !(a===198&&b===51) && !(a===203&&b===0)
+  && !(a===192&&b===0);
+}
 const browserDeviceId = req => {
  const value=str(req.headers.get('X-TL-Device'),80);
  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():'';
@@ -735,6 +748,21 @@ async function handler(req, env) {
       ip, device_code: code, device_registered: Boolean(browserDeviceId(req)),
       google_linked:Boolean(await googleForUser(env,me.id)) });
   }
+  if (m === 'POST' && p === '/api/me/ipv4-report') {
+    const me = await auth(req, env), body = await readBody(req);
+    const reported = str(body.ip, 48), actual = clientIP(req);
+    if (!isPublicIPv4(reported)) fail(400, 'IPv4 công khai được gửi không hợp lệ.');
+    // Nếu kết nối đến Cloudflare bằng IPv4, phải khớp chính địa chỉ Cloudflare quan sát.
+    // Nếu kết nối bằng IPv6 thì đây chỉ là báo cáo từ trình duyệt, không xác minh độc lập.
+    if (isPublicIPv4(actual) && reported !== actual)
+      fail(409, 'IPv4 trình duyệt báo không khớp với kết nối đến máy chủ.');
+    const seen = await env.DB.prepare(`SELECT id FROM risk_events
+      WHERE event_type='browser_ipv4_report' AND user_id=? AND ip=? AND detail=?
+       AND created_at>=datetime('now','-1 day') LIMIT 1`)
+      .bind(me.id, actual, reported).first();
+    if (!seen) await event(env, req, 'browser_ipv4_report', me.id, reported);
+    return json({ ok:true, recorded:true, verified_by_cloudflare:reported===actual });
+  }
   if (m === 'POST' && p === '/api/me/password') {
     const me = await auth(req, env), b = await readBody(req);
     ensurePassword(b.new_password);
@@ -1015,7 +1043,12 @@ async function handler(req, env) {
       const rows = await env.DB.prepare(`SELECT u.id,u.name,u.email,u.role,u.status,u.referral_code,u.joined_ip,u.created_at,
         COALESCE((SELECT SUM(amount) FROM wallet_entries w WHERE w.user_id=u.id),0) balance
         FROM users u ORDER BY u.created_at DESC LIMIT 150`).all();
-      return json({ users: rows.results });
+      const observations=await env.DB.prepare(`SELECT user_id,detail AS observed_ipv4,ip AS cloudflare_ip,created_at
+        FROM risk_events WHERE event_type='browser_ipv4_report'
+          AND created_at>=datetime('now','-7 days') ORDER BY created_at DESC LIMIT 500`).all();
+      const latest=new Map();
+      for (const row of observations.results) if (!latest.has(row.user_id)) latest.set(row.user_id,row);
+      return json({ users: rows.results.map(u=>({...u,ipv4_observation:latest.get(u.id)||null})) });
     }
     const userEdit = p.match(/^\/api\/admin\/users\/([^/]+)$/);
     if (m === 'PATCH' && userEdit) {
@@ -1140,7 +1173,14 @@ async function handler(req, env) {
       const alertCount=await env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts
         FROM risk_events WHERE event_type IN ('link_ip_quota_denied','link_browser_quota_denied')
         AND date(created_at,'+7 hours')=date('now','+7 hours')`).first();
+      const ipv4Observations=await env.DB.prepare(`SELECT r.user_id,u.email,u.name,
+         r.ip AS cloudflare_ip,r.detail AS observed_ipv4,r.created_at
+        FROM risk_events r LEFT JOIN users u ON u.id=r.user_id
+        WHERE r.event_type='browser_ipv4_report'
+         AND r.created_at>=datetime('now','-7 days')
+        ORDER BY r.created_at DESC LIMIT 150`).all();
       return json({ events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
+        ipv4_observations:ipv4Observations.results,
         link_alerts:linkAlerts.results,link_alert_count:alertCount.n,link_alert_accounts:alertCount.accounts });
     }
     if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env) });
