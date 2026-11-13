@@ -7,7 +7,7 @@ const encoder = new TextEncoder();
 // Phân biệt lý do STK sai mà không phải đổi CHECK constraint của D1 đang hoạt động.
 const INVALID_BANK_ACCOUNT_PREFIX = '[TL_INVALID_BANK_ACCOUNT] ';
 const WITHDRAWAL_APPROVED_PREFIX = '[TL_WITHDRAWAL_APPROVED] ';
-const invalidBankAccountNote = 'Số tài khoản hoặc thông tin nhận tiền không đúng. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin chính xác.';
+const invalidBankAccountNote = 'Số tài khoản không đúng hoặc thông tin nhận tiền không hợp lệ. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin chính xác.';
 function presentWithdrawal(w) {
   if (!w) return w;
   const method = w.bank_name === 'ZaloPay' ? 'zalopay' : 'bank';
