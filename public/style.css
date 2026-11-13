@@ -566,3 +566,40 @@
  .legal-brand{font-size:17px}
  .legal-brand img{width:39px;height:39px}
 }
+
+
+/* Chuyển giao diện cùng một website giữa Tiếng Việt / Hmoob Dawb. */
+.language-toggle{display:inline-flex;align-items:center;gap:2px;border-radius:12px;padding:3px;background:#eaf4ed;border:1px solid #c8ddcf;flex-shrink:0}
+.language-toggle button{border:0;background:transparent;border-radius:9px;color:#557368;font-size:11px;font-weight:820;line-height:1.1;padding:9px 10px;cursor:pointer;white-space:nowrap}
+.language-toggle button.selected{background:#1b7955;color:white;box-shadow:0 2px 8px #1b694523}
+.language-toggle button:focus-visible{outline:2px solid #ecb950;outline-offset:2px}
+.welcome-nav-actions .language-toggle{background:#f0f7ec}
+.welcome-nav-actions{min-width:0}
+.auth-language-row{display:flex;justify-content:flex-end;margin:0 0 15px}
+.auth-page-login .language-toggle{border-color:#315465;background:#172730}
+.auth-page-login .language-toggle button{color:#a2c6c8}
+.auth-page-login .language-toggle button.selected{background:#23a578;color:#fff}
+.account-locked .language-toggle{background:#f0f7f2}
+.sidebar-language{display:flex;justify-content:flex-start;margin:0 0 5px}
+.sidebar .language-toggle{background:#174434;border:1px solid #3b755e}
+.sidebar .language-toggle button{color:#c1ddce}
+.sidebar .language-toggle button.selected{background:#56b88b;color:#123827}
+.topbar .language-toggle{margin:0 5px 0 0}
+.topbar .language-toggle button{font-size:10px;padding:8px 7px}
+.legal-language-switch{display:flex;justify-content:flex-end;margin:0 0 12px}
+.language-legal-notice{display:none;border:1px solid #e0cc8e;border-radius:12px;background:#fffaf0;padding:12px 15px;color:#765f28!important;font-size:13px}
+html[lang="hmn"] .language-legal-notice{display:block}
+@media(max-width:730px){
+ .welcome-nav{flex-wrap:wrap;padding-top:10px;padding-bottom:10px;gap:8px}
+ .welcome-nav-actions{width:100%;justify-content:space-between;gap:7px}
+ .welcome-nav-actions .language-toggle button{padding:8px 10px;font-size:11px}
+ .topbar .avatar{display:none}
+ .topbar .language-toggle{margin:0}
+ .topbar .language-toggle button{font-size:10px;padding:7px 6px}
+ .topbar .top-right{gap:5px}
+ .auth-language-row .language-toggle button{font-size:11px}
+}
+@media(max-width:400px){
+ .topbar-title{display:none}
+ .welcome-nav-actions .language-toggle button{padding:8px 7px}
+}
