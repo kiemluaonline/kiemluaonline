@@ -1,4 +1,4 @@
-name: Tram Lua code checks
+name: Tram Co Lua code checks
 on:
   push:
     branches: [main]
