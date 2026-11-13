@@ -69,7 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawals(status,created_
 CREATE INDEX IF NOT EXISTS idx_withdrawals_user ON withdrawals(user_id,created_at);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 INSERT OR IGNORE INTO settings(key,value) VALUES
- ('site_name','Trạm Lúa'),('signup_enabled','1'),('checkin_reward','0'),
+ ('site_name','Trạm Có Lúa'),('signup_enabled','1'),('checkin_reward','0'),
  ('referral_reward','0'),('min_withdraw_lua','1000'),('lua_per_vnd','0'),
  ('withdrawals_enabled','0'),('announcement','');
 CREATE TABLE IF NOT EXISTS risk_events (
