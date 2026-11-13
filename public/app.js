@@ -32,7 +32,7 @@ const maskDeviceCode = value => {
 };
 const dt = v => v ? new Date(String(v).replace(' ', 'T') + (String(v).includes('Z') ? '' : 'Z')).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}) : '—';
 const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
-const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Không nghiêm trọng',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
+const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Không nghiêm trọng',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',low:'Thấp',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
 const field = (key, label, value='', attrs='') => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><input id="${esc(key)}" name="${esc(key)}" value="${esc(value)}" ${attrs}></div>`;
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
 const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
@@ -664,20 +664,29 @@ async function adminReviews(){
  <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved">Duyệt</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
- const d=await api('/api/admin/withdrawals');
+ const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
+ const risks=new Map((riskData.profiles||[]).map(x=>[x.user_id,x]));
  return `${heading('Yêu cầu rút tiền','Bước 1: Duyệt yêu cầu. Bước 2: Chuyển tiền thật. Bước 3: Đánh dấu đã thanh toán.')}
  <div class="callout">Website chỉ ghi nhận yêu cầu và tình trạng. Bạn phải tự chuyển tiền qua ngân hàng hoặc ZaloPay ngoài hệ thống và đối chiếu trước khi bấm “Đã thanh toán”.</div>
  <section class="card section">${table(['Thành viên','Số tiền','Kênh nhận','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr>
- <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div></td>
+ <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div>${risks.get(w.user_id)?.level==='serious'?`<div class="small red">⚠ Cần đối chiếu trước khi thanh toán • ${fmt(risks.get(w.user_id).score)}/100</div>`:''}</td>
  <td class="num">${fmt(w.amount)} Lúa<div class="green">${fmt(w.vnd_amount)} ₫</div></td>
  <td><strong>${esc(w.payment_method==='zalopay'?'Ví ZaloPay':w.bank_name)}</strong><br><code>${esc(w.bank_account)}</code><div class="small">${esc(w.bank_owner)}</div></td>
  <td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div>${w.account_status==='suspended'&&['pending','approved'].includes(w.status)?'<div class="small red">🔒 Tạm dừng chi trả để xác minh tài khoản</div>':''}</td>
- <td>${['pending','approved'].includes(w.status)?`<div class="btn-row">${w.status==='pending'?`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="approved" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã duyệt</button>`:`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã thanh toán</button>`}<button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="invalid_account">Thông tin sai</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
+ <td>${['pending','approved'].includes(w.status)?`<div class="btn-row">${w.status==='pending'?`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="approved" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã duyệt</button>`:`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã thanh toán</button>`}<button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="invalid_account">Thông tin sai</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
 }
 async function adminSecurity(){
- const d=await api('/api/admin/risk-events');
+ const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
  <div class="callout">Chỉ hiện địa chỉ IP thật. Nếu trình duyệt khách kiểm tra được IPv4 công khai qua dịch vụ bên ngoài, hệ thống ghi nhận riêng làm thông tin tham khảo. IPv4 do trình duyệt báo có thể bị giả mạo, không được dùng một mình để khóa người dùng hoặc từ chối thưởng. Khi không có IPv4, hiển thị IPv6 do Cloudflare ghi nhận, tuyệt đối không tự chuyển thành IPv4 ảo.</div>
+ <section class="card section"><h3>🛡️ Anti-Fraud 2.0 — Điểm rủi ro 0–100</h3>
+ <p><strong>${fmt(anti.summary?.serious||0)}</strong> mức nghiêm trọng · <strong>${fmt(anti.summary?.review||0)}</strong> cần kiểm tra · <strong>${fmt(anti.summary?.low||0)}</strong> mức thấp</p>
+ <p class="note">Điểm được tính trên máy chủ từ nhiều dấu hiệu: tài khoản chung nơi nhận tiền, chung mã trình duyệt, hoạt động nhiệm vụ và nhật ký cảnh báo. Trùng IP chỉ là tín hiệu yếu. Không tự động kết luận gian lận hoặc khóa tài khoản. Mức nghiêm trọng sẽ tạm ngăn duyệt/thanh toán cho đến khi Admin đối chiếu và ghi lý do.</p>
+ ${table(['Thành viên','Điểm rủi ro','Tín hiệu cần đối chiếu'],(anti.profiles||[]).filter(p=>p.score>=25).slice(0,60).map(p=>`<tr>
+  <td><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.email)}</div></td>
+  <td><strong>${fmt(p.score)}/100</strong><div>${chip(p.level)}</div></td>
+  <td>${(p.reasons||[]).map(x=>`<div class="small muted">• ${esc(x)}</div>`).join('')}</td>
+ </tr>`))}</section>
  <section class="card section"><h3>📍 IPv4 thực tế đã ghi nhận</h3>
  <p><strong>${fmt((d.ipv4_inventory||[]).length)}</strong> địa chỉ IPv4 trong 30 ngày qua.</p>
  <p class="note">Hiển thị cả IPv4 của một tài khoản, không chỉ IP bị trùng. IPv4 máy chủ ghi nhận và IPv4 do trình duyệt báo được tách nguồn rõ ràng; không tự chuyển IPv6 thành IPv4.</p>
@@ -912,7 +921,11 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status});toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
   }
   if(act==='withdraw-admin'){
-   let note='';
+   let note='',riskOverride='';
+   if(['approved','paid'].includes(el.dataset.status)&&el.dataset.riskLevel==='serious'){
+    riskOverride=prompt('⚠️ Tài khoản có nhiều tín hiệu rủi ro. Sau khi đối chiếu bằng chứng, nhập lý do cho phép duyệt/chi trả (ít nhất 20 ký tự):','')||'';
+    if(riskOverride.trim().length<20)return;
+   }
    if(el.dataset.status==='approved'){
      if(!confirm('Duyệt yêu cầu rút tiền này? Yêu cầu sẽ chuyển sang Đã duyệt, chưa phải đã thanh toán.'))return;
    }else if(el.dataset.status==='paid'){
@@ -922,7 +935,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    }else if(el.dataset.status==='invalid_account'){
      if(!confirm('Xác nhận số tài khoản không đúng? Khách sẽ được thông báo và hoàn Lúa để gửi yêu cầu mới.'))return;
    }else{note=prompt('Nhập lý do từ chối (bắt buộc):','')||'';if(!note.trim())return;}
-   await api('/api/admin/withdrawals/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status,admin_note:note});toast('Đã xử lý yêu cầu rút tiền.');await afterAction('admin-withdrawals');return;
+   await api('/api/admin/withdrawals/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status,admin_note:note,risk_override_note:riskOverride});toast('Đã xử lý yêu cầu rút tiền.');await afterAction('admin-withdrawals');return;
   }
  }catch(err){toast(err.message,true);}
 });
