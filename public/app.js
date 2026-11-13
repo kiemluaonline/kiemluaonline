@@ -677,6 +677,54 @@ async function adminWithdrawals(){
  <td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div>${w.account_status==='suspended'&&['pending','approved'].includes(w.status)?'<div class="small red">🔒 Tạm dừng chi trả để xác minh tài khoản</div>':''}</td>
  <td>${['pending','approved'].includes(w.status)?`<div class="btn-row">${w.status==='pending'?`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="approved" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã duyệt</button>`:`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã thanh toán</button>`}<button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="invalid_account">Thông tin sai</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
 }
+// Chỉ Admin mới gọi được API chi tiết; các tài khoản thành viên khác
+// không thể đọc quan hệ mạng hay tài khoản của nhau.
+async function showFraudAccount(userId){
+ const {profile:p,window_days:days}=await api('/api/admin/fraud-account/'+encodeURIComponent(userId));
+ const root=document.getElementById('modal-root');
+ if(!root)return;
+ const related=(list)=>(list||[]).length?
+  list.map(a=>`<div class="small muted">• ${esc(a.email||a.name||a.user_id)}</div>`).join(''):
+  '<div class="small muted">Không có tài khoản liên quan được ghi nhận.</div>';
+ root.innerHTML=`<div class="modal-cover"><section class="modal fraud-account-modal" role="dialog"
+  aria-modal="true" aria-label="Chi tiết chống gian lận theo tài khoản">
+  <button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
+  <h3>🔎 Báo cáo chống gian lận</h3>
+  <p><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.email)}</div></p>
+  <div class="fraud-detail-score"><strong>${fmt(p.score)} / 100</strong> ${chip(p.level)} ${chip(p.status)}</div>
+  <p class="note">Điểm rủi ro là cảnh báo để xác minh, không phải kết luận gian lận. Thống kê kết nối trong ${fmt(days||30)} ngày qua.</p>
+  <div class="fraud-detail-stats">
+   <div><strong>${fmt(p.ip_count||0)}</strong><span>IP / dải mạng</span></div>
+   <div><strong>${fmt(p.device_count||0)}</strong><span>Mã trình duyệt</span></div>
+   <div><strong>${fmt(p.shared_device_accounts||0)}</strong><span>TK chung mã</span></div>
+   <div><strong>${fmt(p.shared_ip_accounts||0)}</strong><span>TK chung mạng</span></div>
+  </div>
+  <h4>⚠️ Dấu hiệu rủi ro</h4>
+  ${(p.reasons||[]).length?(p.reasons||[]).map(x=>`<p class="fraud-reason">• ${esc(x)}</p>`).join(''):
+   '<p class="small muted">Chưa có tín hiệu vượt ngưỡng cảnh báo từ dữ liệu hiện có.</p>'}
+  <h4>📱 Mã trình duyệt đã ghi nhận</h4>
+  ${(p.browsers||[]).length?p.browsers.map(g=>`<div class="fraud-connection">
+   <code>${esc(g.device_code)}</code>
+   <p class="small">${fmt(g.account_count)} tài khoản dùng chung mã • ${fmt(g.network_count)} IP/dải mạng</p>
+   ${related(g.other_accounts)}</div>`).join(''):
+   '<p class="small muted">Chưa ghi nhận mã trình duyệt ổn định.</p>'}
+  <h4>🌐 IPv4 / IPv6 và thiết bị cùng mạng</h4>
+  ${(p.networks||[]).length?p.networks.map(g=>`<div class="fraud-connection">
+   <strong>${esc(g.ip_type)}</strong> <code>${esc(g.address)}</code>
+   <p class="small">${fmt(g.account_count)} tài khoản • ${fmt(g.device_count)} mã trình duyệt khác nhau</p>
+   ${related(g.other_accounts)}</div>`).join(''):
+   '<p class="small muted">Chưa ghi nhận địa chỉ IP công khai trong các phiên gần đây.</p>'}
+  <h4>👥 Tài khoản có dấu hiệu liên quan</h4>
+  ${(p.related_accounts||[]).length?p.related_accounts.map(a=>`<div class="fraud-connection">
+   <strong>${esc(a.email||a.name||a.user_id)}</strong>
+   <p class="small muted">${esc((a.reasons||[]).join(' + '))}</p>
+   </div>`).join(''):
+   '<p class="small muted">Chưa có tài khoản liên quan trong dữ liệu ghi nhận.</p>'}
+  <p class="note">Một IP có thể được nhiều người dùng chung. Một mã trình duyệt có thể bị sao chép, đổi hoặc xóa. Không tự động khóa hoặc từ chối thanh toán dựa trên những liên kết này.</p>
+  <button type="button" class="btn alt" data-action="close-modal">Đóng báo cáo</button>
+ </section></div>`;
+}
+
 async function adminSecurity(){
  const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
  const members=(anti.profiles||[]);
@@ -922,6 +970,11 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
   if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
   if(act==='use-manual-ipv4'){showPastedIPv4();return;}
+  if(act==='fraud-filter'){
+   state.fraudFilter=['all','serious','review','low'].includes(el.dataset.level)?el.dataset.level:'all';
+   await navigate('admin-security');return;
+  }
+  if(act==='view-fraud-account'){await showFraudAccount(el.dataset.id);return;}
 
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
@@ -975,6 +1028,10 @@ app.addEventListener('submit',async e=>{
  e.preventDefault();const kind=form.dataset.form;const b=formData(form),button=form.querySelector('button[type="submit"]');
  if(button)button.disabled=true;
  try{
+  if(kind==='fraud-search'){
+   state.fraudSearch=String(b.keyword||'').trim().slice(0,120);
+   await navigate('admin-security');return;
+  }
   if(kind==='google-complete'){
      await api('/api/auth/google/complete','POST',b);
      state.googlePending=null;await loadMe();renderShell();await navigate('overview');
