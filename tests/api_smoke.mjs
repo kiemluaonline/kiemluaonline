@@ -69,6 +69,56 @@ for(const legalDoc of ['privacy.html','terms.html']){
 }
 assert.match(frontendForWelcome,/id="topBalance">🌾/,'Reward balance should keep its grain symbol.');
 console.log('PASS: new logo across public, member dashboard, auth, legal and site favicon; Lúa symbols retained for rewards.');
+// Lus Hmoob / Tiếng Việt: chuyển trực tiếp trên cùng website, không chạm API.
+const translator=readFileSync(new URL('../public/i18n.js',import.meta.url),'utf8');
+assert.match(publicHomepage,/data-language="vi"/);
+assert.match(publicHomepage,/data-language="hmn"/);
+assert.match(publicHomepage,/\/i18n\.js/);
+assert.match(frontendForWelcome,/function languageSwitcher\(\)|const languageSwitcher =/);
+for(const legalDoc of ['privacy.html','terms.html']){
+ const html=readFileSync(new URL('../public/'+legalDoc,import.meta.url),'utf8');
+ assert.match(html,/data-language="hmn"/);
+ assert.match(html,/\/i18n\.js/);
+}
+assert.match(translator,/tramco-lua\.language\.v1/);
+assert.match(translator,/MutationObserver/);
+const {runInNewContext}=await import('node:vm');
+let selectedVi=null,selectedHm=null;
+function langButton(language){
+ const info={};
+ const el={dataset:{language},nodeType:1,classList:{toggle(name,yes){info[name]=yes;}},
+  setAttribute(name,value){info[name]=value;}};
+ el.info=info;return el;
+}
+selectedVi=langButton('vi');selectedHm=langButton('hmn');
+const textNode={nodeType:3,nodeValue:'Đăng nhập',parentElement:{closest(){return null;}}};
+const mockBody={nodeType:1,querySelectorAll(sel){
+ return sel==='[data-language]'?[selectedVi,selectedHm]:[];
+}};
+const mockDoc={readyState:'complete',body:mockBody,documentElement:{lang:'vi'},
+ addEventListener(){},dispatchEvent(){},createTreeWalker(){let done=false;return{nextNode(){
+  if(done)return null;done=true;return textNode;
+ }};}};
+const stored=new Map();
+const browserContext={
+ document:mockDoc,window:{},NodeFilter:{SHOW_TEXT:4},
+ localStorage:{getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v)},
+ CustomEvent:class{constructor(name,init){this.name=name;this.detail=init.detail;}},
+ MutationObserver:class{observe(){}}
+};
+runInNewContext(translator,browserContext);
+assert.equal(textNode.nodeValue,'Đăng nhập');
+browserContext.window.TramI18n.setLanguage('hmn');
+assert.equal(textNode.nodeValue,'Nkag mus');
+assert.equal(mockDoc.documentElement.lang,'hmn');
+assert.equal(stored.get('tramco-lua.language.v1'),'hmn');
+assert.equal(selectedHm.info['aria-pressed'],'true');
+browserContext.window.TramI18n.setLanguage('vi');
+assert.equal(textNode.nodeValue,'Đăng nhập');
+assert.equal(mockDoc.documentElement.lang,'vi');
+assert.equal(selectedVi.info['aria-pressed'],'true');
+console.log('PASS: Hmoob/Vietnamese toggle translates text both ways, remembers choice, keeps same URL and has legal-page controls.');
+
 
 
 // POST từ nguồn ngoài hoặc thiếu header không được truy cập.
