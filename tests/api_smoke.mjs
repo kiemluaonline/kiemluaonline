@@ -122,10 +122,25 @@ assert.equal((await call(`/api/admin/reviews/${pending.id}`,'POST',{status:'appr
 assert.equal((await call('/api/me','GET',undefined,refCookie)).data.balance,25);
 const history=await call('/api/history','GET',undefined,cookie,'203.0.113.10');
 assert.ok(history.data.wallet_entries.length>=4);
-// Một yêu cầu rút đã chuyển không tự hoàn Lúa.
-const w2=await call('/api/withdrawals','POST',{amount:20,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie,'203.0.113.10');
+// Chỉ duyệt trước khi thanh toán; thử bỏ qua bước duyệt phải bị từ chối.
+const w2=await call('/api/withdrawals','POST',{
+ amount:20,payment_method:'bank',bank_name:'Vietcombank',
+ bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+},cookie,'203.0.113.10');
 assert.equal(w2.status,200);
+assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'paid',admin_note:'Giao dich da doi chieu'},admCookie)).status,409);
+assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'approved'},admCookie)).status,409);
+const approvedWithdrawal=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===w2.data.id);
+assert.equal(approvedWithdrawal.status,'approved');
+assert.equal(approvedWithdrawal.payment_method,'bank');
+assert.ok(approvedWithdrawal.admin_note.includes('chờ thanh toán'));
+assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,115);
+assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'paid'},admCookie)).status,400);
 assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'paid',admin_note:'Giao dich da doi chieu'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+w2.data.id,'POST',{status:'paid',admin_note:'Trung lap'},admCookie)).status,409);
+const paidWithdrawal=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===w2.data.id);
+assert.equal(paidWithdrawal.status,'paid');
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,115);
 const dashboard=await call('/api/task-dashboard','GET',undefined,cookie,'203.0.113.10');
 assert.equal(dashboard.status,200);
@@ -133,6 +148,36 @@ assert.equal(dashboard.data.latest_payment.vnd_amount,2);
 assert.equal(dashboard.data.latest_payment.masked_account,'12******90');
 assert.equal(dashboard.data.latest_payment.bank_account,undefined);
 assert.ok(dashboard.data.link_lua>=100);
+// Kênh ZaloPay: chọn phương thức, nhập số điện thoại nhận tiền, duyệt rồi từ chối.
+// Chỉ giữ Lúa một lần và hoàn đúng một lần.
+const invalidZaloPhone=await call('/api/withdrawals','POST',{
+ amount:10,payment_method:'zalopay',zalopay_phone:'123',zalopay_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(invalidZaloPhone.status,400);
+const zalo=await call('/api/withdrawals','POST',{
+ amount:10,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(zalo.status,200,JSON.stringify(zalo));
+const adminZalo=(await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals.find(w=>w.id===zalo.data.id);
+assert.equal(adminZalo.payment_method,'zalopay');
+assert.equal(adminZalo.bank_name,'ZaloPay');
+assert.equal(adminZalo.bank_account,'0912345678');
+assert.equal((await call('/api/admin/withdrawals/'+zalo.data.id,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
+assert.equal((await call('/api/admin/withdrawals/'+zalo.data.id,'POST',{status:'invalid_account'},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,115);
+assert.equal((await call('/api/admin/withdrawals/'+zalo.data.id,'POST',{status:'invalid_account'},admCookie)).status,409);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,115);
+// Yêu cầu chuyển khoản ZaloPay thực sự chỉ được đánh dấu đã thanh toán sau duyệt.
+const zaloPaid=await call('/api/withdrawals','POST',{
+ amount:10,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(zaloPaid.status,200);
+assert.equal((await call('/api/admin/withdrawals/'+zaloPaid.data.id,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+zaloPaid.data.id,'POST',{status:'paid',admin_note:'GD Zalopay 123'},admCookie)).status,200);
+const zaloPaidRow=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===zaloPaid.data.id);
+assert.equal(zaloPaidRow.status,'paid');
+assert.equal(zaloPaidRow.payment_method,'zalopay');
 const riskSummary=await call('/api/admin/risk-events','GET',undefined,admCookie);
 assert.equal(riskSummary.status,200);
 assert.ok(Array.isArray(riskSummary.data.repeated_devices));
