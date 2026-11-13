@@ -75,7 +75,8 @@ async function boot(){
   }
 const googleError=new URLSearchParams(location.search).get('google_error');
 if(googleError==='suspended'){
- state.accountHold={account_status:'suspended',reason:'Tài khoản cần được xác minh thêm.',pending_withdrawals:null,withdrawals:[]};
+ // Chỉ hiện thông tin riêng sau khi có phiên đăng nhập hợp lệ.
+ state.accountHold={account_status:'suspended',suspension_type:'review',reason:'Tài khoản cần được xác minh thêm.',pending_withdrawals:null,withdrawals:[]};
  renderLocked();
  history.replaceState(null,'',location.pathname);
 }else if(googleError){
@@ -106,22 +107,40 @@ async function loadMe(){
 }
 function renderLocked(){
  const info=state.accountHold||{};
+ const severe=info.suspension_type==='confirmed';
  const pending=info.pending_withdrawals;
  const money=Array.isArray(info.withdrawals)?info.withdrawals:[];
+ const headingText=severe?'🚫 TÀI KHOẢN ĐÃ BỊ KHÓA VĨNH VIỄN':'⚠️ TÀI KHOẢN TẠM THỜI BỊ KHÓA';
+ const intro=severe
+  ?'Hệ thống của chúng tôi đã phát hiện tài khoản của bạn có hành vi gian lận nghiêm trọng, vi phạm chính sách và quy định của Trạm Lúa.'
+  :'Hệ thống của chúng tôi đã phát hiện hoạt động bất thường liên quan đến tài khoản của bạn, có dấu hiệu vi phạm quy định của Trạm Lúa.';
+ const decisions=severe
+  ?'<li><strong>Tài khoản:</strong> Khóa vĩnh viễn.</li><li><strong>Nhiệm vụ và nhận thưởng:</strong> Chấm dứt.</li><li><strong>Yêu cầu rút tiền:</strong> Từ chối thanh toán đối với các khoản thưởng gian lận theo quy định.</li>'
+  :'<li><strong>Tài khoản:</strong> Tạm khóa để xác minh.</li><li><strong>Nhiệm vụ và nhận thưởng:</strong> Tạm đình chỉ.</li><li><strong>Yêu cầu rút tiền:</strong> Tạm dừng thanh toán trong thời gian xác minh.</li>';
+ const pendingText=pending===null||pending===undefined
+  ?'Các yêu cầu chưa thanh toán đang tạm dừng xử lý.'
+  :pending>0?`Có ${fmt(pending)} yêu cầu rút tiền chưa thanh toán đang được giữ để đối chiếu.`
+  :'Hiện không có yêu cầu rút tiền đang chờ xử lý.';
  app.className='';
  app.innerHTML=`<div class="auth-page"><div class="auth-brand">
-  <div class="brand-mark">🌾</div><p class="eyebrow">TRẠM LÚA • TRẠNG THÁI TÀI KHOẢN</p>
-  <h1>Thông báo tài khoản</h1><p>Thông tin tình trạng tài khoản và yêu cầu rút tiền của bạn.</p></div>
-  <section class="auth-card"><h2>🔒 Tài khoản đang tạm khóa để kiểm tra</h2>
-   <p>Hệ thống cần xác minh thêm hoạt động của tài khoản. Trong thời gian này, bạn không thể làm nhiệm vụ hoặc gửi yêu cầu rút tiền mới.</p>
-   <div class="callout">${esc(info.reason||'Vui lòng liên hệ quản trị viên để được xem xét và giải quyết.')}</div>
-   <h3>Tình trạng rút tiền</h3>
-   <p>${pending===null||pending===undefined?'Yêu cầu rút tiền chưa thanh toán sẽ tạm dừng xử lý trong thời gian kiểm tra.':pending>0?`Có ${fmt(pending)} yêu cầu chưa thanh toán đang tạm dừng xử lý để đối chiếu.`:'Không có yêu cầu rút tiền đang chờ theo dữ liệu hiện tại.'}</p>
-   ${money.length?`<div class="table-wrap"><table><thead><tr><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>${money.map(w=>`<tr><td>${fmt(w.vnd_amount)} ₫</td><td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div></td></tr>`).join('')}</tbody></table></div>`:''}
-   <p class="note">Khóa tài khoản không có nghĩa yêu cầu rút tiền đã bị từ chối. Nếu có tranh chấp hoặc nhầm lẫn, hãy liên hệ quản trị viên qua kênh hỗ trợ chính thức để yêu cầu đối chiếu.</p>
+  <div class="brand-mark">🌾</div><p class="eyebrow">TRẠM LÚA • THÔNG BÁO TÀI KHOẢN</p>
+  <h1>Thông báo từ Trạm Lúa</h1><p>Trạng thái tài khoản và yêu cầu rút tiền.</p></div>
+  <section class="auth-card account-locked ${severe?'account-locked-severe':'account-locked-review'}">
+   <h2>${headingText}</h2>
+   <p>${intro}</p>
+   <h3>⛔ Quyết định xử lý</h3>
+   <ul class="lock-decisions">${decisions}</ul>
+   ${severe?'':`<p>Sau khi xác minh, hệ thống sẽ quyết định mở khóa hoặc áp dụng biện pháp xử lý phù hợp.</p>`}
+   <div class="lock-payment-status"><strong>Tình trạng rút tiền hiện tại</strong>
+    <p>${esc(pendingText)}</p>
+    ${money.length?`<div class="table-wrap"><table><thead><tr><th>Giá trị</th><th>Trạng thái thực tế</th></tr></thead><tbody>${money.map(w=>`<tr><td>${fmt(w.vnd_amount)} ₫</td><td>${chip(w.status)}</td></tr>`).join('')}</tbody></table></div>`:''}
+   </div>
+   ${severe?'':info.reason&&info.reason!=='Tài khoản cần được xác minh thêm.'?`<p class="note">Thông tin thêm: ${esc(info.reason)}</p>`:''}
+   <p class="lock-signature">🛡️ <strong>Trạm Lúa – Hệ thống chống gian lận</strong></p>
    <button class="btn alt" data-action="logout" type="button">Đăng xuất</button>
   </section></div>`;
 }
+
 function googleAuthPanel(active){
  if(active==='setup')return '';
  if(!state.meta.google_auth_enabled)return '<p class="note auth-google-disabled">Đăng nhập Google sẽ hiển thị sau khi chủ website cấu hình Google Cloud.</p>';
@@ -217,7 +236,7 @@ function renderShell(){
  <main class="content" id="viewContent"></main></section></div><div id="modal-root"></div>`;
  setMenuOpen(false);
 }
-async function refreshMe(){await loadMe();if(!state.me){renderAuth();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
+async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderAuth();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
 async function navigate(view){
  state.view=view;
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
@@ -585,7 +604,14 @@ async function adminUsers(){
  const d=await api('/api/admin/users');
  return `${heading('Quản lý thành viên','Tra cứu tài khoản, số Lúa và tình trạng sử dụng.')}<section class="card">${table(['Thành viên','Tài khoản','Số dư','IP đăng ký','Trạng thái','Thao tác'],d.users.map(u=>`<tr>
  <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip,u.ipv4_observation)}</td><td>${chip(u.status)}</td>
- <td>${u.role==='admin'?'Admin':`<button class="btn sm ${u.status==='active'?'danger':'alt'}" data-action="change-user" data-id="${esc(u.id)}" data-status="${u.status==='active'?'suspended':'active'}">${u.status==='active'?'Khóa':'Mở khóa'}</button>`}${u.status==='suspended'?`<div class="small muted">Lý do: ${esc(u.suspension_reason||'Đang xác minh')}</div>`:''}</td></tr>`))}</section>`;
+ <td>${u.role==='admin'?'Admin':`<div class="btn-row">
+  ${u.status==='active'?`
+   <button class="btn alt sm" data-action="change-user" data-id="${esc(u.id)}" data-status="suspended" data-lock-type="review">⚠ Tạm khóa</button>
+   <button class="btn danger sm" data-action="change-user" data-id="${esc(u.id)}" data-status="suspended" data-lock-type="confirmed">⛔ Khóa vĩnh viễn</button>`:`
+   ${u.suspension_type!=='confirmed'?`<button class="btn danger sm" data-action="change-user" data-id="${esc(u.id)}" data-status="suspended" data-lock-type="confirmed">⛔ Khóa vĩnh viễn</button>`:''}
+   <button class="btn alt sm" data-action="change-user" data-id="${esc(u.id)}" data-status="active" data-lock-type="${esc(u.suspension_type||'review')}">Mở khóa</button>`}
+  </div>`}
+  ${u.status==='suspended'?`<div class="small muted">${u.suspension_type==='confirmed'?'<strong class="red">🚫 Khóa vĩnh viễn – Đã xác minh vi phạm</strong>':'⚠ Tạm khóa – Đang xác minh'}<div>Lý do: ${esc(u.suspension_reason||'Đang xác minh')}</div>${u.suspension_type==='confirmed'&&u.suspension_evidence?`<div>Bằng chứng Admin lưu: ${esc(u.suspension_evidence)}</div>`:''}</div>`:''}</td></tr>`))}</section>`;
 }
 async function adminReviews(){
  const d=await api('/api/admin/reviews');
@@ -806,13 +832,25 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='change-user'){
-   let reason='';
+   let reason='',evidence='';
+   const type=el.dataset.lockType==='confirmed'?'confirmed':'review';
    if(el.dataset.status==='suspended'){
-    reason=prompt('Nhập lý do gửi cho thành viên (ít nhất 10 ký tự). Không kết luận gian lận chỉ vì trùng IP:','Hoạt động tài khoản cần được xác minh thêm.')||'';
-    if(reason.trim().length<10)return;
-    if(!confirm('Tạm khóa tài khoản và tạm dừng duyệt/thanh toán khoản rút chưa hoàn tất? Các khoản Lúa vẫn được giữ để đối chiếu.'))return;
-   }else if(!confirm('Mở lại tài khoản này và tiếp tục xử lý yêu cầu rút tiền?'))return;
-   await api('/api/admin/users/'+encodeURIComponent(el.dataset.id),'PATCH',{status:el.dataset.status,suspension_reason:reason});toast('Đã cập nhật trạng thái thành viên.');await navigate('admin-users');return;
+    if(type==='confirmed'){
+     reason=prompt('Ghi lý do xác định vi phạm nghiêm trọng (chỉ Admin xem; tối thiểu 10 ký tự):','Vi phạm nghiêm trọng quy định chống gian lận của Trạm Lúa.')||'';
+     if(reason.trim().length<10)return;
+     evidence=prompt('Nhập bằng chứng cụ thể đã đối chiếu (bắt buộc ít nhất 20 ký tự; không chỉ dựa vào IP trùng):','')||'';
+     if(evidence.trim().length<20){toast('Cần mô tả bằng chứng cụ thể trước khi khóa vĩnh viễn.',true);return;}
+     if(!confirm('XÁC NHẬN KHÓA VĨNH VIỄN? Khách sẽ thấy mẫu thông báo vi phạm nghiêm trọng. Chưa tự xóa Lúa hay tự từ chối mọi giao dịch.'))return;
+    }else{
+     reason=prompt('Nhập lý do tạm khóa để xác minh (tối thiểu 10 ký tự):','Hoạt động tài khoản cần được xác minh thêm.')||'';
+     if(reason.trim().length<10)return;
+     if(!confirm('Tạm khóa để xác minh và dừng duyệt/thanh toán khoản rút chưa hoàn tất?'))return;
+    }
+   }else if(!confirm(type==='confirmed'?'Đây là tài khoản đã bị khóa vĩnh viễn. Bạn chắc chắn muốn khôi phục tài khoản?':'Mở lại tài khoản và tiếp tục xử lý yêu cầu rút tiền?'))return;
+   await api('/api/admin/users/'+encodeURIComponent(el.dataset.id),'PATCH',{
+    status:el.dataset.status,suspension_type:type,suspension_reason:reason,suspension_evidence:evidence
+   });
+   toast('Đã cập nhật loại khóa tài khoản.');await navigate('admin-users');return;
   }
   if(act==='review'){
    if(!confirm(el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
