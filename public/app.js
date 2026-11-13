@@ -193,16 +193,24 @@ function googleProfilePanel(){
 
 function renderAuth(){
  if(state.googlePending){
-   app.className='';
-   app.innerHTML='<div class="auth-page"><div class="auth-brand"><div class="brand-mark brand-mark-image"><img src="/logo.svg" alt="Logo Trạm Có Lúa" width="52" height="52"></div><p class="eyebrow">TRẠM CÓ LÚA • TÀI KHOẢN THÀNH VIÊN</p>'+
-    '<h1>Chào mừng bạn đến Trạm Có Lúa.</h1><p>Đăng nhập Google an toàn và đơn giản.</p></div>'+
-    '<section class="auth-card"><h2>Hoàn tất đăng ký bằng Google</h2>'+
-    '<p>Gmail <strong>'+esc(state.googlePending.email)+'</strong> chưa có tài khoản. Bạn không cần tạo mật khẩu, chỉ cần đồng ý điều khoản để tạo tài khoản thành viên.</p>'+
-    '<form data-form="google-complete"><div class="field"><label><input type="checkbox" name="accept_terms" value="yes" required style="width:auto;margin-right:7px">'+
-    'Tôi đã đọc và đồng ý <a href="/terms.html" target="_blank" rel="noopener">Điều khoản</a> và <a href="/privacy.html" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.</label></div>'+
-    '<button class="btn" type="submit" style="width:100%">Đồng ý và tạo tài khoản</button></form>'+
-    '<button class="btn alt" type="button" data-action="google-cancel" style="width:100%;margin-top:12px">Hủy và trở lại</button></section></div>';
-   return;
+  app.className='';
+  app.innerHTML=`<div class="auth-page auth-page-login">
+   <div class="auth-brand"><div class="auth-brand-new-logo"><img src="/logo.svg" width="83" height="83" alt="Logo Trạm Có Lúa"></div>
+    <p class="eyebrow">TRẠM CÓ LÚA • NỀN TẢNG NHIỆM VỤ</p><h1>Chào mừng bạn đến Trạm Có Lúa.</h1>
+    <p>Đăng ký bằng Google để khám phá nhiệm vụ và quản lý điểm Lúa.</p></div>
+   <section class="auth-card">
+    <div class="auth-logo-line"><img src="/logo.svg" alt="" width="56" height="56"><div><strong>TRẠM CÓ LÚA</strong><span>ĐĂNG KÝ BẰNG GOOGLE</span></div></div>
+    <span class="auth-form-kicker"><i></i> THÀNH VIÊN MỚI</span>
+    <h2>Hoàn tất đăng ký Google</h2>
+    <p class="auth-intro">Email <strong>${esc(state.googlePending.email)}</strong> chưa có tài khoản. Bạn không cần tạo mật khẩu, chỉ cần đồng ý điều khoản để tiếp tục.</p>
+    <form data-form="google-complete"><div class="auth-legal"><label><input type="checkbox" name="accept_terms" value="yes" required>
+     Tôi đồng ý <a href="/terms.html" target="_blank" rel="noopener">Điều khoản</a> và
+     <a href="/privacy.html" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.</label></div>
+     <button class="auth-submit" type="submit">Đồng ý và tạo tài khoản</button>
+    </form>
+    <button class="google-auth-btn" type="button" data-action="google-cancel" style="margin-top:13px">Hủy và trở lại</button>
+   </section></div>`;
+  return;
  }
  const mode=state.authMode;
  const ref=new URLSearchParams(location.search).get('ref')||'';
