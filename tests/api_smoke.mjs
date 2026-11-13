@@ -82,7 +82,7 @@ for(const legalDoc of ['privacy.html','terms.html']){
 }
 assert.match(translator,/tramco-lua\.language\.v1/);
 assert.match(translator,/MutationObserver/);
-const {runInNewContext}=await import('node:vm');
+const {runInNewContext:runLocaleScript}=await import('node:vm');
 let selectedVi=null,selectedHm=null;
 function langButton(language){
  const info={};
@@ -106,7 +106,7 @@ const browserContext={
  CustomEvent:class{constructor(name,init){this.name=name;this.detail=init.detail;}},
  MutationObserver:class{observe(){}}
 };
-runInNewContext(translator,browserContext);
+runLocaleScript(translator,browserContext);
 assert.equal(textNode.nodeValue,'Đăng nhập');
 browserContext.window.TramI18n.setLanguage('hmn');
 assert.equal(textNode.nodeValue,'Nkag mus');
