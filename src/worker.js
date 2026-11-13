@@ -210,8 +210,9 @@ async function auth(req, env, role = null) {
 // Thông tin tài khoản bị khóa chỉ dành cho phiên của chính thành viên hoặc
 // người đã nhập đúng mật khẩu. Việc khóa không tự hủy các khoản Lúa đã ghi.
 async function suspendedInfo(env, userId) {
- const [reason,rows,count]=await Promise.all([
+ const [reason,holdType,rows,count]=await Promise.all([
    env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('account_hold:'+userId).first(),
+   env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('account_hold_type:'+userId).first(),
    env.DB.prepare('SELECT id,amount,vnd_amount,status,admin_note,created_at FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 5').bind(userId).all(),
    env.DB.prepare("SELECT COUNT(*) AS n FROM withdrawals WHERE user_id=? AND status='pending'").bind(userId).first()
  ]);
@@ -220,7 +221,9 @@ async function suspendedInfo(env, userId) {
    return {id:w.id,amount:w.amount,vnd_amount:w.vnd_amount,status:w.status,
     admin_note:w.admin_note,created_at:w.created_at};
  });
- return {account_status:'suspended',reason:reason?.value||'Tài khoản cần được xác minh thêm.',
+ return {account_status:'suspended',
+   suspension_type:holdType?.value==='confirmed'?'confirmed':'review',
+   reason:reason?.value||'Tài khoản cần được xác minh thêm.',
    pending_withdrawals:count?.n||0,
    withdrawals};
 }
@@ -730,7 +733,9 @@ async function handler(req, env) {
         userId=me.id;
       }else if(mapped){
         const found=await env.DB.prepare('SELECT id,status FROM users WHERE id=?').bind(mapped.value).first();
-        if(!found||found.status!=='active')fail(403,'Tài khoản đã tạm khóa.',{auth_code:'suspended'});
+        if(!found)fail(403,'Tài khoản không tồn tại.',{auth_code:'failed'});
+        if(found.status!=='active')
+          return googleReturn(req,'',await createSession(req,env,found.id));
         userId=found.id;
       }else{
         // Gmail đã dùng đăng ký mật khẩu: Google chứng minh quyền sở hữu hộp thư.
@@ -740,8 +745,9 @@ async function handler(req, env) {
           const matched=await registeredEmail(env,identity.email);
           if(matched){
             const existing=await env.DB.prepare('SELECT id,role,status FROM users WHERE id=?').bind(matched.id).first();
-            if(!existing||existing.status!=='active')
-              fail(403,'Tài khoản đã bị tạm khóa.',{auth_code:'suspended'});
+            if(!existing)fail(403,'Tài khoản không tồn tại.',{auth_code:'failed'});
+            if(existing.status!=='active')
+              return googleReturn(req,'',await createSession(req,env,existing.id));
             if(existing.role!=='member')
               fail(409,'Tài khoản quản trị cần liên kết Google trong Hồ sơ.',{auth_code:'email_exists'});
             const attached=await googleForUser(env,existing.id);
@@ -1123,10 +1129,16 @@ async function handler(req, env) {
           AND created_at>=datetime('now','-7 days') ORDER BY created_at DESC LIMIT 500`).all();
       const latest=new Map();
       for (const row of observations.results) if (!latest.has(row.user_id)) latest.set(row.user_id,row);
-      const suspendedRows=await env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'account_hold:%'").all();
-      const holds=new Map(suspendedRows.results.map(x=>[x.key.slice('account_hold:'.length),x.value]));
-      return json({ users: rows.results.map(u=>({...u,ipv4_observation:latest.get(u.id)||null,
-        suspension_reason:holds.get(u.id)||''})) });
+      const holdRows=await env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'account_hold:%' OR key LIKE 'account_hold_type:%' OR key LIKE 'account_hold_evidence:%'").all();
+      const holds=new Map(),types=new Map(),evidence=new Map();
+      for(const row of holdRows.results){
+       if(row.key.startsWith('account_hold_type:'))types.set(row.key.slice(18),row.value);
+       else if(row.key.startsWith('account_hold_evidence:'))evidence.set(row.key.slice(22),row.value);
+       else if(row.key.startsWith('account_hold:'))holds.set(row.key.slice(13),row.value);
+      }
+      return json({users:rows.results.map(u=>({...u,ipv4_observation:latest.get(u.id)||null,
+       suspension_type:u.status==='suspended'?(types.get(u.id)==='confirmed'?'confirmed':'review'):null,
+       suspension_reason:holds.get(u.id)||'',suspension_evidence:evidence.get(u.id)||''}))});
     }
     const userEdit = p.match(/^\/api\/admin\/users\/([^/]+)$/);
     if (m === 'PATCH' && userEdit) {
@@ -1134,20 +1146,29 @@ async function handler(req, env) {
       if (!['active', 'suspended'].includes(b.status)) fail(400, 'Trạng thái không hợp lệ.');
       if (userEdit[1] === admin.id) fail(403, 'Bạn không thể tự khóa tài khoản Admin của mình.');
       const reason=str(b.suspension_reason,240);
+      const suspensionType=str(b.suspension_type||'review',16);
+      const evidence=str(b.suspension_evidence,500);
       if(b.status==='suspended' && reason.length<10)
         fail(400,'Cần ghi lý do tạm khóa rõ ràng (ít nhất 10 ký tự).');
+      if(b.status==='suspended'&&!['review','confirmed'].includes(suspensionType))
+        fail(400,'Loại khóa không hợp lệ.');
+      if(b.status==='suspended'&&suspensionType==='confirmed'&&evidence.length<20)
+        fail(400,'Khóa vĩnh viễn phải có mô tả bằng chứng vi phạm ít nhất 20 ký tự.');
       const target=await env.DB.prepare("SELECT id FROM users WHERE id=? AND role='member'").bind(userEdit[1]).first();
       if(!target)fail(404,'Không tìm thấy thành viên.');
-      const holdKey='account_hold:'+target.id;
+      const holdKey='account_hold:'+target.id, typeKey='account_hold_type:'+target.id;
+      const evidenceKey='account_hold_evidence:'+target.id;
+      const upsertKey=(key,value)=>env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(key,value);
+      const deleteKey=key=>env.DB.prepare('DELETE FROM settings WHERE key=?').bind(key);
       const statements=[
        env.DB.prepare("UPDATE users SET status=? WHERE id=? AND role='member'").bind(b.status,target.id),
-       b.status==='suspended'
-        ?env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(holdKey,reason)
-        :env.DB.prepare('DELETE FROM settings WHERE key=?').bind(holdKey)
+       b.status==='suspended'?upsertKey(holdKey,reason):deleteKey(holdKey),
+       b.status==='suspended'?upsertKey(typeKey,suspensionType):deleteKey(typeKey),
+       b.status==='suspended'&&suspensionType==='confirmed'?upsertKey(evidenceKey,evidence):deleteKey(evidenceKey)
       ];
       await env.DB.batch(statements);
-      await event(env, req, 'admin_user_status', admin.id, `${target.id}:${b.status}`);
-      return json({ ok: true });
+      await event(env, req, 'admin_user_status', admin.id, `${target.id}:${b.status}:${b.status==='suspended'?suspensionType:'unlocked'}`);
+      return json({ok:true,suspension_type:b.status==='suspended'?suspensionType:null});
     }
     if (m === 'GET' && p === '/api/admin/reviews') {
       const rows = await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
