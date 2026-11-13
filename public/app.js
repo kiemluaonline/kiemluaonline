@@ -256,44 +256,17 @@ function showPastedIPv4(){
  copy.dataset.value=ipv4;copy.textContent='Sao chép IPv4';
  toast('Đã hiển thị IPv4 bạn cung cấp. Chưa được hệ thống xác minh.');
 }
-// Mã hiển thị cho quản trị: cùng dải IPv6 /64 có cùng mã 4 số.
-// Đây KHÔNG phải IPv4 thật hoặc công cụ suy ra IPv4 của khách.
-// Chống gian lận vẫn dùng IP thực tế đã lưu ở phía máy chủ.
-function ipv6NetworkPrefix(ip) {
- const value=String(ip||'').trim().toLowerCase();
- if(!value.includes(':')||value.includes('.'))return null;
- if(!/^[0-9a-f:]+$/.test(value))return null;
- const halves=value.split('::');
- if(halves.length>2)return null;
- const left=halves[0]?halves[0].split(':'):[];
- const right=halves.length===2&&halves[1]?halves[1].split(':'):[];
- if(halves.length===2&&left.length+right.length>7)return null;
- const groups=halves.length===2
-   ?[...left,...Array(8-left.length-right.length).fill('0'),...right]
-   :left;
- if(groups.length!==8||groups.some(g=>!/^[0-9a-f]{1,4}$/.test(g)))return null;
- return groups.slice(0,4).map(g=>parseInt(g,16).toString(16)).join(':')+'::/64';
-}
-function ipv6GroupCode(ip) {
- const network=ipv6NetworkPrefix(ip);
- if(!network)return null;
- // FNV-1a 32-bit deterministic, trong khoảng Class E: 240.0.0.0/4.
- // Chỉ là nhãn để lọc/đối chiếu; có thể trùng mã giữa hai mạng khác nhau.
- let hash=0x811c9dc5;
- for(let i=0;i<network.length;i++){
-  hash=Math.imul(hash^network.charCodeAt(i),0x01000193)>>>0;
- }
- return [240+((hash>>>28)&15),(hash>>>16)&255,(hash>>>8)&255,hash&255].join('.');
-}
-const adminIP = ip => {
- const value=String(ip||'');
- const network=ipv6NetworkPrefix(value);
- const code=ipv6GroupCode(value);
- if(!network||!code)return `<code>${esc(value||'—')}</code>`;
+// Chỉ hiển thị IP thật, không sinh IPv4 ảo từ IPv6.
+// observed là kết quả do trình duyệt tự gửi về từ dịch vụ IPv4 bên ngoài;
+// có thể bị sửa nên không được dùng riêng nó để kết luận gian lận.
+const adminIP = (ip,observed=null) => {
+ const value=String(ip||'').trim();
+ const raw=`<div><code class="risk-ip-full">${esc(value||'—')}</code>${value?` <button type="button" class="risk-ip-copy" data-action="copy-ip" data-value="${esc(value)}">Sao chép</button>`:''}</div>`;
+ if(!observed?.observed_ipv4||!isIPv4(observed.observed_ipv4))return raw;
+ const label=observed.observed_ipv4===value?'IPv4 được Cloudflare xác nhận':'IPv4 do trình duyệt báo qua dịch vụ kiểm tra (chưa xác minh)';
  return `<div class="risk-ip-short">
-  <div class="risk-ip-identity"><span class="risk-ip-label">Mã nhóm IPv6 (4 số, không phải IPv4 thật)</span><code class="risk-ip-code">${esc(code)}</code><button type="button" data-action="copy-ip" data-value="${esc(code)}" aria-label="Sao chép mã nhóm">Sao chép mã</button></div>
-  <div class="risk-ip-network">Dải mạng: <code>${esc(network)}</code></div>
-  <details class="risk-ip-details"><summary>Xem IPv6 gốc</summary><code class="risk-ip-full">${esc(value)}</code><button type="button" data-action="copy-ip" data-value="${esc(value)}">Sao chép IP thật</button></details>
+  <div class="risk-ip-identity"><span class="risk-ip-label">${esc(label)}</span><code class="risk-ip-code">${esc(observed.observed_ipv4)}</code></div>
+  <div class="risk-ip-network">IP Cloudflare ghi nhận: ${raw}</div>
  </div>`;
 };
 
@@ -428,6 +401,9 @@ async function detectPublicIPv4(button,silent=false){
   }
   copy.dataset.value=ip;
   copy.textContent='Sao chép IPv4';
+  // Ghi lại kết quả dịch vụ IPv4 trong khu vực Admin, nhưng không coi
+  // đây là IP đã được Cloudflare xác minh khi kết nối chính dùng IPv6.
+  api('/api/me/ipv4-report','POST',{ip}).catch(()=>{});
   if(!silent)toast('Đã nhận diện IPv4 công khai.');
  }catch(error){
   if(button.isConnected&&state.view==='tasks'){
@@ -569,7 +545,7 @@ async function adminTasks(){
 async function adminUsers(){
  const d=await api('/api/admin/users');
  return `${heading('Quản lý thành viên','Tra cứu tài khoản, số Lúa và tình trạng sử dụng.')}<section class="card">${table(['Thành viên','Tài khoản','Số dư','IP đăng ký','Trạng thái','Thao tác'],d.users.map(u=>`<tr>
- <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip)}</td><td>${chip(u.status)}</td>
+ <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip,u.ipv4_observation)}</td><td>${chip(u.status)}</td>
  <td>${u.role==='admin'?'Admin':`<button class="btn sm ${u.status==='active'?'danger':'alt'}" data-action="change-user" data-id="${esc(u.id)}" data-status="${u.status==='active'?'suspended':'active'}">${u.status==='active'?'Khóa':'Mở khóa'}</button>`}</td></tr>`))}</section>`;
 }
 async function adminReviews(){
@@ -593,7 +569,10 @@ async function adminWithdrawals(){
 async function adminSecurity(){
  const d=await api('/api/admin/risk-events');
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
- <div class="callout">IPv4 thật được hiển thị nguyên dạng. Với IPv6 dài, hệ thống hiển thị mã nhóm 4 số dễ tra cứu, có thể mở xem IP gốc và dải mạng /64. Mã nhóm là nhãn quản lý, KHÔNG phải IPv4 thật và có thể trùng. Không kết luận gian lận chỉ vì trùng mã, IP hoặc mã trình duyệt.</div>
+ <div class="callout">Chỉ hiện địa chỉ IP thật. Nếu trình duyệt khách kiểm tra được IPv4 công khai qua dịch vụ bên ngoài, hệ thống ghi nhận riêng làm thông tin tham khảo. IPv4 do trình duyệt báo có thể bị giả mạo, không được dùng một mình để khóa người dùng hoặc từ chối thưởng. Khi không có IPv4, hiển thị IPv6 do Cloudflare ghi nhận, tuyệt đối không tự chuyển thành IPv4 ảo.</div>
+ <section class="card section"><h3>IPv4 công khai do trình duyệt báo trong 7 ngày</h3>
+ <p class="note">Các địa chỉ này là phản hồi dịch vụ kiểm tra trên mạng của khách. IP kết nối do Cloudflare ghi nhận được hiển thị bên cạnh để đối chiếu.</p>
+ ${table(['Thời gian / Thành viên','IPv4 trình duyệt báo','IP Cloudflare ghi nhận'],(d.ipv4_observations||[]).map(r=>`<tr><td>${dt(r.created_at)}<div class="small">${esc(r.name||r.email||'—')}</div></td><td><code>${esc(r.observed_ipv4)}</code></td><td>${adminIP(r.cloudflare_ip)}</td></tr>`))}</section>
  <section class="card section"><h3>⚠ Cảnh báo link rút gọn hôm nay</h3>
  <p><strong>${fmt(d.link_alert_count||0)}</strong> lượt bị chặn · <strong>${fmt(d.link_alert_accounts||0)}</strong> tài khoản · Đặt lại 00:00 giờ Việt Nam</p>
  <p class="note">Phát hiện tài khoản khác dùng chung IP hoặc mã trình duyệt. Đây là cảnh báo để Admin kiểm tra, chưa phải kết luận gian lận.</p>
