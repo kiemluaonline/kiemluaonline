@@ -1,5 +1,7 @@
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
+// Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
+const publicHomeHTML = app.innerHTML;
 const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'' };
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
@@ -35,7 +37,7 @@ const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
 const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Không nghiêm trọng',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',low:'Thấp',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
 const field = (key, label, value='', attrs='') => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><input id="${esc(key)}" name="${esc(key)}" value="${esc(value)}" ${attrs}></div>`;
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
-const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
+const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM CÓ LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
 const empty = (title,body='') => `<div class="empty"><div class="big">☘</div><h3>${esc(title)}</h3><p>${esc(body)}</p></div>`;
 const table = (heads, rows) => rows.length ? `<div class="table-wrap"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` : empty('Chưa có dữ liệu thực tế', 'Các bản ghi sẽ xuất hiện sau khi người dùng thực hiện thao tác.');
 const formData = form => Object.fromEntries(new FormData(form).entries());
@@ -59,6 +61,12 @@ async function api(path, method='GET', body=null){
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;throw error; }
   return data;
 }
+const PUBLIC_TITLE = 'Trạm Có Lúa – Làm nhiệm vụ, tích Lúa mỗi ngày';
+function renderHome(){
+ app.className='';
+ app.innerHTML=publicHomeHTML;
+ document.title=PUBLIC_TITLE;
+}
 async function boot(){
   try{ state.meta=await api('/api/meta');document.title=state.meta.site_name+' · Nhiệm vụ'; }
   catch(e){ app.innerHTML=`<div class="auth-page"><div class="auth-card"><h2>Chưa thể kết nối hệ thống</h2><p>${esc(e.message)}. Hãy kiểm tra D1 và migration.</p></div></div>`;return; }
@@ -71,7 +79,10 @@ async function boot(){
       const pending=await api('/api/auth/google/pending').catch(()=>null);
       state.googlePending=pending?.pending?pending:null;
     }
-    renderAuth();
+    // Giữ trang giới thiệu cho khách mới; chỉ mở biểu mẫu khi khách chọn.
+    if(state.meta.setup_required||state.googlePending||
+       new URLSearchParams(location.search).has('google_error'))renderAuth();
+    else renderHome();
   }
 const googleError=new URLSearchParams(location.search).get('google_error');
 if(googleError==='suspended'){
@@ -83,7 +94,7 @@ if(googleError==='suspended'){
  const messages={
   email_exists:'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi vào Hồ sơ để liên kết Google.',
   not_registered:'Google này chưa đăng ký. Hãy chọn Đăng ký bằng Google.',
-  email_mismatch:'Email Google phải trùng email tài khoản Trạm Lúa.',
+  email_mismatch:'Email Google phải trùng email tài khoản Trạm Có Lúa.',
   expired:'Phiên Google đã hết hạn. Hãy thử lại.',
   cancelled:'Bạn đã hủy đăng nhập Google.',
   signup_closed:'Hệ thống đã tắt đăng ký mới.',
@@ -115,8 +126,8 @@ function renderLocked(){
  const money=Array.isArray(info.withdrawals)?info.withdrawals:[];
  const headingText=severe?'🚫 TÀI KHOẢN ĐÃ BỊ KHÓA VĨNH VIỄN':'⚠️ TÀI KHOẢN TẠM THỜI BỊ KHÓA';
  const intro=severe
-  ?'Hệ thống của chúng tôi đã phát hiện tài khoản của bạn có hành vi gian lận nghiêm trọng, vi phạm chính sách và quy định của Trạm Lúa.'
-  :'Hệ thống của chúng tôi đã phát hiện hoạt động bất thường liên quan đến tài khoản của bạn, có dấu hiệu vi phạm quy định của Trạm Lúa.';
+  ?'Hệ thống của chúng tôi đã phát hiện tài khoản của bạn có hành vi gian lận nghiêm trọng, vi phạm chính sách và quy định của Trạm Có Lúa.'
+  :'Hệ thống của chúng tôi đã phát hiện hoạt động bất thường liên quan đến tài khoản của bạn, có dấu hiệu vi phạm quy định của Trạm Có Lúa.';
  const decisions=severe
   ?'<li><strong>Tài khoản:</strong> Khóa vĩnh viễn.</li><li><strong>Nhiệm vụ và nhận thưởng:</strong> Chấm dứt.</li><li><strong>Yêu cầu rút tiền:</strong> Từ chối thanh toán đối với các khoản thưởng gian lận theo quy định.</li>'
   :'<li><strong>Tài khoản:</strong> Tạm khóa để xác minh.</li><li><strong>Nhiệm vụ và nhận thưởng:</strong> Tạm đình chỉ.</li><li><strong>Yêu cầu rút tiền:</strong> Tạm dừng thanh toán trong thời gian xác minh.</li>';
@@ -126,8 +137,8 @@ function renderLocked(){
   :'Hiện không có yêu cầu rút tiền đang chờ xử lý.';
  app.className='';
  app.innerHTML=`<div class="auth-page"><div class="auth-brand">
-  <div class="brand-mark">🌾</div><p class="eyebrow">TRẠM LÚA • THÔNG BÁO TÀI KHOẢN</p>
-  <h1>Thông báo từ Trạm Lúa</h1><p>Trạng thái tài khoản và yêu cầu rút tiền.</p></div>
+  <div class="brand-mark">🌾</div><p class="eyebrow">TRẠM CÓ LÚA • THÔNG BÁO TÀI KHOẢN</p>
+  <h1>Thông báo từ Trạm Có Lúa</h1><p>Trạng thái tài khoản và yêu cầu rút tiền.</p></div>
   <section class="auth-card account-locked ${severe?'account-locked-severe':'account-locked-review'}">
    <h2>${headingText}</h2>
    <p>${intro}</p>
@@ -139,7 +150,7 @@ function renderLocked(){
     ${money.length?`<div class="table-wrap"><table><thead><tr><th>Giá trị</th><th>Trạng thái thực tế</th></tr></thead><tbody>${money.map(w=>`<tr><td>${fmt(w.vnd_amount)} ₫</td><td>${chip(w.status)}</td></tr>`).join('')}</tbody></table></div>`:''}
    </div>
    ${severe?'':info.reason&&info.reason!=='Tài khoản cần được xác minh thêm.'?`<p class="note">Thông tin thêm: ${esc(info.reason)}</p>`:''}
-   <p class="lock-signature">🛡️ <strong>Trạm Lúa – Hệ thống chống gian lận</strong></p>
+   <p class="lock-signature">🛡️ <strong>Trạm Có Lúa – Hệ thống chống gian lận</strong></p>
    <button class="btn alt" data-action="logout" type="button">Đăng xuất</button>
   </section></div>`;
 }
@@ -167,8 +178,8 @@ function googleProfilePanel(){
 function renderAuth(){
  if(state.googlePending){
    app.className='';
-   app.innerHTML='<div class="auth-page"><div class="auth-brand"><div class="brand-mark">🌾</div><p class="eyebrow">TRẠM LÚA • TÀI KHOẢN THÀNH VIÊN</p>'+
-    '<h1>Chào mừng bạn đến Trạm Lúa.</h1><p>Đăng nhập Google an toàn và đơn giản.</p></div>'+
+   app.innerHTML='<div class="auth-page"><div class="auth-brand"><div class="brand-mark">🌾</div><p class="eyebrow">TRẠM CÓ LÚA • TÀI KHOẢN THÀNH VIÊN</p>'+
+    '<h1>Chào mừng bạn đến Trạm Có Lúa.</h1><p>Đăng nhập Google an toàn và đơn giản.</p></div>'+
     '<section class="auth-card"><h2>Hoàn tất đăng ký bằng Google</h2>'+
     '<p>Gmail <strong>'+esc(state.googlePending.email)+'</strong> chưa có tài khoản. Bạn không cần tạo mật khẩu, chỉ cần đồng ý điều khoản để tạo tài khoản thành viên.</p>'+
     '<form data-form="google-complete"><div class="field"><label><input type="checkbox" name="accept_terms" value="yes" required style="width:auto;margin-right:7px">'+
@@ -204,7 +215,7 @@ function renderAuth(){
  <div class="brand-mark">🌾</div><p class="eyebrow">NHIỆM VỤ · TÍCH LÚA · MINH BẠCH</p>
  <h1>Chăm chỉ làm nhiệm vụ.<br>Rõ ràng từng điểm Lúa.</h1>
  <p>Hệ thống tích Lúa có tài khoản thật, lịch sử giao dịch, kiểm tra CAPTCHA và trang quản trị riêng. Không công bố số thưởng giả.</p>
- </div><section class="auth-card"><div class="auth-tabs">${tabs.map(([k,t])=>`<button type="button" data-auth="${k}" class="${active===k?'chosen':''}">${t}</button>`).join('')}</div>
+ </div><section class="auth-card"><button class="welcome-home-back" type="button" data-action="back-home">← Về trang giới thiệu</button><div class="auth-tabs">${tabs.map(([k,t])=>`<button type="button" data-auth="${k}" class="${active===k?'chosen':''}">${t}</button>`).join('')}</div>
  <h2>${active==='setup'?'Khởi tạo hệ thống':active==='register'?'Tạo tài khoản':'Chào mừng quay lại'}</h2>
  <p>${active==='setup'?'Chỉ dành cho chủ website.':active==='register'?'Nhập thông tin để bắt đầu tích Lúa.':'Đăng nhập để tiếp tục nhiệm vụ.'}</p>
  ${form}${googleAuthPanel(active)}</section></div>`;
@@ -239,7 +250,7 @@ function renderShell(){
  <main class="content" id="viewContent"></main></section></div><div id="modal-root"></div>`;
  setMenuOpen(false);
 }
-async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderAuth();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
+async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderHome();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
 async function navigate(view){
  state.view=view;
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
@@ -937,6 +948,14 @@ app.addEventListener('click',async e=>{
  if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
+  if(act==='open-auth'){
+   state.authMode=el.dataset.authMode==='register'?'register':'login';
+   renderAuth();window.scrollTo({top:0,behavior:'instant'});return;
+  }
+  if(act==='back-home'){
+   if(state.meta.setup_required){state.authMode='setup';renderAuth();return;}
+   renderHome();window.scrollTo({top:0,behavior:'instant'});return;
+  }
   if(act==='google-cancel'){
    await api('/api/auth/google/cancel','POST',{});
    state.googlePending=null;renderAuth();return;
@@ -957,7 +976,7 @@ app.addEventListener('click',async e=>{
 }
 if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
-  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderAuth();return;}
+  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
   if(act==='filter-tasks'){state.taskFilter=el.dataset.filter||'all';await navigate('tasks');return;}
   if(act==='start-task'){await startTask(el.dataset.id);return;}
   if(act==='view-photo'){
@@ -984,7 +1003,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    const type=el.dataset.lockType==='confirmed'?'confirmed':'review';
    if(el.dataset.status==='suspended'){
     if(type==='confirmed'){
-     reason=prompt('Ghi lý do xác định vi phạm nghiêm trọng (chỉ Admin xem; tối thiểu 10 ký tự):','Vi phạm nghiêm trọng quy định chống gian lận của Trạm Lúa.')||'';
+     reason=prompt('Ghi lý do xác định vi phạm nghiêm trọng (chỉ Admin xem; tối thiểu 10 ký tự):','Vi phạm nghiêm trọng quy định chống gian lận của Trạm Có Lúa.')||'';
      if(reason.trim().length<10)return;
      evidence=prompt('Nhập bằng chứng cụ thể đã đối chiếu (bắt buộc ít nhất 20 ký tự; không chỉ dựa vào IP trùng):','')||'';
      if(evidence.trim().length<20){toast('Cần mô tả bằng chứng cụ thể trước khi khóa vĩnh viễn.',true);return;}
