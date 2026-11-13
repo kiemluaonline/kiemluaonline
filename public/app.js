@@ -267,6 +267,7 @@ function ipv6NetworkPrefix(ip) {
  if(halves.length>2)return null;
  const left=halves[0]?halves[0].split(':'):[];
  const right=halves.length===2&&halves[1]?halves[1].split(':'):[];
+ if(halves.length===2&&left.length+right.length>7)return null;
  const groups=halves.length===2
    ?[...left,...Array(8-left.length-right.length).fill('0'),...right]
    :left;
