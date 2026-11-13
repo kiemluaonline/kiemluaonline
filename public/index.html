@@ -16,7 +16,7 @@
   <link rel="canonical" href="https://nhiemvu.click/">
   <title>Trạm Có Lúa – Làm nhiệm vụ, tích Lúa mỗi ngày</title>
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
-  <link rel="stylesheet" href="/style.css?v=20261113-logo-everywhere">
+  <link rel="stylesheet" href="/style.css?v=20261113-hmoob">
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Trạm Có Lúa","url":"https://nhiemvu.click/","description":"Nền tảng nhiệm vụ trực tuyến và tích lũy điểm Lúa."}</script>
 </head>
 <body>
@@ -34,6 +34,10 @@
             <a href="#cau-hoi">Hỏi đáp</a>
           </nav>
           <div class="welcome-nav-actions">
+            <div class="language-toggle" role="group" aria-label="Chọn ngôn ngữ">
+              <button type="button" data-language="vi" aria-pressed="true">Tiếng Việt</button>
+              <button type="button" data-language="hmn" aria-pressed="false">Hmoob</button>
+            </div>
             <button class="welcome-link-login" type="button" data-action="open-auth" data-auth-mode="login">Đăng nhập</button>
             <button class="welcome-btn welcome-btn-primary welcome-nav-signup" type="button" data-action="open-auth" data-auth-mode="register">Đăng ký <span aria-hidden="true">↗</span></button>
           </div>
@@ -123,6 +127,7 @@
     </div>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/app.js?v=20261113-logo-everywhere"></script>
+  <script src="/i18n.js?v=20261113-hmoob" defer></script>
+  <script type="module" src="/app.js?v=20261113-hmoob"></script>
 </body>
 </html>
