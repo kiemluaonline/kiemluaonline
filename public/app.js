@@ -32,7 +32,7 @@ const maskDeviceCode = value => {
 };
 const dt = v => v ? new Date(String(v).replace(' ', 'T') + (String(v).includes('Z') ? '' : 'Z')).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}) : '—';
 const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
-const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Cần kiểm tra',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
+const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Không nghiêm trọng',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
 const field = (key, label, value='', attrs='') => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><input id="${esc(key)}" name="${esc(key)}" value="${esc(value)}" ${attrs}></div>`;
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
 const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
