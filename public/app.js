@@ -950,11 +950,11 @@ app.addEventListener('click',async e=>{
  try{
   if(act==='open-auth'){
    state.authMode=el.dataset.authMode==='register'?'register':'login';
-   renderAuth();window.scrollTo({top:0,behavior:'instant'});return;
+   renderAuth();window.scrollTo(0,0);return;
   }
   if(act==='back-home'){
    if(state.meta.setup_required){state.authMode='setup';renderAuth();return;}
-   renderHome();window.scrollTo({top:0,behavior:'instant'});return;
+   renderHome();window.scrollTo(0,0);return;
   }
   if(act==='google-cancel'){
    await api('/api/auth/google/cancel','POST',{});
