@@ -363,7 +363,17 @@
   "Ưu tiên đối chiếu bằng chứng": "Tshuaj xyuas pov thawj ua ntej",
   "Kết nối máy chủ (xác thực)": "Lub server teev tseg (tau lees)",
   "Trình duyệt báo (chưa xác minh)": "Browser tshaj (tseem tsis tau lees)",
-  "Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.": "Admin hloov xwm txheej no, tsis yog lub txhab nyiaj lees nws tus kheej."
+  "Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.": "Admin hloov xwm txheej no, tsis yog lub txhab nyiaj lees nws tus kheej.",
+  "Quản lý dung lượng bằng chứng:": "Tswj qhov chaw khaws pov thawj:",
+  "Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.": "Tom qab pom zoo lossis tsis kam txais, Admin rho tau daim duab thiab cov pov thawj, tiam sis tseem khaws keeb kwm haujlwm, qhov kev txiav txim thiab Lúa. Pov thawj uas tseem tos kuaj yuav tsis raug rho.",
+  "🗑 Xóa tất cả bằng chứng đã xử lý": "🗑 Rho tag nrho cov pov thawj uas tau kuaj lawm",
+  "🗑 Xóa bằng chứng": "🗑 Rho pov thawj",
+  "🗑 Bằng chứng đã được xóa": "🗑 Pov thawj twb raug rho lawm",
+  "Đã xóa bằng chứng. Vẫn giữ kết quả duyệt và Lúa của thành viên.": "Pov thawj twb raug rho lawm. Qhov kev txiav txim thiab Lúa tseem khaws cia.",
+  "Đã xóa bằng chứng. Quyết định duyệt và số Lúa được giữ nguyên.": "Pov thawj raug rho lawm. Qhov kev txiav txim thiab Lúa tseem zoo li qub.",
+  "Không tìm thấy bằng chứng đã xử lý để xóa. Hãy duyệt hoặc từ chối trước.": "Tsis pom pov thawj uas twb kuaj lawm. Thov pom zoo lossis tsis kam txais ua ntej.",
+  "Đã hủy vì chưa nhập đúng XOA.": "Raug tso tseg vim tsis tau sau XOA kom raug.",
+  "[Bằng chứng đã xóa sau xét duyệt]": "[Pov thawj raug rho tom qab kuaj lawm]"
 };
  const originals=new WeakMap();
  const attributes=new WeakMap();
