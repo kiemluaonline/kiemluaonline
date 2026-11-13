@@ -241,3 +241,20 @@
 .lock-payment-status>p{margin:7px 0 0}
 .lock-payment-status .table-wrap{margin-top:10px}
 .lock-signature{font-size:13px;font-weight:650;color:#28634b;margin:16px 0}
+
+
+/* Cảnh báo mạng trên điện thoại: mỗi địa chỉ được trình bày theo từng khối. */
+.risk-related-v4{margin:12px 0 3px;padding:10px;background:#f4f8f4;border:1px solid #dfeae1;border-radius:10px;font-size:12px;line-height:1.65;color:#305b47}
+.risk-related-v4 strong{display:block;color:#18543c;font-size:13px;margin-bottom:3px}
+.risk-related-v4 div{margin:4px 0;overflow-wrap:anywhere}
+.risk-network-layout .chip{white-space:nowrap}
+.risk-network-layout code{overflow-wrap:anywhere;word-break:break-word;line-height:1.7}
+@media(max-width:730px){
+ .risk-network-layout table,.risk-network-layout tbody{display:block;width:100%}
+ .risk-network-layout thead{display:none}
+ .risk-network-layout tr{display:flex;flex-direction:column;padding:12px 7px;border-bottom:1px solid #e3eae3}
+ .risk-network-layout tr:last-child{border-bottom:0}
+ .risk-network-layout td{display:block;width:100%;padding:7px 10px;border:0}
+ .risk-network-layout td:nth-child(2){background:#f7faf7;border-radius:8px}
+ .risk-network-layout td:nth-child(3){padding-top:12px}
+}
