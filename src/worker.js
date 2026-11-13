@@ -394,6 +394,7 @@ async function readBody(req, limit = 12000) {
 }
 
 const APP_PHOTO_PREFIX = 'APP_PHOTO_V1|';
+const PROOF_REMOVED_MARKER = 'EVIDENCE_REMOVED_V1';
 const APP_PHOTO_MAX_BYTES = 180000;
 // Ảnh do trình duyệt thu nhỏ, lưu trong D1 với mức dung lượng nhỏ;
 // không cần R2, chỉ Admin mới có đường dẫn đọc ảnh.
@@ -1444,13 +1445,41 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/reviews') {
       const rows = await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
         CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN 1 ELSE 0 END AS has_photo,
+        CASE WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN 1 ELSE 0 END AS evidence_removed,
+        CASE WHEN c.evidence NOT IN ('','EVIDENCE_REMOVED_V1') THEN 1 ELSE 0 END AS has_evidence,
         CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|'
           THEN substr(c.evidence,14,instr(substr(c.evidence,14),'|')-1)
+          WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN ''
           ELSE c.evidence END AS evidence,
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 150`).all();
       return json({ reviews: rows.results.map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})) });
+    }
+    // Chỉ xóa tệp/ghi chú sau khi Admin ra quyết định. Giữ nguyên trạng thái,
+    // lịch sử nhiệm vụ, giới hạn lượt và sổ Lúa để tránh làm sai số dư.
+    if(m==='POST' && p==='/api/admin/reviews/erase-processed'){
+      const b=await readBody(req);
+      if(b.confirm!=='DELETE_REVIEWED_EVIDENCE')
+        fail(400,'Cần xác nhận thao tác xóa bằng chứng đã xử lý.');
+      const result=await env.DB.prepare(`UPDATE task_completions SET evidence=?
+        WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
+        .bind(PROOF_REMOVED_MARKER,PROOF_REMOVED_MARKER).run();
+      const count=result.meta?.changes||0;
+      await event(env,req,'admin_evidence_deleted_bulk',admin.id,'Đã xóa '+count+' bằng chứng đã xử lý (giữ lịch sử và số Lúa)');
+      return json({ok:true,deleted:count,message:'Đã xóa '+count+' bằng chứng đã xử lý. Lịch sử và số Lúa được giữ nguyên.'});
+    }
+    const eraseProof=p.match(/^\/api\/admin\/reviews\/([^/]+)\/erase-evidence$/);
+    if(m==='POST' && eraseProof){
+      const b=await readBody(req);
+      if(b.confirm!=='DELETE_EVIDENCE')fail(400,'Cần xác nhận xóa bằng chứng.');
+      const result=await env.DB.prepare(`UPDATE task_completions SET evidence=?
+        WHERE id=? AND status IN ('approved','rejected')
+        AND evidence NOT IN ('',?)`)
+        .bind(PROOF_REMOVED_MARKER,eraseProof[1],PROOF_REMOVED_MARKER).run();
+      if(!result.meta?.changes)fail(409,'Không tìm thấy bằng chứng đã xử lý để xóa. Hãy duyệt hoặc từ chối trước.');
+      await event(env,req,'admin_evidence_deleted',admin.id,'Nhiệm vụ đã xử lý: '+eraseProof[1]);
+      return json({ok:true,message:'Đã xóa bằng chứng. Quyết định duyệt và số Lúa được giữ nguyên.'});
     }
     const proofRead = p.match(/^\/api\/admin\/reviews\/([^/]+)\/photo$/);
     if (m === 'GET' && proofRead) {
