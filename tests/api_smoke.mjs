@@ -592,7 +592,43 @@ assert.ok(newLogin.cookie);
  assert.equal((await call('/api/admin/reviews/'+proofId,'POST',{status:'approved'},admCookie)).status,200);
  assert.equal((await call('/api/admin/reviews/'+proofId,'POST',{status:'approved'},admCookie)).status,409);
  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_id=? AND reference_type='task'").get(proofId).n,1);
+ // Chỉ Admin được xóa ảnh và bằng chứng đã xử lý; không được xóa khi chưa duyệt.
+ const memberDeletion=await call('/api/admin/reviews/'+proofId+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'},user2.cookie);
+ assert.equal(memberDeletion.status,403);
+ const missingDeleteConfirm=await call('/api/admin/reviews/'+proofId+'/erase-evidence','POST',{},admCookie);
+ assert.equal(missingDeleteConfirm.status,400);
+ const deleteProof=await call('/api/admin/reviews/'+proofId+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'},admCookie);
+ assert.equal(deleteProof.status,200,JSON.stringify(deleteProof));
+ const proofRowAfter=sqlite.prepare('SELECT status,reward,evidence FROM task_completions WHERE id=?').get(proofId);
+ assert.equal(proofRowAfter.status,'approved');
+ assert.equal(proofRowAfter.reward,30);
+ assert.equal(proofRowAfter.evidence,'EVIDENCE_REMOVED_V1');
+ assert.equal((await call('/api/admin/reviews/'+proofId+'/photo','GET',undefined,admCookie)).status,404);
+ const reviewsAfterDelete=await call('/api/admin/reviews','GET',undefined,admCookie);
+ const sanitizedRecord=reviewsAfterDelete.data.reviews.find(c=>c.id===proofId);
+ assert.equal(sanitizedRecord.has_photo,0);
+ assert.equal(sanitizedRecord.has_evidence,0);
+ assert.equal(sanitizedRecord.evidence_removed,1);
+ assert.equal(sanitizedRecord.evidence,'');
+ assert.equal((await call('/api/admin/reviews/'+proofId+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'},admCookie)).status,409);
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_id=? AND reference_type='task'").get(proofId).n,1);
+ const waitingProof=sqlite.prepare("SELECT id FROM task_completions WHERE status='pending' AND evidence <> '' LIMIT 1").get();
+ if(waitingProof){
+  assert.equal((await call('/api/admin/reviews/'+waitingProof.id+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'},admCookie)).status,409);
+  assert.notEqual(sqlite.prepare('SELECT evidence FROM task_completions WHERE id=?').get(waitingProof.id).evidence,'EVIDENCE_REMOVED_V1');
+ }
+ const pendingBeforeCleanup=sqlite.prepare("SELECT COUNT(*) n FROM task_completions WHERE status='pending'").get().n;
+ const approvedBalanceBeforeCleanup=(await call('/api/me','GET',undefined,user2.cookie,appIP,user2Device)).data.balance;
+ assert.equal((await call('/api/admin/reviews/erase-processed','POST',{confirm:'wrong'},admCookie)).status,400);
+ assert.equal((await call('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE'},user2.cookie)).status,403);
+ const bulkDeletion=await call('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE'},admCookie);
+ assert.equal(bulkDeletion.status,200,JSON.stringify(bulkDeletion));
+ assert.ok(bulkDeletion.data.deleted>=1,'Previously approved text proofs should be cleaned up.');
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM task_completions WHERE status='pending'").get().n,pendingBeforeCleanup);
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM task_completions WHERE status IN ('approved','rejected') AND evidence NOT IN ('','EVIDENCE_REMOVED_V1')").get().n,0);
+ assert.equal((await call('/api/me','GET',undefined,user2.cookie,appIP,user2Device)).data.balance,approvedBalanceBeforeCleanup);
  assert.equal((await call('/api/tasks/'+appTaskID+'/start','POST',{},user2.cookie,appIP,user2Device)).status,409);
+ console.log('PASS: admin-only individual/bulk proof deletion, pending protection, unchanged Lúa ledger and lost-proof 404.');
 
 
  // Chống email tạm thời, biến thể Gmail và đăng ký trùng.
