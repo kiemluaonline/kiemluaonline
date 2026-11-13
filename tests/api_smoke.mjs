@@ -601,6 +601,22 @@ assert.ok(groups.some(g=>g.ip_type==='IPv6 /64'&&g.source==='cloudflare'
  &&g.address==='2401:d800:26c9:8e5d::/64'&&g.account_count>=5&&g.severity==='serious'),JSON.stringify(groups));
 assert.ok(groups.some(g=>g.ip_type==='IPv4'&&g.source==='browser'
  &&g.address==='125.235.15.67'&&g.severity==='review'),'Browser-supplied IPv4 cannot be treated as a serious verified finding by itself.');
+
+const ipv6Alerts=groups.find(g=>g.ip_type==='IPv6 /64'&&g.source==='cloudflare'&&g.address==='2401:d800:26c9:8e5d::/64');
+assert.ok(ipv6Alerts,'IPv6 /64 warning must exist');
+assert.ok(ipv6Alerts.related_ipv4.some(x=>x.ip==='125.235.15.67'&&x.account_count>=5&&x.source==='browser'),
+ 'IPv6 alert should display actual correlated browser-reported IPv4, never synthetic IPv4');
+assert.ok(groupedWarnings.data.ipv4_inventory.some(x=>x.ip==='125.235.15.67'&&x.source==='browser'&&x.account_count>=5),
+ 'IPv4 inventory includes browser observed real IPv4 even if Cloudflare connects by IPv6');
+const soloRealIPv4='8.8.4.4';
+assert.equal((await call('/api/me','GET',undefined,networkMembers[2].cookie,soloRealIPv4,networkMembers[2].device)).status,200);
+const soloList=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.ok(soloList.data.ipv4_inventory.some(x=>x.ip===soloRealIPv4&&x.source==='cloudflare'&&x.account_count===1),
+ 'IPv4 list must include even an address used by only one member');
+assert.ok(!soloList.data.network_alerts.some(x=>x.address===soloRealIPv4),
+ 'One account IP should not be misreported as duplicate-network warning');
+console.log('PASS: matched true browser IPv4 visible inside IPv6 group, individual real IPv4 shown separately, no invented IPv4.');
+
 // Tài khoản bị khóa không tự mất Lúa và yêu cầu rút không tự bị từ chối.
 const heldMember=networkMembers[0];
 sqlite.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
