@@ -47,7 +47,9 @@ const int = (v, defaultNum = 0) => /^-?\d+$/.test(String(v)) ? Number(v) : defau
 const positive = (v, max = 10000000) => Number.isSafeInteger(Number(v)) && Number(v) > 0 && Number(v) <= max;
 const isLocal = req => ['localhost', '127.0.0.1'].includes(new URL(req.url).hostname);
 // IP công khai do Cloudflare cung cấp ở edge; không lấy từ biểu mẫu người dùng.
-const clientIP = req => str(req.headers.get('CF-Connecting-IP') || (isLocal(req) ? 'local' : 'unknown'), 60);
+// Nếu Cloudflare ở chế độ Pseudo IPv4/Overwrite, địa chỉ IPv6 thật nằm trong CF-Connecting-IPv6.
+// Ưu tiên IPv6 thật để không nhầm địa chỉ Pseudo IPv4 với IP thật.
+const clientIP = req => str(req.headers.get('CF-Connecting-IPv6') || req.headers.get('CF-Connecting-IP') || (isLocal(req) ? 'local' : 'unknown'), 60);
 // Địa chỉ IPv4 công khai từ bên ngoài: validate để không lưu dữ liệu rác.
 // IPv4 do trình duyệt gửi lên KHÔNG được dùng làm chứng cứ duy nhất để xử lý gian lận.
 function isPublicIPv4(value){
