@@ -1359,6 +1359,19 @@ async function handler(req, env) {
        const owner=await env.DB.prepare('SELECT status FROM users WHERE id=?').bind(w.user_id).first();
        if(owner?.status==='suspended')fail(409,'Tài khoản đang tạm khóa để đối chiếu. Không được duyệt hoặc ghi thanh toán khi chưa giải quyết.');
       }
+      let payoutRiskOverride='',payoutRiskScore=0;
+      if(['approved','paid'].includes(status)){
+       const profiles=await loadFraudProfiles(env,w.user_id);
+       const risk=profiles.find(x=>x.user_id===w.user_id);
+       if(risk?.level==='serious'){
+        payoutRiskScore=risk.score;
+        payoutRiskOverride=str(b.risk_override_note,500);
+        if(payoutRiskOverride.length<20)
+         fail(409,'Phát hiện nhiều dấu hiệu rủi ro. Cần đối chiếu và ghi lý do cho phép chi trả trước khi tiếp tục.',{
+           requires_risk_override:true,risk_score:risk.score,risk_reasons:risk.reasons
+         });
+       }
+      }
       const wasApproved = String(w.admin_note || '').startsWith(WITHDRAWAL_APPROVED_PREFIX);
       if (status === 'approved' && wasApproved) fail(409, 'Yêu cầu đã được duyệt trước đó.');
       if (status === 'paid' && !wasApproved) fail(409, 'Bạn phải duyệt yêu cầu trước khi xác nhận đã thanh toán.');
@@ -1370,6 +1383,9 @@ async function handler(req, env) {
           WHERE id=? AND status='pending' AND admin_note NOT LIKE '[TL_WITHDRAWAL_APPROVED] %'`)
           .bind(approvedNote, w.id).run();
         if (!result.meta?.changes) fail(409, 'Yêu cầu đã thay đổi, vui lòng tải lại.');
+        if(payoutRiskOverride)
+          await event(env,req,'fraud_payout_override',admin.id,
+           `${w.id}:approved:score=${payoutRiskScore}; ${payoutRiskOverride}`);
         await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:approved`);
         return json({ ok: true, message: 'Đã duyệt yêu cầu, đang chờ chuyển tiền.' });
       }
@@ -1388,8 +1404,20 @@ async function handler(req, env) {
           .bind(id(), w.user_id, w.amount, w.id, dbStatus, w.id)
       ]);
       if (!results[0].meta?.changes) fail(409, 'Yêu cầu đã được xử lý hoặc thay đổi.');
+      if(payoutRiskOverride)
+        await event(env,req,'fraud_payout_override',admin.id,
+          `${w.id}:${status}:score=${payoutRiskScore}; ${payoutRiskOverride}`);
       await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:${status}`);
       return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu thanh toán. Giao dịch đã được đối chiếu.' : status === 'invalid_account' ? 'Đã báo thông tin nhận tiền không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
+    }
+    if (m === 'GET' && p === '/api/admin/fraud-scores') {
+      const profiles=await loadFraudProfiles(env);
+      return json({profiles,summary:{
+        serious:profiles.filter(x=>x.level==='serious').length,
+        review:profiles.filter(x=>x.level==='review').length,
+        low:profiles.filter(x=>x.level==='low').length,
+        checked_accounts:profiles.length
+      },rules_version:'d1-multi-signal-v1',audit_only:true});
     }
     if (m === 'GET' && p === '/api/admin/risk-events') {
       const risks = await env.DB.prepare('SELECT r.*,u.email,u.name FROM risk_events r LEFT JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC LIMIT 150').all();
