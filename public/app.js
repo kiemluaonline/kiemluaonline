@@ -1,6 +1,6 @@
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
-const state = { meta: {}, me: null, googlePending: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all' };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all' };
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
   ['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
@@ -32,7 +32,7 @@ const maskDeviceCode = value => {
 };
 const dt = v => v ? new Date(String(v).replace(' ', 'T') + (String(v).includes('Z') ? '' : 'Z')).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}) : '—';
 const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
-const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
+const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Cần kiểm tra',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
 const field = (key, label, value='', attrs='') => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><input id="${esc(key)}" name="${esc(key)}" value="${esc(value)}" ${attrs}></div>`;
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
 const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
@@ -64,6 +64,7 @@ async function boot(){
   catch(e){ app.innerHTML=`<div class="auth-page"><div class="auth-card"><h2>Chưa thể kết nối hệ thống</h2><p>${esc(e.message)}. Hãy kiểm tra D1 và migration.</p></div></div>`;return; }
   await loadMe();
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
+  else if(state.accountHold){renderLocked();}
   else {
     if(state.meta.setup_required) state.authMode='setup';
     if(state.meta.google_auth_enabled){
@@ -73,7 +74,11 @@ async function boot(){
     renderAuth();
   }
 const googleError=new URLSearchParams(location.search).get('google_error');
-if(googleError){
+if(googleError==='suspended'){
+ state.accountHold={account_status:'suspended',reason:'Tài khoản cần được xác minh thêm.',pending_withdrawals:null,withdrawals:[]};
+ renderLocked();
+ history.replaceState(null,'',location.pathname);
+}else if(googleError){
  const messages={
   email_exists:'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi vào Hồ sơ để liên kết Google.',
   not_registered:'Google này chưa đăng ký. Hãy chọn Đăng ký bằng Google.',
@@ -89,7 +94,34 @@ if(googleError){
  history.replaceState(null,'',location.pathname);
 }
 }
-async function loadMe(){ try{state.me=await api('/api/me');}catch{state.me=null;} }
+async function loadMe(){
+ try{state.me=await api('/api/me');state.accountHold=null;}
+ catch(err){
+  state.me=null;state.accountHold=null;
+  if(err.status===403){
+   const hold=await api('/api/account-status').catch(()=>null);
+   if(hold?.account_status==='suspended')state.accountHold=hold;
+  }
+ }
+}
+function renderLocked(){
+ const info=state.accountHold||{};
+ const pending=info.pending_withdrawals;
+ const money=Array.isArray(info.withdrawals)?info.withdrawals:[];
+ app.className='';
+ app.innerHTML=`<div class="auth-page"><div class="auth-brand">
+  <div class="brand-mark">🌾</div><p class="eyebrow">TRẠM LÚA • TRẠNG THÁI TÀI KHOẢN</p>
+  <h1>Thông báo tài khoản</h1><p>Thông tin tình trạng tài khoản và yêu cầu rút tiền của bạn.</p></div>
+  <section class="auth-card"><h2>🔒 Tài khoản đang tạm khóa để kiểm tra</h2>
+   <p>Hệ thống cần xác minh thêm hoạt động của tài khoản. Trong thời gian này, bạn không thể làm nhiệm vụ hoặc gửi yêu cầu rút tiền mới.</p>
+   <div class="callout">${esc(info.reason||'Vui lòng liên hệ quản trị viên để được xem xét và giải quyết.')}</div>
+   <h3>Tình trạng rút tiền</h3>
+   <p>${pending===null||pending===undefined?'Yêu cầu rút tiền chưa thanh toán sẽ tạm dừng xử lý trong thời gian kiểm tra.':pending>0?`Có ${fmt(pending)} yêu cầu chưa thanh toán đang tạm dừng xử lý để đối chiếu.`:'Không có yêu cầu rút tiền đang chờ theo dữ liệu hiện tại.'}</p>
+   ${money.length?`<div class="table-wrap"><table><thead><tr><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>${money.map(w=>`<tr><td>${fmt(w.vnd_amount)} ₫</td><td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div></td></tr>`).join('')}</tbody></table></div>`:''}
+   <p class="note">Khóa tài khoản không có nghĩa yêu cầu rút tiền đã bị từ chối. Nếu có tranh chấp hoặc nhầm lẫn, hãy liên hệ quản trị viên qua kênh hỗ trợ chính thức để yêu cầu đối chiếu.</p>
+   <button class="btn alt" data-action="logout" type="button">Đăng xuất</button>
+  </section></div>`;
+}
 function googleAuthPanel(active){
  if(active==='setup')return '';
  if(!state.meta.google_auth_enabled)return '<p class="note auth-google-disabled">Đăng nhập Google sẽ hiển thị sau khi chủ website cấu hình Google Cloud.</p>';
@@ -194,7 +226,13 @@ async function navigate(view){
  const top=document.getElementById('topTitle');if(top)top.textContent=found?.[2]||'Tổng quan';
  const root=document.getElementById('viewContent');if(!root)return;
  root.innerHTML='<div class="app-loading" style="min-height:180px"><span class="spinner"></span></div>';
- try{root.innerHTML=await page(view);}catch(e){root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;}
+ try{root.innerHTML=await page(view);}catch(e){
+  if(e.status===403){
+   const hold=await api('/api/account-status').catch(()=>null);
+   if(hold?.account_status==='suspended'){state.me=null;state.accountHold=hold;renderLocked();return;}
+  }
+  root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
+ }
 }
 async function page(view){
  switch(view){
@@ -547,7 +585,7 @@ async function adminUsers(){
  const d=await api('/api/admin/users');
  return `${heading('Quản lý thành viên','Tra cứu tài khoản, số Lúa và tình trạng sử dụng.')}<section class="card">${table(['Thành viên','Tài khoản','Số dư','IP đăng ký','Trạng thái','Thao tác'],d.users.map(u=>`<tr>
  <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip,u.ipv4_observation)}</td><td>${chip(u.status)}</td>
- <td>${u.role==='admin'?'Admin':`<button class="btn sm ${u.status==='active'?'danger':'alt'}" data-action="change-user" data-id="${esc(u.id)}" data-status="${u.status==='active'?'suspended':'active'}">${u.status==='active'?'Khóa':'Mở khóa'}</button>`}</td></tr>`))}</section>`;
+ <td>${u.role==='admin'?'Admin':`<button class="btn sm ${u.status==='active'?'danger':'alt'}" data-action="change-user" data-id="${esc(u.id)}" data-status="${u.status==='active'?'suspended':'active'}">${u.status==='active'?'Khóa':'Mở khóa'}</button>`}${u.status==='suspended'?`<div class="small muted">Lý do: ${esc(u.suspension_reason||'Đang xác minh')}</div>`:''}</td></tr>`))}</section>`;
 }
 async function adminReviews(){
  const d=await api('/api/admin/reviews');
@@ -571,6 +609,12 @@ async function adminSecurity(){
  const d=await api('/api/admin/risk-events');
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
  <div class="callout">Chỉ hiện địa chỉ IP thật. Nếu trình duyệt khách kiểm tra được IPv4 công khai qua dịch vụ bên ngoài, hệ thống ghi nhận riêng làm thông tin tham khảo. IPv4 do trình duyệt báo có thể bị giả mạo, không được dùng một mình để khóa người dùng hoặc từ chối thưởng. Khi không có IPv4, hiển thị IPv6 do Cloudflare ghi nhận, tuyệt đối không tự chuyển thành IPv4 ảo.</div>
+ <section class="card section"><h3>🚨 Cảnh báo IP trùng lặp: IPv4 và IPv6</h3>
+ <p class="note">Mức nghiêm trọng là ưu tiên kiểm tra, không phải kết luận gian lận. Cảnh báo nghiêm trọng khi ít nhất 5 tài khoản xuất hiện trên cùng IPv4 hoặc dải IPv6 /64 cùng với từ 2 mã trình duyệt trở lên. IPv4 do trình duyệt tự báo luôn là thông tin tham khảo.</p>
+ ${table(['Địa chỉ / Nguồn','Tài khoản / Thiết bị','Mức độ'],(d.network_alerts||[]).map(r=>`<tr>
+ <td><strong>${esc(r.ip_type)}</strong><div>${adminIP(r.address)}</div><div class="small muted">${r.source==='cloudflare'?'IP kết nối do Cloudflare ghi nhận':'IPv4 trình duyệt báo (chưa xác minh)'}</div></td>
+ <td><strong>${fmt(r.account_count)} tài khoản</strong><div class="small muted">${fmt(r.device_count)} mã trình duyệt khác nhau</div></td>
+ <td>${chip(r.severity)}<div class="small muted">${r.severity==='serious'?'Ưu tiên đối chiếu bằng chứng':'Chưa đủ bằng chứng để kết luận'}</div></td></tr>`))}</section>
  <section class="card section"><h3>IPv4 công khai do trình duyệt báo trong 7 ngày</h3>
  <p class="note">Các địa chỉ này là phản hồi dịch vụ kiểm tra trên mạng của khách. IP kết nối do Cloudflare ghi nhận được hiển thị bên cạnh để đối chiếu.</p>
  ${table(['Thời gian / Thành viên','IPv4 trình duyệt báo','IP Cloudflare ghi nhận'],(d.ipv4_observations||[]).map(r=>`<tr><td>${dt(r.created_at)}<div class="small">${esc(r.name||r.email||'—')}</div></td><td><code>${esc(r.observed_ipv4)}</code></td><td>${adminIP(r.cloudflare_ip)}</td></tr>`))}</section>
@@ -744,7 +788,7 @@ app.addEventListener('click',async e=>{
 }
 if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
-  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.authMode='login';renderAuth();return;}
+  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderAuth();return;}
   if(act==='filter-tasks'){state.taskFilter=el.dataset.filter||'all';await navigate('tasks');return;}
   if(act==='start-task'){await startTask(el.dataset.id);return;}
   if(act==='view-photo'){
@@ -762,8 +806,13 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='change-user'){
-   if(!confirm(el.dataset.status==='suspended'?'Tạm khóa thành viên này?':'Mở lại tài khoản này?'))return;
-   await api('/api/admin/users/'+encodeURIComponent(el.dataset.id),'PATCH',{status:el.dataset.status});toast('Đã cập nhật trạng thái thành viên.');await navigate('admin-users');return;
+   let reason='';
+   if(el.dataset.status==='suspended'){
+    reason=prompt('Nhập lý do gửi cho thành viên (ít nhất 10 ký tự). Không kết luận gian lận chỉ vì trùng IP:','Hoạt động tài khoản cần được xác minh thêm.')||'';
+    if(reason.trim().length<10)return;
+    if(!confirm('Tạm khóa tài khoản và tạm dừng duyệt/thanh toán khoản rút chưa hoàn tất? Các khoản Lúa vẫn được giữ để đối chiếu.'))return;
+   }else if(!confirm('Mở lại tài khoản này và tiếp tục xử lý yêu cầu rút tiền?'))return;
+   await api('/api/admin/users/'+encodeURIComponent(el.dataset.id),'PATCH',{status:el.dataset.status,suspension_reason:reason});toast('Đã cập nhật trạng thái thành viên.');await navigate('admin-users');return;
   }
   if(act==='review'){
    if(!confirm(el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
@@ -796,7 +845,10 @@ app.addEventListener('submit',async e=>{
    }
    if(kind==='setup'){await api('/api/setup','POST',b);state.meta=await api('/api/meta');await loadMe();renderShell();await navigate('admin-overview');toast('Admin đã được tạo. Hãy xóa khóa thiết lập SETUP_KEY sau khi hoàn tất.');}
   if(kind==='login'||kind==='register'){
-    await api('/api/auth/'+kind,'POST',b);await loadMe();renderShell();await navigate(state.me.user.role==='admin'?'admin-overview':'overview');toast(kind==='login'?'Đăng nhập thành công.':'Đăng ký thành công.');
+    const authResult=await api('/api/auth/'+kind,'POST',b);
+    await loadMe();
+    if(state.accountHold){renderLocked();return;}
+    renderShell();await navigate(state.me.user.role==='admin'?'admin-overview':'overview');toast(kind==='login'?'Đăng nhập thành công.':'Đăng ký thành công.');
   }
   if(kind==='password'){const r=await api('/api/me/password','POST',b);state.me=null;renderAuth();toast(r.message);}
   if(kind==='withdraw'){
@@ -820,6 +872,9 @@ app.addEventListener('submit',async e=>{
     state.attempt=null;document.getElementById('modal-root').innerHTML='';toast(r.message);await afterAction('tasks');
   }
  }catch(err){
+   if(err.account_status==='suspended'){
+     state.accountHold=err;state.me=null;renderLocked();return;
+   }
    if(kind==='task-claim'&&err.status===422&&state.attempt){
      state.attempt.a=err.a;state.attempt.b=err.b;
      if(state.attempt.category==='app'){
