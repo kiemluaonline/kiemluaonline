@@ -753,4 +753,64 @@ assert.equal(reviewCleared.data.users.find(x=>x.id===stageMember.id).suspension_
 assert.equal((await call('/api/account-status','GET',undefined,stageMember.cookie)).data.account_status,'active');
 console.log('PASS: Admin chooses review or confirmed fraud lock, evidence is required and private, member sees selected type, unlock removes decision.');
 
+// Anti-Fraud 2.0: nhiều tín hiệu độc lập, không tự khóa hay tự tịch thu Lúa.
+const antiA=networkMembers[3],antiB=networkMembers[4];
+const antiBrowser='e7777777-2222-4333-8444-555555555555';
+for(const member of [antiA,antiB]){
+ const seen=await call('/api/me','GET',undefined,member.cookie,'203.0.113.200',antiBrowser);
+ assert.equal(seen.status,200,JSON.stringify(seen));
+}
+for(const [n,member] of [antiA,antiB].entries()){
+ sqlite.prepare(`INSERT INTO withdrawals
+   (id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner,status)
+   VALUES(?,?,20,2,10,'BIDV','908070605040','TEST HOLDER','paid')`)
+  .run('antifraud-historical-'+n,member.id);
+}
+const riskView=await call('/api/admin/fraud-scores','GET',undefined,admCookie);
+assert.equal(riskView.status,200,JSON.stringify(riskView));
+assert.equal(riskView.data.audit_only,true);
+const antiProfile=riskView.data.profiles.find(x=>x.user_id===antiA.id);
+assert.ok(antiProfile,JSON.stringify(riskView.data));
+assert.ok(antiProfile.score>=80&&antiProfile.score<=100,JSON.stringify(antiProfile));
+assert.equal(antiProfile.level,'serious');
+assert.ok(antiProfile.reasons.some(x=>x.includes('nhận tiền')));
+assert.ok(antiProfile.reasons.some(x=>x.includes('mã trình duyệt')));
+assert.equal((await call('/api/admin/fraud-scores','GET',undefined,antiA.cookie)).status,403);
+const activeAnti=await call('/api/me','GET',undefined,antiA.cookie,'203.0.113.200',antiBrowser);
+assert.equal(activeAnti.status,200,'Scoring does not auto-suspend a customer');
+sqlite.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
+ VALUES(?,?,100,'Mock task reward','smoke','antifraud-funds')`).run('antifraud-funds-entry',antiA.id);
+const antiWD=await call('/api/withdrawals','POST',{
+ amount:20,payment_method:'bank',bank_name:'BIDV',
+ bank_account:'908070605040',bank_owner:'TEST HOLDER'
+},antiA.cookie,'203.0.113.200',antiBrowser);
+assert.equal(antiWD.status,200,JSON.stringify(antiWD));
+const antiBlocked=await call('/api/admin/withdrawals/'+antiWD.data.id,'POST',{status:'approved'},admCookie);
+assert.equal(antiBlocked.status,409,JSON.stringify(antiBlocked));
+assert.equal(antiBlocked.data.requires_risk_override,true);
+assert.ok(antiBlocked.data.risk_score>=80);
+const antiShortOverride=await call('/api/admin/withdrawals/'+antiWD.data.id,'POST',{
+ status:'approved',risk_override_note:'đã kiểm tra'
+},admCookie);
+assert.equal(antiShortOverride.status,409);
+assert.equal(sqlite.prepare('SELECT status FROM withdrawals WHERE id=?').get(antiWD.data.id).status,'pending');
+const antiApproved=await call('/api/admin/withdrawals/'+antiWD.data.id,'POST',{
+ status:'approved',risk_override_note:'Admin đã đối chiếu bằng chứng và xác minh đây là giao dịch hợp lệ.'
+},admCookie);
+assert.equal(antiApproved.status,200,JSON.stringify(antiApproved));
+const antiPaidBlocked=await call('/api/admin/withdrawals/'+antiWD.data.id,'POST',{
+ status:'paid',admin_note:'Test successful bank transfer'
+},admCookie);
+assert.equal(antiPaidBlocked.status,409);
+const antiPaid=await call('/api/admin/withdrawals/'+antiWD.data.id,'POST',{
+ status:'paid',admin_note:'Test successful bank transfer',
+ risk_override_note:'Admin đã kiểm tra độc lập nguồn thưởng và tài khoản nhận tiền.'
+},admCookie);
+assert.equal(antiPaid.status,200,JSON.stringify(antiPaid));
+const overrideEvents=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.ok(overrideEvents.data.events.some(e=>e.event_type==='fraud_payout_override'&&e.detail.includes(antiWD.data.id)));
+assert.equal(sqlite.prepare('SELECT status FROM withdrawals WHERE id=?').get(antiWD.data.id).status,'paid');
+console.log('PASS: free anti-fraud score independent signals, safe member access, guarded withdrawals, verified Admin override and auditable payments.');
+
+
 
