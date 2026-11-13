@@ -637,10 +637,21 @@ async function adminSecurity(){
  <div class="callout">Chỉ hiện địa chỉ IP thật. Nếu trình duyệt khách kiểm tra được IPv4 công khai qua dịch vụ bên ngoài, hệ thống ghi nhận riêng làm thông tin tham khảo. IPv4 do trình duyệt báo có thể bị giả mạo, không được dùng một mình để khóa người dùng hoặc từ chối thưởng. Khi không có IPv4, hiển thị IPv6 do Cloudflare ghi nhận, tuyệt đối không tự chuyển thành IPv4 ảo.</div>
  <section class="card section"><h3>🚨 Cảnh báo IP trùng lặp: IPv4 và IPv6</h3>
  <p class="note">Mức nghiêm trọng là ưu tiên kiểm tra, không phải kết luận gian lận. Cảnh báo nghiêm trọng khi ít nhất 5 tài khoản xuất hiện trên cùng IPv4 hoặc dải IPv6 /64 cùng với từ 2 mã trình duyệt trở lên. IPv4 do trình duyệt tự báo luôn là thông tin tham khảo.</p>
- ${table(['Địa chỉ / Nguồn','Tài khoản / Thiết bị','Mức độ'],(d.network_alerts||[]).map(r=>`<tr>
- <td><strong>${esc(r.ip_type)}</strong><div>${adminIP(r.address)}</div><div class="small muted">${r.source==='cloudflare'?'IP kết nối do Cloudflare ghi nhận':'IPv4 trình duyệt báo (chưa xác minh)'}</div></td>
+ <div class="risk-network-layout">${table(['Địa chỉ / Nguồn','Tài khoản / Thiết bị','Mức độ'],(d.network_alerts||[]).map(r=>`<tr>
+ <td><strong>${esc(r.ip_type)}</strong><div>${adminIP(r.address)}</div><div class="small muted">${r.source==='cloudflare'?'IP kết nối do Cloudflare ghi nhận':'IPv4 trình duyệt báo (chưa xác minh)'}</div>
+ ${r.ip_type==='IPv6 /64'?'<div class="risk-related-v4"><strong>IPv4 liên quan:</strong> '+((r.related_ipv4||[]).length
+  ?r.related_ipv4.map(x=>'<div><code>'+esc(x.ip)+'</code> • '+fmt(x.account_count)+' tài khoản (trình duyệt báo, chưa xác minh)</div>').join('')
+  :'Chưa ghi nhận IPv4 cho nhóm này.')+'</div>':''}</td>
  <td><strong>${fmt(r.account_count)} tài khoản</strong><div class="small muted">${fmt(r.device_count)} mã trình duyệt khác nhau</div></td>
- <td>${chip(r.severity)}<div class="small muted">${r.severity==='serious'?'Ưu tiên đối chiếu bằng chứng':'Chưa đủ bằng chứng để kết luận'}</div></td></tr>`))}</section>
+ <td>${chip(r.severity)}<div class="small muted">${r.severity==='serious'?'Ưu tiên đối chiếu bằng chứng':'Chưa đủ bằng chứng để kết luận'}</div></td></tr>`))}</div></section>
+ <section class="card section"><h3>📍 Danh sách IPv4 thực tế ghi nhận trong 30 ngày</h3>
+ <p class="note">Hiển thị cả IPv4 của một tài khoản, không chỉ IP bị trùng. IPv4 máy chủ ghi nhận và IPv4 do trình duyệt báo được tách nguồn rõ ràng; không tự chuyển IPv6 thành IPv4.</p>
+ ${table(['Địa chỉ IPv4','Nguồn ghi nhận','Tài khoản','Gần nhất'],(d.ipv4_inventory||[]).map(r=>`<tr>
+  <td><code>${esc(r.ip)}</code></td>
+  <td>${r.source==='cloudflare'?'Kết nối máy chủ (xác thực)':'Trình duyệt báo (chưa xác minh)'}</td>
+  <td>${fmt(r.account_count)}</td>
+  <td>${dt(r.last_seen)}</td>
+ </tr>`))}</section>
  <section class="card section"><h3>IPv4 công khai do trình duyệt báo trong 7 ngày</h3>
  <p class="note">Các địa chỉ này là phản hồi dịch vụ kiểm tra trên mạng của khách. IP kết nối do Cloudflare ghi nhận được hiển thị bên cạnh để đối chiếu.</p>
  ${table(['Thời gian / Thành viên','IPv4 trình duyệt báo','IP Cloudflare ghi nhận'],(d.ipv4_observations||[]).map(r=>`<tr><td>${dt(r.created_at)}<div class="small">${esc(r.name||r.email||'—')}</div></td><td><code>${esc(r.observed_ipv4)}</code></td><td>${adminIP(r.cloudflare_ip)}</td></tr>`))}</section>
