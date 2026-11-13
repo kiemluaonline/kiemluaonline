@@ -96,7 +96,10 @@ if(googleError==='suspended'){
 }
 }
 async function loadMe(){
- try{state.me=await api('/api/me');state.accountHold=null;}
+ try{state.me=await api('/api/me');state.accountHold=null;
+  if(state.me?.user?.role==='member'&&String(state.me.ip||'').includes(':'))
+   setTimeout(()=>captureMemberIPv4().catch(()=>{}),0);
+ }
  catch(err){
   state.me=null;state.accountHold=null;
   if(err.status===403){
@@ -425,6 +428,46 @@ async function resolvePublicIPv4(){
  failure.details=reasons;
  throw failure;
 }
+
+// Ghi nhận IPv4 tự động cho thành viên có kết nối IPv6, không yêu cầu
+// khách phải mở riêng trang Nhiệm vụ. Không áp dụng cho Admin.
+// Dữ liệu do trình duyệt báo chỉ dùng để tham khảo, không làm căn cứ khóa.
+const IPV4_AUTO_STORAGE_KEY='tram-lua-ipv4-autocheck-v1';
+let ipv4ProbePromise=null, ipv4AutoPromise=null;
+function sharedPublicIPv4Probe(){
+ if(!ipv4ProbePromise){
+  ipv4ProbePromise=resolvePublicIPv4().finally(()=>{ipv4ProbePromise=null;});
+ }
+ return ipv4ProbePromise;
+}
+async function captureMemberIPv4(){
+ const me=state.me;
+ if(me?.user?.role!=='member'||!String(me.ip||'').includes(':'))return;
+ if(ipv4AutoPromise)return ipv4AutoPromise;
+ const key=String(me.user.id)+'|'+String(me.ip);
+ let cached=null;
+ try{cached=JSON.parse(sessionStorage.getItem(IPV4_AUTO_STORAGE_KEY)||'null');}catch{}
+ if(cached?.key===key&&Number.isFinite(cached.at)){
+  const age=Date.now()-cached.at;
+  if(age>=0&&age<(cached.ok?6*60*60*1000:5*60*1000))return;
+ }
+ ipv4AutoPromise=(async()=>{
+  let success=false;
+  try{
+   const ipv4=await sharedPublicIPv4Probe();
+   await api('/api/me/ipv4-report','POST',{ip:ipv4});
+   success=true;
+  }catch{
+   // IPv4 không khả dụng trên mọi mạng. Cloudflare vẫn ghi IP kết nối thật.
+  }finally{
+   try{sessionStorage.setItem(IPV4_AUTO_STORAGE_KEY,JSON.stringify({
+    key,at:Date.now(),ok:success
+   }));}catch{}
+  }
+ })().finally(()=>{ipv4AutoPromise=null;});
+ return ipv4AutoPromise;
+}
+
 function updateIPv4Diagnostics(details){
  const container=document.getElementById('taskIPv4Diagnostics');
  const output=document.getElementById('taskIPv4DebugInfo');
@@ -440,7 +483,7 @@ async function detectPublicIPv4(button,silent=false){
  button.disabled=true;
  button.textContent='Đang tìm IPv4…';
  try{
-  const ip=await resolvePublicIPv4();
+  const ip=await sharedPublicIPv4Probe();
   const currentIP=document.getElementById('taskDisplayIP');
   const label=document.getElementById('taskIPLabel');
   if(!button.isConnected||!currentIP||!label||state.view!=='tasks')return;
