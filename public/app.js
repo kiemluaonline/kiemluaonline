@@ -25,6 +25,11 @@ const ADMIN_NAV = [
 ];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const fmt = v => Number(v || 0).toLocaleString('vi-VN');
+// Chỉ che trong giao diện thành viên; mã gốc và kiểm tra chống gian lận không đổi.
+const maskDeviceCode = value => {
+ const raw=String(value||'').trim();
+ return raw ? raw.slice(0,10)+'•'.repeat(Math.max(0,raw.length-10)) : '—';
+};
 const dt = v => v ? new Date(String(v).replace(' ', 'T') + (String(v).includes('Z') ? '' : 'Z')).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}) : '—';
 const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
 const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
@@ -211,7 +216,7 @@ async function overview(){
  <div class="card"><div class="metric-label">Nhiệm vụ chưa làm</div><div class="metric">${available}</div><div class="metric-caption">Đang mở thực tế</div></div>
  <div class="card"><div class="metric-label">Người được giới thiệu</div><div class="metric">${fmt(m.referral_count)}</div><div class="metric-caption">Tài khoản đã đăng ký</div></div></section>
  <section class="grid two section"><article class="card"><h3>📢 Thông báo hệ thống</h3><p>${esc(state.meta.announcement||'Chào mừng đến với nền tảng. Theo dõi thông báo từ quản trị viên tại đây.')}</p></article>
- <article class="card"><h3>🛡️ Kiểm tra chống gian lận</h3><div class="field-hint">IP đang truy cập</div><div class="field-output">${esc(m.ip)}</div><div class="field-hint" style="margin-top:10px">Mã nhận diện trình duyệt</div><div class="field-output">${esc(m.device_code)}</div><p class="note">Mã do website lưu trên trình duyệt nếu được cho phép. Đây không phải IMEI và có thể bị xóa hoặc thay đổi.</p></article></section>`;
+ <article class="card"><h3>🛡️ Kiểm tra chống gian lận</h3><div class="field-hint">IP đang truy cập</div><div class="field-output">${esc(m.ip)}</div><div class="field-hint" style="margin-top:10px">📱 Đã định danh thiết bị</div><div class="field-output">${esc(maskDeviceCode(m.device_code))}</div><p class="note">Mã do website lưu trên trình duyệt nếu được cho phép. Đây không phải IMEI và có thể bị xóa hoặc thay đổi.</p></article></section>`;
 }
 
 
@@ -286,7 +291,7 @@ function taskDashboardCard(d,quotas={}){
   <section class="card task-device-card task-security-compact" aria-label="Bảo vệ chống gian lận">
    <h3 class="task-security-title">🛡️ Bảo vệ chống gian lận</h3>
    <div class="task-security-ip"><span>IP hiện tại:</span> <strong id="taskDisplayIP">${esc(compactIP(d.ip))}</strong></div>
-   <div class="task-security-id"><span>Mã định danh:</span> <code>${esc(d.device_code||'—')}</code></div>
+   <div class="task-security-id"><span>📱 Đã định danh thiết bị:</span> <code>${esc(maskDeviceCode(d.device_code))}</code></div>
    <div class="task-security-quotas"><span>Hạn mức nhiệm vụ được đặt lại lúc 00:00 (giờ Việt Nam).</span></div>
    <details class="task-security-details"><summary>Thông tin IP</summary>
     <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 công khai':'Chưa xác định IP'}</span>
@@ -497,7 +502,7 @@ async function history(){
 async function profile(){
  const u=state.me.user;
  return `${heading('Hồ sơ cá nhân','Thông tin đăng nhập và bảo mật tài khoản.')}
- <div class="grid two"><section class="card"><h3>Thông tin tài khoản</h3><p><strong>Tên:</strong> ${esc(u.name)}</p><p><strong>Email:</strong> ${esc(u.email)}</p><p><strong>Vai trò:</strong> ${esc(u.role)}</p><p><strong>Tham gia:</strong> ${dt(u.created_at)}</p><p><strong>IP truy cập:</strong> <code>${esc(state.me.ip)}</code></p><p><strong>Mã trình duyệt:</strong> <code>${esc(state.me.device_code)}</code></p><div class="callout">Không chia sẻ mật khẩu hoặc mã cài đặt quản trị với bất kỳ ai.</div></section>
+ <div class="grid two"><section class="card"><h3>Thông tin tài khoản</h3><p><strong>Tên:</strong> ${esc(u.name)}</p><p><strong>Email:</strong> ${esc(u.email)}</p><p><strong>Vai trò:</strong> ${esc(u.role)}</p><p><strong>Tham gia:</strong> ${dt(u.created_at)}</p><p><strong>IP truy cập:</strong> <code>${esc(state.me.ip)}</code></p><p><strong>📱 Đã định danh thiết bị:</strong> <code>${esc(maskDeviceCode(state.me.device_code))}</code></p><div class="callout">Không chia sẻ mật khẩu hoặc mã cài đặt quản trị với bất kỳ ai.</div></section>
  <form class="card" data-form="password"><h3>Đổi mật khẩu</h3>
  ${field('old_password','Mật khẩu hiện tại','', 'required type="password" autocomplete="current-password"')}
  ${field('new_password','Mật khẩu mới (≥10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
