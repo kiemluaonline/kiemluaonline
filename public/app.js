@@ -49,6 +49,9 @@ const authField=(key,label,placeholder,attrs='',icon='username',value='')=>`<div
   <input id="${esc(key)}" name="${esc(key)}" placeholder="${esc(placeholder)}" value="${esc(value)}" ${attrs}>
   ${icon==='password'?'<button class="auth-password-eye" data-action="toggle-password" type="button" aria-label="Hiện mật khẩu" aria-pressed="false">◉</button>':''}
  </div></div>`;
+const languageSwitcher = () => '<div class="language-toggle" role="group" aria-label="Chọn ngôn ngữ">'+
+ '<button type="button" data-language="vi" aria-pressed="true">Tiếng Việt</button>'+
+ '<button type="button" data-language="hmn" aria-pressed="false">Hmoob</button></div>';
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
 const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM CÓ LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
 const empty = (title,body='') => `<div class="empty"><div class="big">☘</div><h3>${esc(title)}</h3><p>${esc(body)}</p></div>`;
@@ -153,6 +156,7 @@ function renderLocked(){
   <div class="brand-mark brand-mark-image"><img src="/logo.svg" alt="Logo Trạm Có Lúa" width="52" height="52"></div><p class="eyebrow">TRẠM CÓ LÚA • THÔNG BÁO TÀI KHOẢN</p>
   <h1>Thông báo từ Trạm Có Lúa</h1><p>Trạng thái tài khoản và yêu cầu rút tiền.</p></div>
   <section class="auth-card account-locked ${severe?'account-locked-severe':'account-locked-review'}">
+   <div class="auth-language-row">${languageSwitcher()}</div>
    <h2>${headingText}</h2>
    <p>${intro}</p>
    <h3>⛔ Quyết định xử lý</h3>
@@ -199,6 +203,7 @@ function renderAuth(){
     <p class="eyebrow">TRẠM CÓ LÚA • NỀN TẢNG NHIỆM VỤ</p><h1>Chào mừng bạn đến Trạm Có Lúa.</h1>
     <p>Đăng ký bằng Google để khám phá nhiệm vụ và quản lý điểm Lúa.</p></div>
    <section class="auth-card">
+    <div class="auth-language-row">${languageSwitcher()}</div>
     <div class="auth-logo-line"><img src="/logo.svg" alt="" width="56" height="56"><div><strong>TRẠM CÓ LÚA</strong><span>ĐĂNG KÝ BẰNG GOOGLE</span></div></div>
     <span class="auth-form-kicker"><i></i> THÀNH VIÊN MỚI</span>
     <h2>Hoàn tất đăng ký Google</h2>
@@ -250,6 +255,7 @@ function renderAuth(){
     <p>Đăng ký miễn phí để bắt đầu làm nhiệm vụ và quản lý điểm Lúa. Mọi phần thưởng phụ thuộc kết quả được xác minh.</p>
   </div>
   <section class="auth-card">
+   <div class="auth-language-row">${languageSwitcher()}</div>
    <button class="welcome-home-back" type="button" data-action="back-home">← Quay lại trang chủ</button>
    <div class="auth-logo-line"><img src="/logo.svg" alt="" width="56" height="56"><div><strong>TRẠM CÓ LÚA</strong><span>LÀM NHIỆM VỤ · TÍCH LÚA</span></div></div>
    <span class="auth-form-kicker"><i></i>${active==='setup'?'QUẢN TRỊ HỆ THỐNG':active==='register'?'THÀNH VIÊN MỚI':'CHÀO MỪNG TRỞ LẠI'}</span>
@@ -284,10 +290,11 @@ function renderShell(){
  app.className='';app.innerHTML=`<div class="layout"><aside class="sidebar" id="site-menu" aria-label="Menu điều hướng">
   <div class="side-header"><div class="side-brand"><span class="brand-mark brand-mark-image"><img src="/logo.svg" alt="" width="40" height="40"></span><span>${esc(state.meta.site_name)}</span></div><button type="button" class="sidebar-close" data-action="close-menu" aria-label="Đóng menu">×</button></div>
   <div class="side-kicker">${user.role==='admin'?'BẢNG QUẢN TRỊ':'KHÔNG GIAN THÀNH VIÊN'}</div>
+  <div class="sidebar-language">${languageSwitcher()}</div>
   <nav class="nav">${nav.map(([key,symbol,name])=>`<button data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`).join('')}</nav>
   <div class="sidebar-bottom"><strong>${esc(user.name)}</strong>${esc(user.email)}<button data-action="logout">Đăng xuất ↗</button></div>
  </aside><button type="button" class="menu-backdrop" tabindex="-1" data-action="close-menu" aria-label="Đóng menu"></button><section class="main-area"><header class="topbar"><div class="topbar-leading"><button type="button" class="menu-toggle" id="menu-toggle" data-action="toggle-menu" aria-controls="site-menu" aria-expanded="false" aria-label="Mở menu"><span aria-hidden="true">☰</span></button><div class="topbar-title"><h1 id="topTitle">Bảng điều khiển</h1><p>Quản lý minh bạch • Cập nhật theo dữ liệu thật</p></div></div>
- <div class="top-right"><span class="balance-pill" id="topBalance">🌾 ${fmt(state.me.balance)} Lúa</span><span class="avatar" title="${esc(user.name)}">${esc(user.name[0]?.toUpperCase()||'T')}</span></div></header>
+ <div class="top-right">${languageSwitcher()}<span class="balance-pill" id="topBalance">🌾 ${fmt(state.me.balance)} Lúa</span><span class="avatar" title="${esc(user.name)}">${esc(user.name[0]?.toUpperCase()||'T')}</span></div></header>
  <main class="content" id="viewContent"></main></section></div><div id="modal-root"></div>`;
  setMenuOpen(false);
 }
