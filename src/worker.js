@@ -170,9 +170,8 @@ function computeFraudProfiles(users,events,withdrawals,completions){
     stats.devices.add(e.device_code);
   }
   const ip=String(e.ip||'');
-  const net=ip.includes(':')?ipv6Network(ip):(isPublicIPv4(ip)||/^((192\.0\.2)|(198\.51\.100)|(203\.0\.113))\./.test(ip)?ip:null);
-  // Các IP ví dụ của test được phép nhóm để mô phỏng, không chấp nhận IPv4
-  // do trình duyệt tự gửi cho điểm rủi ro.
+  const net=ip.includes(':')?ipv6Network(ip):(isPublicIPv4(ip)?ip:null);
+  // Không chấm điểm từ IPv4 do trình duyệt tự báo, hoặc IP riêng/tài liệu.
   if(net){
     addGroup(networkGroups,net,e.user_id);
     if(!accountNetworks.has(e.user_id))accountNetworks.set(e.user_id,new Set());
@@ -233,7 +232,7 @@ async function loadFraudProfiles(env,targetId=null){
  const [users,events,withdrawals,completions,selected]=await Promise.all([
   env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE role='member' ORDER BY created_at DESC LIMIT 250").all(),
   env.DB.prepare("SELECT user_id,event_type,detail,ip,device_code FROM risk_events WHERE user_id IS NOT NULL AND created_at>=datetime('now','-14 days') ORDER BY created_at DESC LIMIT 5000").all(),
-  env.DB.prepare("SELECT user_id,bank_name,bank_account FROM withdrawals WHERE created_at>=datetime('now','-90 days') ORDER BY created_at DESC LIMIT 3000").all(),
+  env.DB.prepare("SELECT user_id,bank_name,bank_account FROM withdrawals WHERE status IN ('pending','paid') AND created_at>=datetime('now','-90 days') ORDER BY created_at DESC LIMIT 3000").all(),
   env.DB.prepare("SELECT user_id,created_at FROM task_completions WHERE created_at>=datetime('now','-1 hour') ORDER BY created_at DESC LIMIT 2000").all(),
   targetId?env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE id=?").bind(targetId).first():Promise.resolve(null)
  ]);
