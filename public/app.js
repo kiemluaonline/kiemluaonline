@@ -36,6 +36,19 @@ const dt = v => v ? new Date(String(v).replace(' ', 'T') + (String(v).includes('
 const safeUrl = v => /^https:\/\//i.test(String(v || '')) ? esc(v) : '';
 const chip = v => `<span class="chip ${esc(v)}">${({approved:'Đã duyệt',pending:'Đang chờ',review:'Không nghiêm trọng',serious:'Nghiêm trọng',rejected:'Từ chối',invalid_account:'Số tài khoản không đúng',low:'Thấp',paid:'Đã thanh toán',active:'Hoạt động',suspended:'Tạm khóa'})[v] || esc(v)}</span>`;
 const field = (key, label, value='', attrs='') => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><input id="${esc(key)}" name="${esc(key)}" value="${esc(value)}" ${attrs}></div>`;
+const AUTH_ICONS={
+ username:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.7 20a7.3 7.3 0 0 1 14.6 0"/></svg>',
+ email:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+ password:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg>',
+ gift:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="9" width="16" height="12" rx="1"/><path d="M2 9h20M12 9v12"/><path d="M12 9C4 9 5 2 8 3c2 .5 4 6 4 6Zm0 0c8 0 7-7 4-6-2 .5-4 6-4 6Z"/></svg>'
+};
+const authField=(key,label,placeholder,attrs='',icon='username',value='')=>`<div class="auth-input-field">
+ <label for="${esc(key)}">${esc(label)}</label>
+ <div class="auth-input-wrap">
+  <span class="auth-input-icon">${AUTH_ICONS[icon]||AUTH_ICONS.username}</span>
+  <input id="${esc(key)}" name="${esc(key)}" placeholder="${esc(placeholder)}" value="${esc(value)}" ${attrs}>
+  ${icon==='password'?'<button class="auth-password-eye" data-action="toggle-password" type="button" aria-label="Hiện mật khẩu" aria-pressed="false">◉</button>':''}
+ </div></div>`;
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
 const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM CÓ LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
 const empty = (title,body='') => `<div class="empty"><div class="big">☘</div><h3>${esc(title)}</h3><p>${esc(body)}</p></div>`;
@@ -137,7 +150,7 @@ function renderLocked(){
   :'Hiện không có yêu cầu rút tiền đang chờ xử lý.';
  app.className='';
  app.innerHTML=`<div class="auth-page"><div class="auth-brand">
-  <div class="brand-mark">🌾</div><p class="eyebrow">TRẠM CÓ LÚA • THÔNG BÁO TÀI KHOẢN</p>
+  <div class="brand-mark brand-mark-image"><img src="/logo.svg" alt="Logo Trạm Có Lúa" width="52" height="52"></div><p class="eyebrow">TRẠM CÓ LÚA • THÔNG BÁO TÀI KHOẢN</p>
   <h1>Thông báo từ Trạm Có Lúa</h1><p>Trạng thái tài khoản và yêu cầu rút tiền.</p></div>
   <section class="auth-card account-locked ${severe?'account-locked-severe':'account-locked-review'}">
    <h2>${headingText}</h2>
@@ -158,7 +171,10 @@ function renderLocked(){
 function googleAuthPanel(active){
  if(active==='setup')return '';
  if(!state.meta.google_auth_enabled)return '<p class="note auth-google-disabled">Đăng nhập Google sẽ hiển thị sau khi chủ website cấu hình Google Cloud.</p>';
- if(active==='register')return '<p class="note">Đăng ký bằng email và mật khẩu: bạn có thể nhập mã giới thiệu nếu có. Muốn tạo tài khoản nhanh bằng Google? Chọn tab Đăng nhập rồi bấm Tiếp tục với Google.</p>';
+ if(active==='register')return '<div class="oauth-separator"><span>HOẶC</span></div>'+
+  '<button class="google-auth-btn" type="button" data-action="google-register">'+
+  '<span class="google-g" aria-hidden="true">G</span>Đăng ký với Google</button>'+
+  '<p class="note">Đăng ký bằng Google sẽ dùng tên hiển thị từ tài khoản Google. Hãy tích đồng ý điều khoản trước khi tiếp tục.</p>';
  return '<div class="oauth-separator">hoặc</div>'+
   '<button class="google-auth-btn" type="button" data-action="google-login">'+
   '<span class="google-g" aria-hidden="true">G</span>'+
@@ -178,7 +194,7 @@ function googleProfilePanel(){
 function renderAuth(){
  if(state.googlePending){
    app.className='';
-   app.innerHTML='<div class="auth-page"><div class="auth-brand"><div class="brand-mark">🌾</div><p class="eyebrow">TRẠM CÓ LÚA • TÀI KHOẢN THÀNH VIÊN</p>'+
+   app.innerHTML='<div class="auth-page"><div class="auth-brand"><div class="brand-mark brand-mark-image"><img src="/logo.svg" alt="Logo Trạm Có Lúa" width="52" height="52"></div><p class="eyebrow">TRẠM CÓ LÚA • TÀI KHOẢN THÀNH VIÊN</p>'+
     '<h1>Chào mừng bạn đến Trạm Có Lúa.</h1><p>Đăng nhập Google an toàn và đơn giản.</p></div>'+
     '<section class="auth-card"><h2>Hoàn tất đăng ký bằng Google</h2>'+
     '<p>Gmail <strong>'+esc(state.googlePending.email)+'</strong> chưa có tài khoản. Bạn không cần tạo mật khẩu, chỉ cần đồng ý điều khoản để tạo tài khoản thành viên.</p>'+
@@ -193,32 +209,49 @@ function renderAuth(){
  const tabs=state.meta.setup_required? [['setup','Thiết lập Admin'],['login','Đăng nhập'],['register','Đăng ký']] : [['login','Đăng nhập'],['register','Đăng ký email']];
  // Không ép quay lại Thiết lập Admin khi người dùng chọn tab Đăng nhập.
  const active=state.authMode;
- const form= active==='setup' ? `<form data-form="setup">
-   ${field('setup_key','Khóa cài đặt bí mật','', 'required type="password" autocomplete="off"')}
-   ${field('name','Tên quản trị viên','', 'required minlength="2"')}
-   ${field('email','Email quản trị','', 'required type="email" autocomplete="email"')}
-   ${field('password','Mật khẩu (ít nhất 10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
-   <button class="btn" type="submit" style="width:100%">Tạo Admin đầu tiên</button>
-   <p class="note">Khóa cài đặt được đặt trên máy chủ, không phải mật khẩu tài khoản.</p></form>`:
- active==='register'? `<form data-form="register">
-   ${field('name','Tên hiển thị','', 'required minlength="2"')}
-   ${field('email','Email','', 'required type="email" autocomplete="email"')}
-   ${state.meta.gmail_google_required?'<p class="note">Gmail mới cần xác minh qua Tiếp tục với Google ở tab Đăng nhập. Tài khoản email đã đăng ký trước đây vẫn dùng mật khẩu.</p>':''}
-   ${field('password','Mật khẩu (ít nhất 10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
-   ${field('referral_code','Mã giới thiệu (không bắt buộc)',ref)}
-   <div class="field"><label><input type="checkbox" name="accept_terms" value="yes" required style="width:auto;margin-right:7px"> Tôi đã đọc <a href="/terms.html" target="_blank">Điều khoản</a> và <a href="/privacy.html" target="_blank">Chính sách quyền riêng tư</a>.</label></div>
-   <button class="btn" type="submit" style="width:100%">Tạo tài khoản</button></form>` :
- `<form data-form="login">${field('email','Email','', 'required type="email" autocomplete="email"')}
- ${field('password','Mật khẩu','', 'required type="password" autocomplete="current-password"')}
- <button class="btn" type="submit" style="width:100%">Đăng nhập</button></form>`;
- app.className='';app.innerHTML=`<div class="auth-page"><div class="auth-brand">
- <div class="brand-mark">🌾</div><p class="eyebrow">NHIỆM VỤ · TÍCH LÚA · MINH BẠCH</p>
- <h1>Chăm chỉ làm nhiệm vụ.<br>Rõ ràng từng điểm Lúa.</h1>
- <p>Hệ thống tích Lúa có tài khoản thật, lịch sử giao dịch, kiểm tra CAPTCHA và trang quản trị riêng. Không công bố số thưởng giả.</p>
- </div><section class="auth-card"><button class="welcome-home-back" type="button" data-action="back-home">← Về trang giới thiệu</button><div class="auth-tabs">${tabs.map(([k,t])=>`<button type="button" data-auth="${k}" class="${active===k?'chosen':''}">${t}</button>`).join('')}</div>
- <h2>${active==='setup'?'Khởi tạo hệ thống':active==='register'?'Tạo tài khoản':'Chào mừng quay lại'}</h2>
- <p>${active==='setup'?'Chỉ dành cho chủ website.':active==='register'?'Nhập thông tin để bắt đầu tích Lúa.':'Đăng nhập để tiếp tục nhiệm vụ.'}</p>
- ${form}${googleAuthPanel(active)}</section></div>`;
+ const form=active==='setup'? `<form data-form="setup">
+  ${authField('setup_key','Khóa cài đặt bí mật','Nhập khóa quản trị','required type="password" autocomplete="off"','password')}
+  ${authField('name','Tên quản trị viên','Tên quản trị viên','required minlength="2"','username')}
+  ${authField('email','Email','you@example.com','required type="email" autocomplete="email"','email')}
+  ${authField('password','Mật khẩu','Ít nhất 8 ký tự','required type="password" minlength="8" maxlength="128" autocomplete="new-password"','password')}
+  <button class="auth-submit" type="submit">Tạo Admin đầu tiên</button>
+  <p class="note">Khóa cài đặt được đặt trên máy chủ, không phải mật khẩu tài khoản.</p>
+ </form>`:
+ active==='register'?`<form data-form="register">
+  ${authField('username','Tên đăng nhập','4–20 ký tự, a-z, 0-9','required minlength="4" maxlength="20" pattern="[a-z0-9]{4,20}" autocapitalize="none" spellcheck="false" autocomplete="username"','username')}
+  ${authField('email','Email','you@example.com','required type="email" autocomplete="email"','email')}
+  ${state.meta.gmail_google_required?'<p class="note">Gmail mới cần xác minh qua Đăng ký với Google bên dưới. Tài khoản Gmail đã đăng ký trước đó vẫn có thể dùng mật khẩu.</p>':''}
+  ${authField('password','Mật khẩu','Ít nhất 8 ký tự','required type="password" minlength="8" maxlength="128" autocomplete="new-password"','password')}
+  ${authField('referral_code','Mã giới thiệu (không bắt buộc)','Ví dụ: A1B2C3D4E5 (10 ký tự)','maxlength="10" autocapitalize="characters" autocomplete="off"','gift',ref)}
+  <div class="auth-legal"><label><input type="checkbox" name="accept_terms" value="yes" required>
+   Tôi đồng ý <a href="/terms.html" target="_blank" rel="noopener">Điều khoản</a> và <a href="/privacy.html" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.
+  </label></div>
+  <button class="auth-submit" type="submit">Đăng ký</button>
+ </form>`:
+ `<form data-form="login">
+  ${authField('email','Email hoặc tên đăng nhập','Nhập email hoặc tên đăng nhập','required type="text" autocomplete="username" autocapitalize="none" spellcheck="false"','email')}
+  ${authField('password','Mật khẩu','Nhập mật khẩu của bạn','required type="password" autocomplete="current-password"','password')}
+  <button class="auth-submit" type="submit">Đăng nhập</button>
+ </form>`;
+ app.className='';
+ app.innerHTML=`<div class="auth-page auth-page-login">
+  <div class="auth-brand">
+    <div class="auth-brand-new-logo"><img src="/logo.svg" width="83" height="83" alt="Logo Trạm Có Lúa"></div>
+    <p class="eyebrow">TRẠM CÓ LÚA • NỀN TẢNG NHIỆM VỤ</p>
+    <h1>Làm nhiệm vụ.<br>Tích Lúa.<br>Nhận thành quả.</h1>
+    <p>Đăng ký miễn phí để bắt đầu làm nhiệm vụ và quản lý điểm Lúa. Mọi phần thưởng phụ thuộc kết quả được xác minh.</p>
+  </div>
+  <section class="auth-card">
+   <button class="welcome-home-back" type="button" data-action="back-home">← Quay lại trang chủ</button>
+   <div class="auth-logo-line"><img src="/logo.svg" alt="" width="56" height="56"><div><strong>TRẠM CÓ LÚA</strong><span>LÀM NHIỆM VỤ · TÍCH LÚA</span></div></div>
+   <span class="auth-form-kicker"><i></i>${active==='setup'?'QUẢN TRỊ HỆ THỐNG':active==='register'?'THÀNH VIÊN MỚI':'CHÀO MỪNG TRỞ LẠI'}</span>
+   <h2>${active==='setup'?'Khởi tạo hệ thống':active==='register'?'Tạo tài khoản':'Đăng nhập'}</h2>
+   <p class="auth-intro">${active==='setup'?'Chỉ dành cho chủ website.':active==='register'?'Bắt đầu hoàn thành nhiệm vụ, tích Lúa và theo dõi phần thưởng của bạn.':'Tiếp tục hành trình làm nhiệm vụ và quản lý tài khoản của bạn.'}</p>
+   ${form}
+   ${googleAuthPanel(active)}
+   ${active==='register'?'<p class="auth-switch">Đã có tài khoản? <button type="button" data-auth="login">Đăng nhập</button></p>':active==='login'?'<p class="auth-switch">Chưa có tài khoản? <button type="button" data-auth="register">Đăng ký</button></p>':''}
+  </section>
+ </div>`;
 }
 
 function setMenuOpen(open,restoreFocus=false){
@@ -241,7 +274,7 @@ function renderShell(){
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
  const user=state.me.user;
  app.className='';app.innerHTML=`<div class="layout"><aside class="sidebar" id="site-menu" aria-label="Menu điều hướng">
-  <div class="side-header"><div class="side-brand"><span class="brand-mark">🌾</span><span>${esc(state.meta.site_name)}</span></div><button type="button" class="sidebar-close" data-action="close-menu" aria-label="Đóng menu">×</button></div>
+  <div class="side-header"><div class="side-brand"><span class="brand-mark brand-mark-image"><img src="/logo.svg" alt="" width="40" height="40"></span><span>${esc(state.meta.site_name)}</span></div><button type="button" class="sidebar-close" data-action="close-menu" aria-label="Đóng menu">×</button></div>
   <div class="side-kicker">${user.role==='admin'?'BẢNG QUẢN TRỊ':'KHÔNG GIAN THÀNH VIÊN'}</div>
   <nav class="nav">${nav.map(([key,symbol,name])=>`<button data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`).join('')}</nav>
   <div class="sidebar-bottom"><strong>${esc(user.name)}</strong>${esc(user.email)}<button data-action="logout">Đăng xuất ↗</button></div>
@@ -616,7 +649,7 @@ async function profile(){
  <div class="grid two"><section class="card"><h3>Thông tin tài khoản</h3><p><strong>Tên:</strong> ${esc(u.name)}</p><p><strong>Email:</strong> ${esc(u.email)}</p><p><strong>Vai trò:</strong> ${esc(u.role)}</p><p><strong>Tham gia:</strong> ${dt(u.created_at)}</p><p><strong>IP truy cập:</strong> <code>${esc(state.me.ip)}</code></p><p><strong>📱 Đã định danh thiết bị:</strong> <code>${esc(maskDeviceCode(state.me.device_code))}</code></p><div class="callout">Không chia sẻ mật khẩu hoặc mã cài đặt quản trị với bất kỳ ai.</div></section>
  <form class="card" data-form="password"><h3>Đổi mật khẩu</h3>
  ${field('old_password','Mật khẩu hiện tại','', 'required type="password" autocomplete="current-password"')}
- ${field('new_password','Mật khẩu mới (≥10 ký tự)','', 'required type="password" minlength="10" autocomplete="new-password"')}
+ ${field('new_password','Mật khẩu mới (≥10 ký tự)','', 'required type="password" minlength="8" autocomplete="new-password"')}
  <button class="btn" type="submit">Lưu mật khẩu mới</button><p class="note">Đổi xong, tất cả phiên đăng nhập sẽ bị đăng xuất.</p></form>${googleProfilePanel()}</div>`;
 }
 async function adminOverview(){
@@ -951,6 +984,13 @@ app.addEventListener('click',async e=>{
   if(act==='open-auth'){
    state.authMode=el.dataset.authMode==='register'?'register':'login';
    renderAuth();window.scrollTo(0,0);return;
+  }
+  if(act==='toggle-password'){
+   const input=el.closest('.auth-input-wrap')?.querySelector('input');
+   if(input){const visible=input.type==='text';input.type=visible?'password':'text';
+    el.setAttribute('aria-pressed',String(!visible));
+    el.setAttribute('aria-label',visible?'Hiện mật khẩu':'Ẩn mật khẩu');}
+   return;
   }
   if(act==='back-home'){
    if(state.meta.setup_required){state.authMode='setup';renderAuth();return;}
