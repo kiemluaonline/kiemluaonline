@@ -226,3 +226,18 @@
 .risk-ip-details summary{font-size:11px;color:#25644c;cursor:pointer}
 .risk-ip-details[open]{display:flex;flex-direction:column;align-items:flex-start;gap:5px}
 .risk-ip-full{font-size:11px;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
+
+
+/* Hai cấp độ khóa tài khoản: chỉ là thông báo, không thay đổi sổ Lúa. */
+.auth-card.account-locked{max-width:570px}
+.account-locked h2{font-size:clamp(21px,3vw,28px);line-height:1.3;margin:0 0 14px}
+.account-locked p{line-height:1.65}
+.account-locked-review{border-top:5px solid #d1a545}
+.account-locked-severe{border-top:5px solid #b03934}
+.account-locked-severe h2{color:#a52e2a}
+.lock-decisions{padding:0;margin:10px 0 16px;list-style:none}
+.lock-decisions li{padding:8px 0;border-bottom:1px solid #edf0ec;font-size:14px;line-height:1.6}
+.lock-payment-status{margin:17px 0;padding:14px;background:#f7f9f7;border:1px solid #e1e9e1;border-radius:12px}
+.lock-payment-status>p{margin:7px 0 0}
+.lock-payment-status .table-wrap{margin-top:10px}
+.lock-signature{font-size:13px;font-weight:650;color:#28634b;margin:16px 0}
