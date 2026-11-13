@@ -1,6 +1,6 @@
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all' };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'' };
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
   ['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
@@ -649,9 +649,11 @@ async function adminUsers(){
  <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip,u.ipv4_observation)}</td><td>${chip(u.status)}</td>
  <td>${u.role==='admin'?'Admin':`<div class="btn-row">
   ${u.status==='active'?`
+   <button class="btn alt sm" data-action="view-fraud-account" data-id="${esc(u.id)}">🔎 Xem rủi ro</button>
    <button class="btn alt sm" data-action="change-user" data-id="${esc(u.id)}" data-status="suspended" data-lock-type="review">⚠ Tạm khóa</button>
    <button class="btn danger sm" data-action="change-user" data-id="${esc(u.id)}" data-status="suspended" data-lock-type="confirmed">⛔ Khóa vĩnh viễn</button>`:`
    ${u.suspension_type!=='confirmed'?`<button class="btn danger sm" data-action="change-user" data-id="${esc(u.id)}" data-status="suspended" data-lock-type="confirmed">⛔ Khóa vĩnh viễn</button>`:''}
+   <button class="btn alt sm" data-action="view-fraud-account" data-id="${esc(u.id)}">🔎 Xem rủi ro</button>
    <button class="btn alt sm" data-action="change-user" data-id="${esc(u.id)}" data-status="active" data-lock-type="${esc(u.suspension_type||'review')}">Mở khóa</button>`}
   </div>`}
   ${u.status==='suspended'?`<div class="small muted">${u.suspension_type==='confirmed'?'<strong class="red">🚫 Khóa vĩnh viễn – Đã xác minh vi phạm</strong>':'⚠ Tạm khóa – Đang xác minh'}<div>Lý do: ${esc(u.suspension_reason||'Đang xác minh')}</div>${u.suspension_type==='confirmed'&&u.suspension_evidence?`<div>Bằng chứng Admin lưu: ${esc(u.suspension_evidence)}</div>`:''}</div>`:''}</td></tr>`))}</section>`;
@@ -677,15 +679,44 @@ async function adminWithdrawals(){
 }
 async function adminSecurity(){
  const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
+ const members=(anti.profiles||[]);
+ const matching=members.filter(p=>
+  (state.fraudFilter==='all'||state.fraudFilter===p.level)&&
+  (p.name+' '+p.email).toLowerCase().includes(state.fraudSearch.trim().toLowerCase())
+ );
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
  <div class="callout">Chỉ hiện địa chỉ IP thật. Nếu trình duyệt khách kiểm tra được IPv4 công khai qua dịch vụ bên ngoài, hệ thống ghi nhận riêng làm thông tin tham khảo. IPv4 do trình duyệt báo có thể bị giả mạo, không được dùng một mình để khóa người dùng hoặc từ chối thưởng. Khi không có IPv4, hiển thị IPv6 do Cloudflare ghi nhận, tuyệt đối không tự chuyển thành IPv4 ảo.</div>
- <section class="card section"><h3>🛡️ Anti-Fraud 2.0 — Điểm rủi ro 0–100</h3>
- <p><strong>${fmt(anti.summary?.serious||0)}</strong> mức nghiêm trọng · <strong>${fmt(anti.summary?.review||0)}</strong> cần kiểm tra · <strong>${fmt(anti.summary?.low||0)}</strong> mức thấp</p>
- <p class="note">Điểm được tính trên máy chủ từ nhiều dấu hiệu: tài khoản chung nơi nhận tiền, chung mã trình duyệt, hoạt động nhiệm vụ và nhật ký cảnh báo. Trùng IP chỉ là tín hiệu yếu. Không tự động kết luận gian lận hoặc khóa tài khoản. Mức nghiêm trọng sẽ tạm ngăn duyệt/thanh toán cho đến khi Admin đối chiếu và ghi lý do.</p>
- ${table(['Thành viên','Điểm rủi ro','Tín hiệu cần đối chiếu'],(anti.profiles||[]).filter(p=>p.score>=25).slice(0,60).map(p=>`<tr>
-  <td><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.email)}</div></td>
+ <section class="card section"><h3>🛡️ Anti-Fraud 2.0 — Rủi ro từng tài khoản</h3>
+ <p><strong>${fmt(anti.summary?.checked_accounts||0)}</strong> tài khoản được thống kê · <strong>${fmt(anti.summary?.serious||0)}</strong> nghiêm trọng · <strong>${fmt(anti.summary?.review||0)}</strong> cần kiểm tra · <strong>${fmt(anti.summary?.low||0)}</strong> mức thấp</p>
+ <p class="note">Chọn từng tài khoản để xem IP/dải IPv6, mã trình duyệt và tài khoản có liên quan trong 30 ngày. Điểm rủi ro được tính từ các tín hiệu 14 ngày và lịch sử rút tiền 90 ngày. Không tự động kết luận gian lận. Mức nghiêm trọng chỉ giữ bước duyệt tiền cho đến khi Admin ghi kết quả đối chiếu.</p>
+ <div class="fraud-filter-row">
+  ${[['all','Tất cả'],['serious','Nghiêm trọng'],['review','Cần kiểm tra'],['low','Mức thấp']].map(([v,label])=>`<button type="button" class="btn sm ${state.fraudFilter===v?'':'alt'}" data-action="fraud-filter" data-level="${v}">${label}</button>`).join('')}
+ </div>
+ <form class="fraud-search-form" data-form="fraud-search">
+  <input type="search" name="keyword" value="${esc(state.fraudSearch)}" placeholder="Tìm tên hoặc email thành viên" aria-label="Tìm tài khoản" maxlength="120">
+  <button class="btn sm" type="submit">Tìm</button>
+ </form>
+ <p class="small muted">Tìm thấy ${fmt(matching.length)} tài khoản; hiển thị ${fmt(Math.min(100,matching.length))} tài khoản đầu tiên. Bạn có thể tìm bằng email để xem tài khoản khác.</p>
+ ${table(['Tài khoản / Trạng thái','Điểm / Mức độ','IP và mã trình duyệt','Liên quan / Chi tiết'],matching.slice(0,100).map(p=>`<tr>
+  <td><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.email)}</div><div>${chip(p.status)}</div></td>
   <td><strong>${fmt(p.score)}/100</strong><div>${chip(p.level)}</div></td>
-  <td>${(p.reasons||[]).map(x=>`<div class="small muted">• ${esc(x)}</div>`).join('')}</td>
+  <td><strong>${fmt(p.ip_count||0)}</strong> IP/dải mạng<div class="small muted">${fmt(p.device_count||0)} mã trình duyệt</div><div class="small muted">Nhiều nhất ${fmt(p.max_devices_same_ip||0)} mã trên một IP/dải</div></td>
+  <td><div class="small"><strong>${fmt(p.shared_device_accounts||0)}</strong> tài khoản chung mã trình duyệt</div><div class="small"><strong>${fmt(p.shared_ip_accounts||0)}</strong> tài khoản chung IP/dải</div>
+   <button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(p.user_id)}">🔎 Xem chi tiết</button></td>
+ </tr>`))}</section>
+ <section class="card section"><h3>📱 Nhiều tài khoản dùng chung một mã trình duyệt</h3>
+ <p class="note">Đây là mã trình duyệt được ghi nhận, không phải IMEI. Có thể bị đổi hoặc giả mạo; cần kết hợp nhiều chứng cứ khi đối chiếu.</p>
+ ${table(['Mã trình duyệt','Số tài khoản / Mạng','Tài khoản liên quan'],(anti.shared_browsers||[]).slice(0,35).map(g=>`<tr>
+  <td><code>${esc(g.device_code)}</code></td>
+  <td><strong>${fmt(g.account_count)}</strong> tài khoản<div class="small muted">${fmt(g.network_count)} IP/dải mạng</div></td>
+  <td>${(g.accounts||[]).slice(0,10).map(a=>`<div class="small"><button class="button-plain" type="button" data-action="view-fraud-account" data-id="${esc(a.user_id)}">${esc(a.email||a.name||'Thành viên')}</button></div>`).join('')}</td>
+ </tr>`))}</section>
+ <section class="card section"><h3>🌐 Nhiều mã trình duyệt trên cùng IP / dải IPv6</h3>
+ <p class="note">Một IP có thể phục vụ nhiều thiết bị độc lập (Wi-Fi gia đình, quán cà phê hoặc nhà mạng). IPv6 được nhóm theo /64 và không đồng nghĩa cùng điện thoại.</p>
+ ${table(['IP / Dải mạng','Mã trình duyệt / Tài khoản','Thành viên đã ghi nhận'],(anti.shared_networks||[]).filter(g=>g.device_count>=2||g.account_count>=2).slice(0,35).map(g=>`<tr>
+  <td><strong>${esc(g.ip_type)}</strong><div>${adminIP(g.address)}</div></td>
+  <td><strong>${fmt(g.device_count)}</strong> mã trình duyệt<div class="small muted">${fmt(g.account_count)} tài khoản</div></td>
+  <td>${(g.accounts||[]).slice(0,10).map(a=>`<div class="small"><button class="button-plain" type="button" data-action="view-fraud-account" data-id="${esc(a.user_id)}">${esc(a.email||a.name||'Thành viên')}</button></div>`).join('')}</td>
  </tr>`))}</section>
  <section class="card section"><h3>📍 IPv4 thực tế đã ghi nhận</h3>
  <p><strong>${fmt((d.ipv4_inventory||[]).length)}</strong> địa chỉ IPv4 trong 30 ngày qua.</p>
