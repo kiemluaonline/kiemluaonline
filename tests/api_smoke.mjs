@@ -64,6 +64,25 @@ const dup=await call(`/api/tasks/${taskId}/submit`,'POST',{attempt_id:a.attempt_
 assert.equal(dup.status,410);
 const userMe=await call('/api/me','GET',undefined,cookie,'203.0.113.10');
 assert.equal(userMe.data.balance,100);assert.equal(userMe.data.device_code.length,16);
+// Khi khách có IPv4 công khai qua dịch vụ bên ngoài, lưu là báo cáo riêng,
+// không ghi đè IP thật do Cloudflare quan sát và không dùng làm điều kiện khóa.
+const realIPv6='2401:d800:26c9:8e5d:39ba:4b48:aafa:1745';
+const observed=await call('/api/me/ipv4-report','POST',{ip:'125.235.15.67'},cookie,realIPv6);
+assert.equal(observed.status,200,JSON.stringify(observed));
+assert.equal(observed.data.verified_by_cloudflare,false);
+const observedAgain=await call('/api/me/ipv4-report','POST',{ip:'125.235.15.67'},cookie,realIPv6);
+assert.equal(observedAgain.status,200);
+assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND event_type='browser_ipv4_report'").get(userMe.data.user.id).n,1);
+assert.equal((await call('/api/me/ipv4-report','POST',{ip:'241.175.137.167'},cookie,realIPv6)).status,400);
+assert.equal((await call('/api/me/ipv4-report','POST',{ip:'125.235.15.68'},cookie,'125.235.15.67')).status,409);
+const realV4=await call('/api/me/ipv4-report','POST',{ip:'125.235.15.67'},cookie,'125.235.15.67');
+assert.equal(realV4.status,200);
+assert.equal(realV4.data.verified_by_cloudflare,true);
+const observedUsers=await call('/api/admin/users','GET',undefined,admCookie);
+assert.equal(observedUsers.data.users.find(x=>x.id===userMe.data.user.id).ipv4_observation.observed_ipv4,'125.235.15.67');
+const observedRisks=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.ok(observedRisks.data.ipv4_observations.some(x=>x.observed_ipv4==='125.235.15.67'&&x.cloudflare_ip===realIPv6));
+
 assert.equal(userMe.data.device_registered,true);
 const changedIp=await call('/api/me','GET',undefined,cookie,'198.51.100.22');
 assert.equal(changedIp.data.device_code,userMe.data.device_code,'Same browser ID must survive IP change');
