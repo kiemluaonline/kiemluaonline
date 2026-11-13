@@ -57,6 +57,20 @@ assert.equal(migratedBrandMeta.data.site_name,'Trạm Có Lúa',
 sqlite.prepare("UPDATE settings SET value='Trạm Có Lúa' WHERE key='site_name'").run();
 console.log('PASS: public crawlable landing page, auth navigation hooks, legal links, new brand and legacy D1 name compatibility.');
 
+const oldRiceLogoHtml=/class="brand-mark"[^>]*>🌾|class="welcome-logo-icon"[^>]*>🌾|class="hero-icon"[^>]*>🌾/;
+assert.ok(!oldRiceLogoHtml.test(publicHomepage),'Public homepage must not use the old emoji as logo.');
+assert.ok(!oldRiceLogoHtml.test(frontendForWelcome),'Member dashboard and auth screens must not use old emoji as brand logo.');
+assert.match(frontendForWelcome,/class="hero-icon brand-hero-logo"><img src="\/logo\.svg"/);
+assert.match(publicHomepage,/class="welcome-art-label"><img src="\/logo\.svg"/);
+for(const legalDoc of ['privacy.html','terms.html']){
+ const html=readFileSync(new URL('../public/'+legalDoc,import.meta.url),'utf8');
+ assert.match(html,/class="legal-brand"[^>]*><img src="\/logo\.svg"/);
+ assert.match(html,/rel="icon" type="image\/svg\+xml" href="\/logo\.svg"/);
+}
+assert.match(frontendForWelcome,/id="topBalance">🌾/,'Reward balance should keep its grain symbol.');
+console.log('PASS: new logo across public, member dashboard, auth, legal and site favicon; Lúa symbols retained for rewards.');
+
+
 // POST từ nguồn ngoài hoặc thiếu header không được truy cập.
 const csrf=await call('/api/auth/register','POST',{name:'A',email:'a@example.com',password:'passpasspass'});
 assert.equal(csrf.status,400); // Có header CSRF, nhưng chưa chấp nhận điều khoản.
