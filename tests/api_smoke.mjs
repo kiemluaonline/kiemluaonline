@@ -575,3 +575,78 @@ assert.equal(countPassive(),1);
 await call('/api/tasks','GET',undefined,firstPhone.cookie,sharedIP,phone1);
 assert.equal(countPassive(),1,'Refresh does not duplicate daily shared-IP warning');
 console.log('PASS: passive shared-IP warning appears when listing tasks, deduplicated per day.');
+
+// ==== Cảnh báo IP thật và trạng thái tài khoản tạm khóa/chi trả ====
+const networkMembers=[];
+for(let i=0;i<5;i++){
+ const member=await call('/api/auth/register','POST',{
+   name:'Network Member '+i,email:'network-member-'+i+'@example.com',
+   password:'network-test-password-2026',accept_terms:'yes'
+ },'','198.51.100.'+(31+i),'c0000000-2222-4333-8444-00000000000'+i);
+ assert.equal(member.status,201,JSON.stringify(member));
+ const device='c0000000-2222-4333-8444-00000000000'+i;
+ assert.equal((await call('/api/me','GET',undefined,member.cookie,'203.0.113.199',device)).status,200);
+ assert.equal((await call('/api/me','GET',undefined,member.cookie,
+   '2401:d800:26c9:8e5d:1234:5678:abcd:000'+(i+1),device)).status,200);
+ assert.equal((await call('/api/me/ipv4-report','POST',{ip:'125.235.15.67'},member.cookie,
+   '2401:d800:26c9:8e5d:1234:5678:abcd:000'+(i+1),device)).status,200);
+ networkMembers.push({...member,device,id:sqlite.prepare('SELECT id FROM users WHERE email=?').get('network-member-'+i+'@example.com').id});
+}
+const groupedWarnings=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.equal(groupedWarnings.status,200);
+const groups=groupedWarnings.data.network_alerts;
+assert.ok(groups.some(g=>g.ip_type==='IPv4'&&g.source==='cloudflare'&&g.address==='203.0.113.199'
+ &&g.account_count>=5&&g.severity==='serious'),JSON.stringify(groups));
+assert.ok(groups.some(g=>g.ip_type==='IPv6 /64'&&g.source==='cloudflare'
+ &&g.address==='2401:d800:26c9:8e5d::/64'&&g.account_count>=5&&g.severity==='serious'),JSON.stringify(groups));
+assert.ok(groups.some(g=>g.ip_type==='IPv4'&&g.source==='browser'
+ &&g.address==='125.235.15.67'&&g.severity==='review'),'Browser-supplied IPv4 cannot be treated as a serious verified finding by itself.');
+// Tài khoản bị khóa không tự mất Lúa và yêu cầu rút không tự bị từ chối.
+const heldMember=networkMembers[0];
+sqlite.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
+ VALUES(?,?,30,'Test reward','smoke','hold-member')`).run('hold-reward-2026',heldMember.id);
+await call('/api/admin/settings','PUT',{withdrawals_enabled:'1',lua_per_vnd:'10',min_withdraw_lua:'10'},admCookie);
+const heldWithdrawal=await call('/api/withdrawals','POST',{
+ amount:20,payment_method:'bank',bank_name:'BIDV',
+ bank_account:'1234567890',bank_owner:'NETWORK MEMBER'
+},heldMember.cookie);
+assert.equal(heldWithdrawal.status,200,JSON.stringify(heldWithdrawal));
+assert.equal((await call('/api/me','GET',undefined,heldMember.cookie)).data.balance,10);
+const hold=await call('/api/admin/users/'+heldMember.id,'PATCH',{
+ status:'suspended',suspension_reason:'Tài khoản đang được kiểm tra thông tin và đối chiếu giao dịch.'
+},admCookie);
+assert.equal(hold.status,200,JSON.stringify(hold));
+const lockedStatus=await call('/api/account-status','GET',undefined,heldMember.cookie);
+assert.equal(lockedStatus.status,200,JSON.stringify(lockedStatus));
+assert.equal(lockedStatus.data.account_status,'suspended');
+assert.equal(lockedStatus.data.pending_withdrawals,1);
+assert.match(lockedStatus.data.reason,/đối chiếu giao dịch/);
+assert.equal(lockedStatus.data.withdrawals[0].status,'pending');
+assert.equal((await call('/api/me','GET',undefined,heldMember.cookie)).status,403);
+const verifiedLockedLogin=await call('/api/auth/login','POST',{
+ email:'network-member-0@example.com',password:'network-test-password-2026'
+});
+assert.equal(verifiedLockedLogin.status,403);
+assert.equal(verifiedLockedLogin.data.account_status,'suspended');
+assert.equal(verifiedLockedLogin.data.pending_withdrawals,1);
+assert.equal((await call('/api/withdrawals','POST',{
+ amount:10,payment_method:'bank',bank_name:'BIDV',
+ bank_account:'1234567890',bank_owner:'NETWORK MEMBER'
+},heldMember.cookie)).status,403);
+assert.equal((await call('/api/admin/withdrawals/'+heldWithdrawal.data.id,'POST',
+ {status:'approved'},admCookie)).status,409);
+assert.equal((await call('/api/admin/withdrawals/'+heldWithdrawal.data.id,'POST',
+ {status:'paid',admin_note:'No proof of payment'},admCookie)).status,409);
+const adminHeld=await call('/api/admin/withdrawals','GET',undefined,admCookie);
+assert.equal(adminHeld.data.withdrawals.find(w=>w.id===heldWithdrawal.data.id).account_status,'suspended');
+assert.equal(sqlite.prepare('SELECT status FROM withdrawals WHERE id=?').get(heldWithdrawal.data.id).status,'pending');
+assert.equal(sqlite.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM wallet_entries WHERE user_id=?").get(heldMember.id).n,10);
+assert.equal((await call('/api/admin/users/'+heldMember.id,'PATCH',{status:'active'},admCookie)).status,200);
+assert.equal((await call('/api/account-status','GET',undefined,heldMember.cookie)).data.account_status,'active');
+assert.equal((await call('/api/admin/withdrawals/'+heldWithdrawal.data.id,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+heldWithdrawal.data.id,'POST',{
+ status:'paid',admin_note:'Paid and verified by administrator'
+},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,heldMember.cookie)).data.balance,10);
+console.log('PASS: IPv4 and IPv6 /64 severity alerts, unverified IPv4 limited, suspended status, unpaid withdrawals held, reactivation restores payout flow.');
+
