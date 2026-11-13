@@ -142,7 +142,7 @@
   "Cài đặt": "Kev teeb tsa",
   "Hồ sơ của tôi": "Kuv tus as khauj",
   "BẢNG QUẢN TRỊ": "PHAJ TSWJ HWM",
-  "KHÔNG GIAN THÀNH VIÊN": "CHAW TS​WV CUAB",
+  "KHÔNG GIAN THÀNH VIÊN": "CHAW TSWV CUAB",
   "Bảng điều khiển": "Nplooj tswj",
   "Quản lý minh bạch • Cập nhật theo dữ liệu thật": "Tswj meej • Siv ntaub ntawv tiag",
   "TRẠM CÓ LÚA • HỆ THỐNG THÀNH VIÊN": "TRẠM CÓ LÚA • KEV TSWJ TSWV CUAB",
