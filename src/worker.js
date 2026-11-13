@@ -6,12 +6,16 @@ const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
 // Phân biệt lý do STK sai mà không phải đổi CHECK constraint của D1 đang hoạt động.
 const INVALID_BANK_ACCOUNT_PREFIX = '[TL_INVALID_BANK_ACCOUNT] ';
-const invalidBankAccountNote = 'Số tài khoản không đúng. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin ngân hàng chính xác.';
+const WITHDRAWAL_APPROVED_PREFIX = '[TL_WITHDRAWAL_APPROVED] ';
+const invalidBankAccountNote = 'Số tài khoản hoặc thông tin nhận tiền không đúng. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin chính xác.';
 function presentWithdrawal(w) {
-  if (w?.status === 'rejected' && String(w.admin_note || '').startsWith(INVALID_BANK_ACCOUNT_PREFIX)) {
-    return { ...w, status: 'invalid_account', admin_note: w.admin_note.slice(INVALID_BANK_ACCOUNT_PREFIX.length) };
-  }
-  return w;
+  if (!w) return w;
+  const method = w.bank_name === 'ZaloPay' ? 'zalopay' : 'bank';
+  if (w.status === 'pending' && String(w.admin_note || '').startsWith(WITHDRAWAL_APPROVED_PREFIX))
+    return { ...w, payment_method: method, status: 'approved', admin_note: w.admin_note.slice(WITHDRAWAL_APPROVED_PREFIX.length) };
+  if (w.status === 'rejected' && String(w.admin_note || '').startsWith(INVALID_BANK_ACCOUNT_PREFIX))
+    return { ...w, payment_method: method, status: 'invalid_account', admin_note: w.admin_note.slice(INVALID_BANK_ACCOUNT_PREFIX.length) };
+  return { ...w, payment_method: method };
 }
 const DEFAULTS = {
   site_name: 'Trạm Lúa', signup_enabled: '1', checkin_reward: '0',
@@ -932,8 +936,18 @@ async function handler(req, env) {
     if (settings.withdrawals_enabled !== '1' || rate <= 0) fail(403, 'Admin chưa bật chức năng rút tiền hoặc chưa đặt tỷ giá.');
     if (!positive(amount, 1000000000) || amount < int(settings.min_withdraw_lua)) fail(400, `Yêu cầu tối thiểu ${settings.min_withdraw_lua} Lúa.`);
     if (amount % rate !== 0) fail(400, `Số Lúa cần chia hết cho ${rate} để quy đổi ra VNĐ.`);
-    const bank = str(b.bank_name, 90), account = str(b.bank_account, 40), owner = str(b.bank_owner, 100);
-    if (bank.length < 2 || !/^[0-9]{5,30}$/.test(account) || owner.length < 3) fail(400, 'Thông tin ngân hàng chưa hợp lệ.');
+    // Dùng các cột ngân hàng sẵn có để lưu 2 kênh nhận tiền, không cần migration D1.
+    // Dữ liệu cũ không có payment_method vẫn được hiểu là chuyển khoản ngân hàng.
+    const method = str(b.payment_method || 'bank', 20);
+    if (!['bank','zalopay'].includes(method)) fail(400, 'Phương thức nhận tiền không hợp lệ.');
+    const bank = method === 'zalopay' ? 'ZaloPay' :
+      str(b.bank_name === 'other' ? b.bank_other : b.bank_name, 90);
+    const account = method === 'zalopay' ? str(b.zalopay_phone, 40) : str(b.bank_account, 40);
+    const owner = method === 'zalopay' ? str(b.zalopay_owner, 100) : str(b.bank_owner, 100);
+    if (method === 'bank' && (bank.length < 2 || bank.toLowerCase() === 'zalopay' || !/^[0-9]{5,30}$/.test(account) || owner.length < 3))
+      fail(400, 'Thông tin tài khoản ngân hàng chưa hợp lệ.');
+    if (method === 'zalopay' && (!/^0[0-9]{9}$/.test(account) || owner.length < 3))
+      fail(400, 'Vui lòng nhập số điện thoại ZaloPay Việt Nam gồm 10 số và tên người nhận.');
     const wid = id();
     const results = await env.DB.batch([
       env.DB.prepare(`INSERT INTO withdrawals(id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner)
@@ -955,7 +969,7 @@ async function handler(req, env) {
         "SELECT COUNT(*) n FROM users WHERE role='member'",
         'SELECT COUNT(*) n FROM tasks WHERE is_active=1',
         "SELECT COUNT(*) n FROM task_completions WHERE status='pending'",
-        "SELECT COUNT(*) n FROM withdrawals WHERE status='pending'",
+        "SELECT COUNT(*) n FROM withdrawals WHERE status='pending' AND admin_note NOT LIKE '[TL_WITHDRAWAL_APPROVED] %'",
         "SELECT COALESCE(SUM(amount),0) n FROM wallet_entries WHERE amount>0",
         "SELECT COUNT(*) n FROM risk_events WHERE date(created_at,'+7 hours')=date('now','+7 hours')"
       ];
@@ -1062,16 +1076,32 @@ async function handler(req, env) {
     const wd = p.match(/^\/api\/admin\/withdrawals\/([^/]+)$/);
     if (m === 'POST' && wd) {
       const b = await readBody(req), status = str(b.status, 20), note = str(b.admin_note, 500);
-      if (!['paid', 'rejected', 'invalid_account'].includes(status)) fail(400, 'Trạng thái rút tiền không hợp lệ.');
+      if (!['approved','paid','rejected','invalid_account'].includes(status)) fail(400, 'Trạng thái rút tiền không hợp lệ.');
       if (status === 'rejected' && !note) fail(400, 'Cần lý do khi từ chối.');
-      // STK sai là một lý do từ chối riêng cho khách; vẫn lưu rejected để
-      // tương thích D1 hiện tại và đảm bảo hoàn Lúa đúng một lần.
-      const dbStatus = status === 'invalid_account' ? 'rejected' : status;
-      const dbNote = status === 'invalid_account' ? INVALID_BANK_ACCOUNT_PREFIX + invalidBankAccountNote : note;
+      if (status === 'paid' && !note) fail(400, 'Nhập mã giao dịch hoặc ghi chú thanh toán thật trước khi xác nhận.');
       const w = await env.DB.prepare('SELECT * FROM withdrawals WHERE id=?').bind(wd[1]).first();
       if (!w || w.status !== 'pending') fail(409, 'Yêu cầu không còn chờ xử lý.');
+      const wasApproved = String(w.admin_note || '').startsWith(WITHDRAWAL_APPROVED_PREFIX);
+      if (status === 'approved' && wasApproved) fail(409, 'Yêu cầu đã được duyệt trước đó.');
+      if (status === 'paid' && !wasApproved) fail(409, 'Bạn phải duyệt yêu cầu trước khi xác nhận đã thanh toán.');
+      if (status === 'approved') {
+        // Chưa thanh toán, chưa ghi thêm sổ ví. Prefix để giữ tương thích CHECK
+        // status đang có trên các D1 đã triển khai (pending/paid/rejected).
+        const approvedNote = WITHDRAWAL_APPROVED_PREFIX + 'Đã duyệt, đang chờ thanh toán.';
+        const result = await env.DB.prepare(`UPDATE withdrawals SET admin_note=?
+          WHERE id=? AND status='pending' AND admin_note NOT LIKE '[TL_WITHDRAWAL_APPROVED] %'`)
+          .bind(approvedNote, w.id).run();
+        if (!result.meta?.changes) fail(409, 'Yêu cầu đã thay đổi, vui lòng tải lại.');
+        await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:approved`);
+        return json({ ok: true, message: 'Đã duyệt yêu cầu, đang chờ chuyển tiền.' });
+      }
+      const dbStatus = status === 'invalid_account' ? 'rejected' : status;
+      const dbNote = status === 'invalid_account' ? INVALID_BANK_ACCOUNT_PREFIX + invalidBankAccountNote : note;
+      const condition = status === 'paid'
+        ? " AND admin_note LIKE '[TL_WITHDRAWAL_APPROVED] %'" : '';
       const results = await env.DB.batch([
-        env.DB.prepare("UPDATE withdrawals SET status=?,admin_note=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
+        env.DB.prepare(`UPDATE withdrawals SET status=?,admin_note=?,reviewed_at=CURRENT_TIMESTAMP
+          WHERE id=? AND status='pending'${condition}`)
           .bind(dbStatus, dbNote, w.id),
         env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
           SELECT ?,?,?,'Hoàn Lúa do từ chối rút','withdraw_refund',? WHERE ?='rejected' AND EXISTS
@@ -1079,9 +1109,9 @@ async function handler(req, env) {
           ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
           .bind(id(), w.user_id, w.amount, w.id, dbStatus, w.id)
       ]);
-      if (!results[0].meta?.changes) fail(409, 'Yêu cầu đã được xử lý.');
+      if (!results[0].meta?.changes) fail(409, 'Yêu cầu đã được xử lý hoặc thay đổi.');
       await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:${status}`);
-      return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu chuyển tiền. Hãy đối chiếu giao dịch ngân hàng.' : status === 'invalid_account' ? 'Đã báo số tài khoản không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
+      return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu thanh toán. Giao dịch đã được đối chiếu.' : status === 'invalid_account' ? 'Đã báo thông tin nhận tiền không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
     }
     if (m === 'GET' && p === '/api/admin/risk-events') {
       const risks = await env.DB.prepare('SELECT r.*,u.email,u.name FROM risk_events r LEFT JOIN users u ON u.id=r.user_id ORDER BY r.created_at DESC LIMIT 150').all();
