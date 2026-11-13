@@ -226,6 +226,118 @@ function computeFraudProfiles(users,events,withdrawals,completions){
    network_shared_accounts:networks,claims_last_hour:claims};
  }).sort((a,b)=>b.score-a.score||a.email.localeCompare(b.email));
 }
+// Tập hợp quan hệ từ các phiên truy cập đã được máy chủ ghi nhận.
+// Mã trình duyệt là giá trị có thể bị xóa/giả mạo, KHÔNG phải mã IMEI.
+// IP giống nhau, nhất là IPv6 /64, chỉ phản ánh chung đường mạng.
+function buildFraudConnections(rows){
+ const byAccount=new Map(),byNetwork=new Map(),byBrowser=new Map();
+ const acct=(r)=>{
+  if(!byAccount.has(r.user_id))byAccount.set(r.user_id,{
+   id:r.user_id,name:r.name||'',email:r.email||'',networks:new Set(),browsers:new Set()
+  });
+  return byAccount.get(r.user_id);
+ };
+ const group=(map,key,type)=>{
+  if(!map.has(key))map.set(key,{
+   value:key,type,accounts:new Set(),browsers:new Set(),networks:new Set(),last_seen:''
+  });
+  return map.get(key);
+ };
+ for(const r of rows){
+  if(!r.user_id)continue;
+  const account=acct(r),rawIp=String(r.ip||'');
+  const net=rawIp.includes(':')?ipv6Network(rawIp):isPublicIPv4(rawIp)?rawIp:null;
+  const browser=r.detail==='browser_id'&&/^[0-9A-F]{16}$/i.test(String(r.device_code||''))?
+    String(r.device_code).toUpperCase():'';
+  let networkGroup=null;
+  if(net){
+   const type=rawIp.includes(':')?'IPv6 /64':'IPv4';
+   networkGroup=group(byNetwork,net,type);
+   networkGroup.accounts.add(r.user_id);
+   account.networks.add(net);
+   if(browser)networkGroup.browsers.add(browser);
+   if(r.created_at&&r.created_at>networkGroup.last_seen)networkGroup.last_seen=r.created_at;
+  }
+  if(browser){
+   const g=group(byBrowser,browser,'browser');
+   g.accounts.add(r.user_id);
+   account.browsers.add(browser);
+   if(net)g.networks.add(net);
+   if(r.created_at&&r.created_at>g.last_seen)g.last_seen=r.created_at;
+  }
+ }
+ const related=(set,own)=>[...set].filter(id=>id!==own).map(id=>{
+  const a=byAccount.get(id);
+  return {user_id:id,name:a?.name||'',email:a?.email||''};
+ });
+ const networkList=[...byNetwork.values()].map(g=>({
+  address:g.value,ip_type:g.type,account_count:g.accounts.size,
+  device_count:g.browsers.size,last_seen:g.last_seen,
+  severity:g.accounts.size>=5&&g.browsers.size>=2?'serious':'review',
+  accounts:[...g.accounts].slice(0,15).map(id=>({
+   user_id:id,name:byAccount.get(id)?.name||'',email:byAccount.get(id)?.email||''
+  }))
+ })).sort((a,b)=>b.device_count-a.device_count||b.account_count-a.account_count);
+ const browserList=[...byBrowser.values()].map(g=>({
+  device_code:g.value,account_count:g.accounts.size,network_count:g.networks.size,
+  networks:[...g.networks].slice(0,8),last_seen:g.last_seen,
+  severity:g.accounts.size>=5?'serious':'review',
+  accounts:[...g.accounts].slice(0,15).map(id=>({
+   user_id:id,name:byAccount.get(id)?.name||'',email:byAccount.get(id)?.email||''
+  }))
+ })).sort((a,b)=>b.account_count-a.account_count||b.network_count-a.network_count);
+ const accounts={};
+ for(const a of byAccount.values()){
+  const networks=[...a.networks].map(key=>byNetwork.get(key)).filter(Boolean);
+  const browsers=[...a.browsers].map(key=>byBrowser.get(key)).filter(Boolean);
+  const sameBrowser=new Set(),sameIP=new Set(),matches=new Map();
+  const remember=(people,why)=>{
+   for(const person of people){
+    if(!matches.has(person.user_id))matches.set(person.user_id,{...person,reasons:[]});
+    if(!matches.get(person.user_id).reasons.includes(why))matches.get(person.user_id).reasons.push(why);
+   }
+  };
+  for(const g of networks){const people=related(g.accounts,a.id);
+   people.forEach(x=>sameIP.add(x.user_id));
+   if(people.length)remember(people,'Chung IP/dải mạng');
+  }
+  for(const g of browsers){const people=related(g.accounts,a.id);
+   people.forEach(x=>sameBrowser.add(x.user_id));
+   if(people.length)remember(people,'Chung mã trình duyệt');
+  }
+  accounts[a.id]={
+   ip_count:a.networks.size,device_count:a.browsers.size,
+   shared_ip_accounts:sameIP.size,shared_device_accounts:sameBrowser.size,
+   max_devices_same_ip:networks.reduce((max,g)=>Math.max(max,g.browsers.size),0),
+   networks:networks.map(g=>({
+    address:g.value,ip_type:g.type,account_count:g.accounts.size,
+    device_count:g.browsers.size,other_accounts:related(g.accounts,a.id).slice(0,10)
+   })).sort((x,y)=>y.device_count-x.device_count||y.account_count-x.account_count).slice(0,12),
+   browsers:browsers.map(g=>({
+    device_code:g.value,account_count:g.accounts.size,network_count:g.networks.size,
+    other_accounts:related(g.accounts,a.id).slice(0,10)
+   })).sort((x,y)=>y.account_count-x.account_count).slice(0,12),
+   related_accounts:[...matches.values()].sort((x,y)=>y.reasons.length-x.reasons.length)
+    .slice(0,20)
+  };
+ }
+ return {
+  by_account:accounts,
+  shared_networks:networkList.filter(x=>x.account_count>=2||x.device_count>=2).slice(0,80),
+  shared_browsers:browserList.filter(x=>x.account_count>=2).slice(0,80),
+  observed_accounts:byAccount.size,
+  sampled_events:rows.length
+ };
+}
+async function loadFraudConnections(env){
+ const rows=await env.DB.prepare(`SELECT r.user_id,r.ip,r.device_code,r.detail,r.created_at,
+     u.name,u.email FROM risk_events r JOIN users u ON u.id=r.user_id
+    WHERE r.event_type='device_seen' AND r.user_id IS NOT NULL
+      AND r.created_at>=datetime('now','-30 days')
+    ORDER BY r.created_at DESC LIMIT 5000`).all();
+ return buildFraudConnections(rows.results);
+}
+
 async function loadFraudProfiles(env,targetId=null){
  // Các giới hạn bảo vệ D1 Free: không quét toàn bộ lịch sử của site.
  // Khi chấm điểm cho một yêu cầu rút, luôn nạp đúng tài khoản đích dù cũ.
