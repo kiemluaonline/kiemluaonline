@@ -1454,7 +1454,13 @@ async function handler(req, env) {
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 150`).all();
-      return json({ reviews: rows.results.map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})) });
+      const pendingErase = await env.DB.prepare(`SELECT COUNT(*) AS n FROM task_completions
+        WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
+        .bind(PROOF_REMOVED_MARKER).first();
+      return json({
+        reviews: rows.results.map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})),
+        processed_evidence_count: Number(pendingErase.n) || 0
+      });
     }
     // Chỉ xóa tệp/ghi chú sau khi Admin ra quyết định. Giữ nguyên trạng thái,
     // lịch sử nhiệm vụ, giới hạn lượt và sổ Lúa để tránh làm sai số dư.
@@ -1462,6 +1468,14 @@ async function handler(req, env) {
       const b=await readBody(req);
       if(b.confirm!=='DELETE_REVIEWED_EVIDENCE')
         fail(400,'Cần xác nhận thao tác xóa bằng chứng đã xử lý.');
+      const expected=Number(b.expected_count);
+      if(!Number.isSafeInteger(expected)||expected<1)
+        fail(400,'Cần xác nhận số lượng bằng chứng muốn xóa.');
+      const actual=await env.DB.prepare(`SELECT COUNT(*) AS n FROM task_completions
+        WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
+        .bind(PROOF_REMOVED_MARKER).first();
+      if(Number(actual.n)!==expected)
+        fail(409,'Số lượng bằng chứng đã thay đổi. Vui lòng tải lại danh sách và kiểm tra trước khi xóa.');
       const result=await env.DB.prepare(`UPDATE task_completions SET evidence=?
         WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
         .bind(PROOF_REMOVED_MARKER,PROOF_REMOVED_MARKER).run();
