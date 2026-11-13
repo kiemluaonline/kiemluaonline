@@ -550,7 +550,7 @@ async function signupRateLimit(env,req,email=''){
 }
 
 function ensurePassword(password) {
-  if (typeof password !== 'string' || password.length < 10 || password.length > 128) fail(400, 'Mật khẩu phải có 10–128 ký tự.');
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) fail(400, 'Mật khẩu phải có 8–128 ký tự.');
 }
 async function registerUser(env, params) {
   const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
@@ -558,10 +558,15 @@ async function registerUser(env, params) {
   const entry=env.DB.prepare(`INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at)
       VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(userId,params.email,params.name,
     await passwordDigest(params.password,salt),salt,params.role||'member',referralCode(),params.referredBy||null,params.ip,params.role==='admin'?null:new Date().toISOString());
-  if(params.role!=='admin'&&gmailDomain(normEmail(params.email).split('@')[1])){
-    await env.DB.batch([entry,env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
-      .bind('gmail_claim:'+await hash(canonicalEmail(params.email)),userId)]);
-  }else await entry.run();
+  const additional=[];
+  if(params.username)additional.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
+    .bind('login_username:'+params.username,userId));
+  if(params.role!=='admin'&&gmailDomain(normEmail(params.email).split('@')[1]))
+    additional.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
+      .bind('gmail_claim:'+await hash(canonicalEmail(params.email)),userId));
+  // D1 batch giao dịch: không bao giờ tạo tài khoản nửa chừng nếu tên đăng nhập trùng.
+  if(additional.length)await env.DB.batch([entry,...additional]);
+  else await entry.run();
   return userId;
 }
 
@@ -860,7 +865,11 @@ async function handler(req, env) {
   if (m === 'POST' && p === '/api/auth/register') {
     const b = await readBody(req), settings = await getSettings(env);
     if (settings.signup_enabled !== '1') fail(403, 'Hệ thống tạm khóa đăng ký.');
-    const email = normEmail(b.email), password = b.password, name = str(b.name, 70);
+    const email = normEmail(b.email), password = b.password;
+    const username=String(b.username||'').trim().toLowerCase();
+    const name=username||str(b.name,70);
+    if(b.username!==undefined&&!/^[a-z0-9]{4,20}$/.test(username))
+      fail(400,'Tên đăng nhập phải dài 4–20 ký tự, chỉ gồm a-z và 0-9.');
     if (b.accept_terms !== 'yes') fail(400, 'Bạn cần đồng ý với điều khoản và chính sách dữ liệu.');
     ensureEmail(email); ensurePassword(password);
     preventDisposable(email);
@@ -870,10 +879,20 @@ async function handler(req, env) {
     const ip=clientIP(req);
     await signupRateLimit(env,req,email);
     if(await registeredEmail(env,email))fail(409,'Email đã được đăng ký hoặc trùng biến thể Gmail.');
+    if(username){
+      const existed=await env.DB.prepare('SELECT id FROM users WHERE lower(name)=? LIMIT 1').bind(username).first();
+      if(existed)fail(409,'Tên đăng nhập đã có người sử dụng, vui lòng chọn tên khác.');
+    }
     const ref = str(b.referral_code, 30).toUpperCase();
     const refUser = ref ? await env.DB.prepare('SELECT id FROM users WHERE referral_code=? AND status=\'active\'').bind(ref).first() : null;
     if (ref && !refUser) fail(400, 'Mã giới thiệu không tồn tại.');
-    const userId = await registerUser(env, { email, password, name, role: 'member', ip, referredBy: refUser?.id });
+    let userId;
+    try{
+      userId=await registerUser(env,{ email,password,name,username,role:'member',ip,referredBy:refUser?.id });
+    }catch(err){
+      if(username&&/UNIQUE constraint failed: settings\.key/i.test(String(err)))fail(409,'Tên đăng nhập đã được sử dụng.');
+      throw err;
+    }
     await event(env,req,'signup_completed',userId,'email_password');
     return json({ ok: true, message: 'Đăng ký thành công.' }, 201, { 'Set-Cookie': await createSession(req, env, userId) });
   }
@@ -1038,12 +1057,19 @@ async function handler(req, env) {
   }
 
   if (m === 'POST' && p === '/api/auth/login') {
-    const b = await readBody(req), email = normEmail(b.email), password = String(b.password || '');
+    const b = await readBody(req), identifier=String(b.email||'').trim().toLowerCase();
+    const email=identifier.includes('@')?normEmail(identifier):identifier;
+    const password=String(b.password||'');
     const ip = clientIP(req);
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM login_attempts WHERE ip=? AND success=0 AND created_at>=datetime('now','-15 minutes')").bind(ip).first();
     if (n.n >= 12) fail(429, 'Đăng nhập sai quá nhiều. Vui lòng thử sau 15 phút.');
-    const user = await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
-    const correct = user && password && await checkPassword(password, user);
+    let user=null;
+    if(email.includes('@'))user=await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
+    else if(/^[a-z0-9]{4,20}$/.test(email)){
+      const record=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('login_username:'+email).first();
+      if(record)user=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(record.value).first();
+    }
+    const correct = user && password && await checkPassword(password,user);
     await env.DB.prepare('INSERT INTO login_attempts(id,ip,email,success) VALUES(?,?,?,?)').bind(id(), ip, email, correct ? 1 : 0).run();
     if (!correct) { await event(env, req, 'login_failed', user?.id || null, email); fail(401, 'Email hoặc mật khẩu không đúng.'); }
     if (user.status !== 'active')
