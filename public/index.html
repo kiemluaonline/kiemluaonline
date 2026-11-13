@@ -3,14 +3,125 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0c2925">
-  <meta name="description" content="Nền tảng nhiệm vụ, tích Lúa và quản lý thành viên minh bạch.">
-  <title>Trạm Lúa · Nhiệm vụ & tích điểm</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta name="theme-color" content="#103f32">
+  <meta name="description" content="Trạm Có Lúa – nền tảng nhiệm vụ trực tuyến. Khám phá nhiệm vụ App, Link, Video; hoàn thành yêu cầu, tích lũy điểm Lúa và theo dõi lịch sử nhận thưởng minh bạch.">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="vi_VN">
+  <meta property="og:site_name" content="Trạm Có Lúa">
+  <meta property="og:title" content="Trạm Có Lúa | Làm nhiệm vụ, tích Lúa mỗi ngày">
+  <meta property="og:description" content="Khám phá nhiệm vụ trực tuyến, tích lũy Lúa khi kết quả được xác nhận và theo dõi thưởng minh bạch.">
+  <meta property="og:url" content="https://nhiemvu.click/">
+  <meta name="twitter:card" content="summary">
+  <link rel="canonical" href="https://nhiemvu.click/">
+  <title>Trạm Có Lúa – Làm nhiệm vụ, tích Lúa mỗi ngày</title>
+  <link rel="stylesheet" href="/style.css?v=20261113-welcome">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Trạm Có Lúa","url":"https://nhiemvu.click/","description":"Nền tảng nhiệm vụ trực tuyến và tích lũy điểm Lúa."}</script>
 </head>
 <body>
-  <div id="app" class="app-loading"><span class="spinner"></span><p>Đang tải hệ thống…</p></div>
+  <div id="app">
+    <div class="welcome-site">
+      <header class="welcome-header">
+        <div class="welcome-wrap welcome-nav">
+          <a class="welcome-logo" href="/" aria-label="Trạm Có Lúa, về đầu trang">
+            <span class="welcome-logo-icon" aria-hidden="true">🌾</span>
+            <span class="welcome-logo-name">Trạm Có Lúa<small>NỀN TẢNG NHIỆM VỤ</small></span>
+          </a>
+          <nav class="welcome-links" aria-label="Điều hướng trang chủ">
+            <a href="#nhiem-vu">Nhiệm vụ</a>
+            <a href="#cach-hoat-dong">Cách hoạt động</a>
+            <a href="#cau-hoi">Hỏi đáp</a>
+          </nav>
+          <div class="welcome-nav-actions">
+            <button class="welcome-link-login" type="button" data-action="open-auth" data-auth-mode="login">Đăng nhập</button>
+            <button class="welcome-btn welcome-btn-primary welcome-nav-signup" type="button" data-action="open-auth" data-auth-mode="register">Đăng ký <span aria-hidden="true">↗</span></button>
+          </div>
+        </div>
+      </header>
+      <main>
+        <section class="welcome-hero" aria-labelledby="welcome-heading">
+          <div class="welcome-wrap welcome-hero-grid">
+            <div class="welcome-hero-copy">
+              <span class="welcome-pill"><span class="welcome-pill-dot"></span> Khám phá cơ hội tích Lúa mỗi ngày</span>
+              <h1 id="welcome-heading">Làm nhiệm vụ.<br><span>Tích Lúa.</span><br>Nhận thành quả.</h1>
+              <p class="welcome-lead">Một nơi để khám phá các nhiệm vụ trực tuyến, theo dõi kết quả và tích lũy Lúa khi nhiệm vụ được xác nhận hợp lệ.</p>
+              <div class="welcome-hero-actions">
+                <button class="welcome-btn welcome-btn-primary welcome-btn-large" type="button" data-action="open-auth" data-auth-mode="register">Bắt đầu miễn phí <span aria-hidden="true">↗</span></button>
+                <a class="welcome-btn welcome-btn-outline welcome-btn-large" href="#cach-hoat-dong">Tìm hiểu cách hoạt động <span aria-hidden="true">↓</span></a>
+              </div>
+              <div class="welcome-hero-assurance"><span>✓ Đăng ký tài khoản miễn phí</span><span>✓ Lịch sử điểm Lúa rõ ràng</span></div>
+            </div>
+            <div class="welcome-hero-art" aria-hidden="true">
+              <div class="welcome-art-orb welcome-orb-one"></div>
+              <div class="welcome-art-orb welcome-orb-two"></div>
+              <div class="welcome-art-main">
+                <div class="welcome-art-label"><span>🌾</span> HÀNH TRÌNH TÍCH LÚA</div>
+                <div class="welcome-art-title">Mỗi nhiệm vụ nhỏ,<br>một bước tiến mới.</div>
+                <div class="welcome-art-task"><span class="welcome-art-icon">📱</span><div><b>Khám phá ứng dụng</b><small>Thực hiện theo hướng dẫn</small></div><span class="welcome-art-check">✓</span></div>
+                <div class="welcome-art-task"><span class="welcome-art-icon">🔗</span><div><b>Nhiệm vụ liên kết</b><small>Gửi kết quả để xác minh</small></div><span class="welcome-art-check">✓</span></div>
+                <div class="welcome-art-task"><span class="welcome-art-icon">🎬</span><div><b>Nội dung video</b><small>Hoàn thành yêu cầu</small></div><span class="welcome-art-check">✓</span></div>
+                <div class="welcome-art-footer"><span>🔒</span> Tiến độ &amp; thưởng được ghi nhận trong tài khoản</div>
+              </div>
+              <div class="welcome-float-card welcome-float-grain"><span>🌱</span> Bắt đầu từ những điều nhỏ</div>
+              <div class="welcome-art-sprig">✺</div>
+            </div>
+          </div>
+          <div class="welcome-wave" aria-hidden="true"></div>
+        </section>
+        <section id="nhiem-vu" class="welcome-section welcome-types" aria-labelledby="types-heading">
+          <div class="welcome-wrap">
+            <div class="welcome-section-head"><span class="welcome-eyebrow">KHÁM PHÁ NHIỆM VỤ</span><h2 id="types-heading">Nhiều cách tham gia,<br><em>một hành trình tích Lúa.</em></h2>
+              <p>Chọn nhiệm vụ phù hợp và làm theo hướng dẫn. Điều kiện và mức Lúa cụ thể được hiển thị trong tài khoản.</p></div>
+            <div class="welcome-type-grid">
+              <article class="welcome-type-card"><span class="welcome-type-icon mint">📱</span><h3>Nhiệm vụ App</h3><p>Khám phá ứng dụng, đăng ký hoặc thực hiện các bước được yêu cầu.</p><span class="welcome-type-footer">Làm theo hướng dẫn <span>↗</span></span></article>
+              <article class="welcome-type-card"><span class="welcome-type-icon cream">🔗</span><h3>Nhiệm vụ Link</h3><p>Truy cập liên kết, thực hiện yêu cầu và gửi kết quả xác minh.</p><span class="welcome-type-footer">Hoàn thành liên kết <span>↗</span></span></article>
+              <article class="welcome-type-card"><span class="welcome-type-icon peach">🎬</span><h3>Nhiệm vụ Video</h3><p>Xem nội dung và đáp ứng thời gian hoặc điều kiện được công bố.</p><span class="welcome-type-footer">Khám phá nội dung <span>↗</span></span></article>
+              <article class="welcome-type-card"><span class="welcome-type-icon lilac">✨</span><h3>Nhiệm vụ Khác</h3><p>Tham gia các hoạt động mới do quản trị viên đăng tải khi có sẵn.</p><span class="welcome-type-footer">Xem hoạt động <span>↗</span></span></article>
+            </div>
+          </div>
+        </section>
+        <section id="cach-hoat-dong" class="welcome-section welcome-how" aria-labelledby="how-heading">
+          <div class="welcome-wrap">
+            <div class="welcome-section-head"><span class="welcome-eyebrow">DỄ DÀNG BẮT ĐẦU</span><h2 id="how-heading">Chỉ ba bước để<br><em>bắt đầu tích Lúa.</em></h2></div>
+            <div class="welcome-step-grid">
+              <article class="welcome-step"><span class="welcome-step-number">01</span><span class="welcome-step-symbol">👤</span><h3>Tạo tài khoản</h3><p>Đăng ký bằng email hoặc tiếp tục với Google khi tính năng được bật.</p></article>
+              <article class="welcome-step"><span class="welcome-step-number">02</span><span class="welcome-step-symbol">✅</span><h3>Hoàn thành nhiệm vụ</h3><p>Đọc yêu cầu, thực hiện và gửi bằng chứng khi nhiệm vụ cần xét duyệt.</p></article>
+              <article class="welcome-step"><span class="welcome-step-number">03</span><span class="welcome-step-symbol">🌾</span><h3>Tích lũy điểm Lúa</h3><p>Nhận Lúa khi kết quả hợp lệ và theo dõi số dư, lịch sử ngay trong tài khoản.</p></article>
+            </div>
+          </div>
+        </section>
+        <section class="welcome-section welcome-trust" aria-labelledby="trust-heading">
+          <div class="welcome-wrap welcome-trust-grid">
+            <div class="welcome-trust-badge" aria-hidden="true"><span>🛡️</span><div>Minh bạch<br>&amp; an toàn</div></div>
+            <div><span class="welcome-eyebrow">RÕ RÀNG TỪNG BƯỚC</span><h2 id="trust-heading">Bạn luôn biết<br>điểm Lúa đến từ đâu.</h2><p>Nhiệm vụ có hướng dẫn và trạng thái xử lý. Bạn có thể xem lịch sử tích Lúa và gửi yêu cầu quy đổi khi chương trình cho phép, theo điều kiện đã công bố.</p>
+              <div class="welcome-trust-tags"><span>✓ Theo dõi lịch sử</span><span>✓ Kiểm tra kết quả</span><span>✓ Bảo vệ tài khoản</span></div>
+            </div>
+          </div>
+        </section>
+        <section id="cau-hoi" class="welcome-section welcome-faq" aria-labelledby="faq-heading">
+          <div class="welcome-wrap welcome-faq-grid">
+            <div><span class="welcome-eyebrow">CÂU HỎI THƯỜNG GẶP</span><h2 id="faq-heading">Bạn đang thắc mắc?</h2><p>Những điều nên biết trước khi bắt đầu.</p></div>
+            <div class="welcome-faq-list">
+              <details><summary>Đăng ký Trạm Có Lúa có mất phí không?<span>+</span></summary><p>Không mất phí để tạo tài khoản. Bạn có thể đăng ký bằng email/mật khẩu hoặc đăng nhập Google khi được hỗ trợ.</p></details>
+              <details><summary>Làm nhiệm vụ xong có nhận Lúa ngay không?<span>+</span></summary><p>Tùy từng nhiệm vụ. Một số nhiệm vụ cần Admin kiểm tra bằng chứng trước khi cộng Lúa; điều kiện được nêu trong phần nhiệm vụ.</p></details>
+              <details><summary>Lúa có phải tiền mặt không?<span>+</span></summary><p>Không. Lúa là điểm nội bộ. Yêu cầu quy đổi chỉ khả dụng khi hệ thống bật tính năng, có tỷ giá và đáp ứng điều kiện thanh toán đã công bố.</p></details>
+              <details><summary>Tôi có thể theo dõi kết quả ở đâu?<span>+</span></summary><p>Sau khi đăng nhập, bạn có thể xem nhiệm vụ, ví Lúa, lịch sử và trạng thái yêu cầu rút tiền tại khu vực thành viên.</p></details>
+            </div>
+          </div>
+        </section>
+        <section class="welcome-final"><div class="welcome-wrap"><div class="welcome-final-inner">
+          <div><span class="welcome-eyebrow">CÙNG BẮT ĐẦU NÀO</span><h2>Trạm đã sẵn sàng.<br><span>Bạn đã sẵn sàng chưa?</span></h2><p>Khám phá những nhiệm vụ phù hợp với bạn và bắt đầu tích lũy từng điểm Lúa.</p></div>
+          <button class="welcome-btn welcome-btn-gold welcome-btn-large" type="button" data-action="open-auth" data-auth-mode="register">Tham gia Trạm Có Lúa <span aria-hidden="true">↗</span></button>
+        </div></div></section>
+      </main>
+      <footer class="welcome-footer"><div class="welcome-wrap">
+        <div class="welcome-footer-top"><a class="welcome-logo" href="/"><span class="welcome-logo-icon" aria-hidden="true">🌾</span><span class="welcome-logo-name">Trạm Có Lúa<small>NỀN TẢNG NHIỆM VỤ</small></span></a><p>Làm nhiệm vụ • Tích Lúa • Nhận thành quả</p></div>
+        <div class="welcome-footer-bottom"><span>© Trạm Có Lúa · nhiemvu.click</span><nav aria-label="Thông tin pháp lý"><a href="/terms.html">Điều khoản sử dụng</a><a href="/privacy.html">Quyền riêng tư</a><a href="#cau-hoi">Câu hỏi thường gặp</a></nav></div>
+        <p class="welcome-disclaimer">Lúa là điểm tích lũy nội bộ, không phải tiền mặt. Các khoản thưởng và yêu cầu quy đổi phụ thuộc điều kiện được công bố; không cam kết thu nhập.</p>
+      </div></footer>
+    </div>
+  </div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/app.js?v=20261113-daily-reset"></script>
+  <script type="module" src="/app.js?v=20261113-welcome"></script>
 </body>
 </html>
