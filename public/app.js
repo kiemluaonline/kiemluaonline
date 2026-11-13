@@ -256,9 +256,44 @@ function showPastedIPv4(){
  copy.dataset.value=ipv4;copy.textContent='Sao chép IPv4';
  toast('Đã hiển thị IPv4 bạn cung cấp. Chưa được hệ thống xác minh.');
 }
+// Mã hiển thị cho quản trị: cùng dải IPv6 /64 có cùng mã 4 số.
+// Đây KHÔNG phải IPv4 thật hoặc công cụ suy ra IPv4 của khách.
+// Chống gian lận vẫn dùng IP thực tế đã lưu ở phía máy chủ.
+function ipv6NetworkPrefix(ip) {
+ const value=String(ip||'').trim().toLowerCase();
+ if(!value.includes(':')||value.includes('.'))return null;
+ if(!/^[0-9a-f:]+$/.test(value))return null;
+ const halves=value.split('::');
+ if(halves.length>2)return null;
+ const left=halves[0]?halves[0].split(':'):[];
+ const right=halves.length===2&&halves[1]?halves[1].split(':'):[];
+ const groups=halves.length===2
+   ?[...left,...Array(8-left.length-right.length).fill('0'),...right]
+   :left;
+ if(groups.length!==8||groups.some(g=>!/^[0-9a-f]{1,4}$/.test(g)))return null;
+ return groups.slice(0,4).map(g=>parseInt(g,16).toString(16)).join(':')+'::/64';
+}
+function ipv6GroupCode(ip) {
+ const network=ipv6NetworkPrefix(ip);
+ if(!network)return null;
+ // FNV-1a 32-bit deterministic, trong khoảng Class E: 240.0.0.0/4.
+ // Chỉ là nhãn để lọc/đối chiếu; có thể trùng mã giữa hai mạng khác nhau.
+ let hash=0x811c9dc5;
+ for(let i=0;i<network.length;i++){
+  hash=Math.imul(hash^network.charCodeAt(i),0x01000193)>>>0;
+ }
+ return [240+((hash>>>28)&15),(hash>>>16)&255,(hash>>>8)&255,hash&255].join('.');
+}
 const adminIP = ip => {
  const value=String(ip||'');
- return value.includes(':')?`<details class="risk-ip-details"><summary><code title="${esc(value)}">${esc(compactIP(value))}</code></summary><code>${esc(value)}</code><button type="button" data-action="copy-ip" data-value="${esc(value)}">Sao chép</button></details>`:`<code>${esc(value)}</code>`;
+ const network=ipv6NetworkPrefix(value);
+ const code=ipv6GroupCode(value);
+ if(!network||!code)return `<code>${esc(value||'—')}</code>`;
+ return `<div class="risk-ip-short">
+  <div class="risk-ip-identity"><span class="risk-ip-label">Mã nhóm IPv6 (4 số, không phải IPv4 thật)</span><code class="risk-ip-code">${esc(code)}</code><button type="button" data-action="copy-ip" data-value="${esc(code)}" aria-label="Sao chép mã nhóm">Sao chép mã</button></div>
+  <div class="risk-ip-network">Dải mạng: <code>${esc(network)}</code></div>
+  <details class="risk-ip-details"><summary>Xem IPv6 gốc</summary><code class="risk-ip-full">${esc(value)}</code><button type="button" data-action="copy-ip" data-value="${esc(value)}">Sao chép IP thật</button></details>
+ </div>`;
 };
 
 function taskDashboardCard(d,quotas={}){
@@ -533,7 +568,7 @@ async function adminTasks(){
 async function adminUsers(){
  const d=await api('/api/admin/users');
  return `${heading('Quản lý thành viên','Tra cứu tài khoản, số Lúa và tình trạng sử dụng.')}<section class="card">${table(['Thành viên','Tài khoản','Số dư','IP đăng ký','Trạng thái','Thao tác'],d.users.map(u=>`<tr>
- <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td><code>${esc(u.joined_ip)}</code></td><td>${chip(u.status)}</td>
+ <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip)}</td><td>${chip(u.status)}</td>
  <td>${u.role==='admin'?'Admin':`<button class="btn sm ${u.status==='active'?'danger':'alt'}" data-action="change-user" data-id="${esc(u.id)}" data-status="${u.status==='active'?'suspended':'active'}">${u.status==='active'?'Khóa':'Mở khóa'}</button>`}</td></tr>`))}</section>`;
 }
 async function adminReviews(){
@@ -557,7 +592,7 @@ async function adminWithdrawals(){
 async function adminSecurity(){
  const d=await api('/api/admin/risk-events');
  return `${heading('Chống gian lận','Ghi nhận sự kiện CAPTCHA sai, đăng nhập thất bại, hạn mức và IP nhiều tài khoản.')}
- <div class="callout">Dữ liệu IP/mã trình duyệt chỉ hỗ trợ đánh giá rủi ro; người dùng chung mạng hoặc thay đổi IP có thể trùng/đổi mã. Không nên tự động quy kết gian lận chỉ dựa trên IP.</div>
+ <div class="callout">IPv4 thật được hiển thị nguyên dạng. Với IPv6 dài, hệ thống hiển thị mã nhóm 4 số dễ tra cứu, có thể mở xem IP gốc và dải mạng /64. Mã nhóm là nhãn quản lý, KHÔNG phải IPv4 thật và có thể trùng. Không kết luận gian lận chỉ vì trùng mã, IP hoặc mã trình duyệt.</div>
  <section class="card section"><h3>⚠ Cảnh báo link rút gọn hôm nay</h3>
  <p><strong>${fmt(d.link_alert_count||0)}</strong> lượt bị chặn · <strong>${fmt(d.link_alert_accounts||0)}</strong> tài khoản · Đặt lại 00:00 giờ Việt Nam</p>
  <p class="note">Phát hiện tài khoản khác dùng chung IP hoặc mã trình duyệt. Đây là cảnh báo để Admin kiểm tra, chưa phải kết luận gian lận.</p>
