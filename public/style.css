@@ -211,3 +211,15 @@
 .task-security-full-ip code{font-size:11px}
 .task-security-compact .task-device-note{font-size:11px;line-height:1.5;margin:7px 0 0}
 @media(max-width:730px){.task-security-compact.card{padding:14px 15px;border-radius:14px}.task-security-compact .task-security-title{font-size:15px}.task-security-ip strong{font-size:15px}}
+
+/* Mã nhóm IPv6 chỉ để quản trị thuận tiện, không thay thế IP thật. */
+.risk-ip-short{display:flex;flex-direction:column;align-items:flex-start;gap:5px;max-width:300px;font-size:12px;line-height:1.45}
+.risk-ip-identity{display:flex;align-items:center;gap:5px 8px;flex-wrap:wrap}
+.risk-ip-label{width:100%;font-size:11px;font-weight:650;color:#6a8075}
+.risk-ip-code{font-size:14px;font-weight:850;color:#20533f;white-space:nowrap}
+.risk-ip-short button{border:1px solid #c4dbca;border-radius:8px;padding:4px 7px;background:white;color:#255943;cursor:pointer;font-size:11px}
+.risk-ip-network{font-size:11px;color:#638171;overflow-wrap:anywhere}
+.risk-ip-network code{font-size:11px}
+.risk-ip-details summary{font-size:11px;color:#25644c;cursor:pointer}
+.risk-ip-details[open]{display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.risk-ip-full{font-size:11px;overflow-wrap:anywhere;word-break:break-all;white-space:normal}
