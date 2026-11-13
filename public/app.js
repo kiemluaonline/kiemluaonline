@@ -238,14 +238,14 @@ function parsePastedIPv4(raw){
 function showPastedIPv4(){
  const input=document.getElementById('taskIPv4ManualInput');
  const ipv4=parsePastedIPv4(input?.value);
- if(!ipv4){toast('IPv4 không hợp lệ. Bạn hãy sao chép đúng kết quả từ ipify.',true);return;}
+ if(!ipv4){toast('IPv4 không hợp lệ. Vui lòng kiểm tra lại.',true);return;}
  const el=document.getElementById('taskDisplayIP');
  const label=document.getElementById('taskIPLabel');
  if(!el||!label)return;
  el.textContent=ipv4;
  label.textContent='IPv4 tự nhập • chưa được website xác minh';
  const note=document.getElementById('taskIPv4Help');
- if(note)note.textContent='Đây là địa chỉ bạn sao chép từ ipify, chỉ để hiển thị. Máy chủ vẫn dùng IP Cloudflare ghi nhận để đánh giá an toàn.';
+ if(note)note.textContent='';
  const existing=document.getElementById('taskCopyIPv4');
  const copy=existing||document.createElement('button');
  if(!existing){
@@ -286,19 +286,15 @@ function taskDashboardCard(d,quotas={}){
   <section class="card task-device-card task-security-compact" aria-label="Bảo vệ chống gian lận">
    <h3 class="task-security-title">🛡️ Bảo vệ chống gian lận</h3>
    <div class="task-security-ip"><span>IP hiện tại:</span> <strong id="taskDisplayIP">${esc(compactIP(d.ip))}</strong></div>
-   <p class="task-security-policy">Quota chặn theo mã thiết bị và địa chỉ IP — đổi IP/VPN/4G không giúp vượt giới hạn.</p>
    <div class="task-security-id"><span>Mã định danh:</span> <code>${esc(d.device_code||'—')}</code></div>
-   <p class="task-security-description">Hệ thống kiểm tra IP và mã định danh thiết bị để giới hạn lượt làm và ngăn nhận thưởng trùng.</p>
-   <div class="task-security-quotas"><span>Link rút gọn: 1 tài khoản/IP và mã trình duyệt mỗi ngày · Đặt lại 00:00</span></div>
-   <details class="task-security-details"><summary>Xem chi tiết</summary>
-    <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 • hiển thị rút gọn':'Chưa xác định IP'}</span>
+   <div class="task-security-quotas"><span>Hạn mức nhiệm vụ được đặt lại lúc 00:00 (giờ Việt Nam).</span></div>
+   <details class="task-security-details"><summary>Thông tin IP</summary>
+    <span class="task-ip-type" id="taskIPLabel">${isIPv4(d.ip)?'IPv4 công khai':String(d.ip||'').includes(':')?'IPv6 công khai':'Chưa xác định IP'}</span>
     <div class="task-ip-tools">
      ${String(d.ip||'').includes(':')?'<button class="task-ip-btn" type="button" data-action="check-ipv4">Kiểm tra IPv4</button>':''}
-     <button class="task-ip-btn" type="button" data-action="copy-ip" data-value="${esc(d.ip)}">Sao chép IP</button>
+     <button class="task-ip-btn" type="button" data-action="copy-ip" data-value="${esc(d.ip)}">Sao chép IP kết nối</button>
     </div>
-    <div class="task-security-full-ip">IP hệ thống ghi nhận: <code>${esc(d.ip)}</code></div>
-    <p class="task-ip-helper" id="taskIPv4Help">IP do Cloudflare ghi nhận được dùng cho kiểm tra bảo mật. IPv4 kiểm tra từ trình duyệt chỉ dùng để hiển thị.</p>
-    <p class="task-device-note">Mã định danh được lưu trên trình duyệt, không phải IMEI và có thể bị xóa hoặc thay đổi.</p>
+    <div class="task-security-full-ip">IP kết nối: <code>${esc(d.ip)}</code></div>
    </details>
   </section>
  </div>`;
@@ -387,10 +383,10 @@ async function detectPublicIPv4(button,silent=false){
   const label=document.getElementById('taskIPLabel');
   if(!button.isConnected||!currentIP||!label||state.view!=='tasks')return;
   currentIP.textContent=ip;
-  label.textContent='IPv4 công khai • kiểm tra trực tiếp';
+  label.textContent='IPv4 công khai';
   updateIPv4Diagnostics([]);
   const note=document.getElementById('taskIPv4Help');
-  if(note)note.textContent='IPv4 được kiểm tra từ trình duyệt qua ipify. Cloudflare có thể thấy IPv6 khác. Chỉ dùng IPv4 này để hiển thị, không dùng để tự động khóa tài khoản.';
+  if(note)note.textContent='';
   button.textContent='Kiểm tra lại IPv4';
   let copy=document.getElementById('taskCopyIPv4');
   if(!copy){
@@ -411,8 +407,8 @@ async function detectPublicIPv4(button,silent=false){
    const label=document.getElementById('taskIPLabel');
    if(label)label.textContent='IPv6 • chưa đọc được IPv4 trong trang web';
    const note=document.getElementById('taskIPv4Help');
-   if(note)note.textContent='Trình duyệt chưa cho website đọc IPv4 từ hai dịch vụ kiểm tra. IPv6 Cloudflare vẫn được giữ cho việc kiểm tra an toàn.';
-   if(!silent)toast('Trình duyệt chưa trả IPv4 cho website. IP mạng vẫn được ghi nhận bằng IPv6.',true);
+   if(note)note.textContent='';
+   if(!silent)toast('Không tìm được IPv4. IP kết nối vẫn được ghi nhận.',true);
   }
  }finally{
   if(button.isConnected){
