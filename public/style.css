@@ -552,3 +552,17 @@
  .auth-page-login .auth-input-icon{flex-basis:43px}
  .auth-page-login .auth-input-wrap input{font-size:13px}
 }
+
+/* Đồng bộ logo Trạm Có Lúa ở các khu vực còn lại. */
+.brand-hero-logo{display:flex;align-items:center;justify-content:center;opacity:1}
+.brand-hero-logo img{max-width:100%;height:auto;filter:drop-shadow(0 7px 18px rgba(242,214,105,.2))}
+.welcome-art-label img{width:27px;height:27px;object-fit:contain;flex-shrink:0}
+.legal-brand{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:850;color:#17533b;text-decoration:none;margin-bottom:8px}
+.legal-brand:hover{text-decoration:none}
+.legal-brand img{object-fit:contain;filter:drop-shadow(0 5px 8px #1d754126)}
+.legal-back{display:inline-flex;margin:8px 0 13px;font-size:13px}
+@media(max-width:730px){
+ .brand-hero-logo img{width:63px;height:63px}
+ .legal-brand{font-size:17px}
+ .legal-brand img{width:39px;height:39px}
+}
