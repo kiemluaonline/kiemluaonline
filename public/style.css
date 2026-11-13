@@ -603,3 +603,6 @@ html[lang="hmn"] .language-legal-notice{display:block}
  .topbar-title{display:none}
  .welcome-nav-actions .language-toggle button{padding:8px 7px}
 }
+
+/* Nút dọn bằng chứng phù hợp cả iPhone màn hình hẹp. */
+.proof-delete-all{max-width:100%;white-space:normal;line-height:1.45;text-align:center}
