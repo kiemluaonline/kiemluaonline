@@ -82,13 +82,15 @@ function ipv6Network(ip) {
  if(parts.length!==8||parts.some(p=>!/^[0-9a-f]{1,4}$/.test(p)))return null;
  return parts.slice(0,4).map(p=>parseInt(p,16).toString(16)).join(':')+'::/64';
 }
+// Giữ riêng IPv4 thật và dải IPv6. IPv4 được trình duyệt gửi lên chỉ để đối chiếu.
 function networkAlerts(realIpRecords, reportedRecords) {
  const grouped=new Map();
  const add=(key,type,source,account,device,realIp)=>{
   if(!key||!account)return;
   const mapKey=source+'|'+type+'|'+key;
   if(!grouped.has(mapKey))grouped.set(mapKey,{
-   address:key,ip_type:type,source,accounts:new Set(),devices:new Set(),samples:new Set()
+   address:key,ip_type:type,source,accounts:new Set(),devices:new Set(),samples:new Set(),
+   relatedIpv4:new Map()
   });
   const g=grouped.get(mapKey);
   g.accounts.add(account);
@@ -100,17 +102,49 @@ function networkAlerts(realIpRecords, reportedRecords) {
    const addr=type==='IPv4'?r.ip:ipv6Network(r.ip);
    add(addr,type,'cloudflare',r.user_id,r.device_code,r.ip);
  }
- // IPv4 do trình duyệt tự báo chưa xác minh, luôn chỉ mức cần kiểm tra.
  for(const r of reportedRecords){
-   if(isPublicIPv4(r.detail))add(r.detail,'IPv4','browser',r.user_id,r.device_code,r.ip);
+   if(!isPublicIPv4(r.detail))continue;
+   // Báo cáo do trình duyệt cung cấp; không tự biến IPv6 thành IPv4.
+   add(r.detail,'IPv4','browser',r.user_id,r.device_code,r.ip);
+   // Liên kết theo cùng phiên ghi nhận IPv6 /64, không gán IP của
+   // người khác trong nhóm hoặc xem đây là bằng chứng gian lận.
+   const ipv6Group=ipv6Network(r.ip);
+   const g=ipv6Group&&grouped.get('cloudflare|IPv6 /64|'+ipv6Group);
+   if(g&&g.accounts.has(r.user_id)){
+     if(!g.relatedIpv4.has(r.detail))g.relatedIpv4.set(r.detail,new Set());
+     g.relatedIpv4.get(r.detail).add(r.user_id);
+   }
  }
  return [...grouped.values()].filter(g=>g.accounts.size>=2).map(g=>({
    address:g.address,ip_type:g.ip_type,source:g.source,
    account_count:g.accounts.size,device_count:g.devices.size,
    severity:g.source==='cloudflare'&&g.accounts.size>=5&&g.devices.size>=2?'serious':'review',
+   related_ipv4:[...g.relatedIpv4].map(([ip,accounts])=>({
+    ip,account_count:accounts.size,source:'browser'
+   })).sort((a,b)=>b.account_count-a.account_count||a.ip.localeCompare(b.ip)).slice(0,8),
    sample_ip:[...g.samples].slice(0,3)
  })).sort((a,b)=>(b.severity==='serious')-(a.severity==='serious')||b.account_count-a.account_count).slice(0,70);
 }
+// Hiển thị cả IPv4 chỉ có 1 tài khoản, thay vì chỉ hiện nhóm IP bị trùng.
+function ipv4Inventory(realIpRecords,reportedRecords){
+ const data=new Map();
+ const add=(address,source,userId,createdAt)=>{
+  if(!isPublicIPv4(address)||!userId)return;
+  const key=source+'|'+address;
+  if(!data.has(key))data.set(key,{ip:address,source,accounts:new Set(),last_seen:''});
+  const group=data.get(key);
+  group.accounts.add(userId);
+  if(createdAt&&(!group.last_seen||createdAt>group.last_seen))group.last_seen=createdAt;
+ };
+ for(const r of realIpRecords){
+   if(!String(r.ip||'').includes(':'))add(r.ip,'cloudflare',r.user_id,r.created_at);
+ }
+ for(const r of reportedRecords)add(r.detail,'browser',r.user_id,r.created_at);
+ return [...data.values()].map(x=>({
+  ip:x.ip,source:x.source,account_count:x.accounts.size,last_seen:x.last_seen
+ })).sort((a,b)=>b.account_count-a.account_count||String(b.last_seen).localeCompare(String(a.last_seen))).slice(0,100);
+}
+
 const browserDeviceId = req => {
  const value=str(req.headers.get('X-TL-Device'),80);
  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():'';
@@ -1294,11 +1328,11 @@ async function handler(req, env) {
          AND r.created_at>=datetime('now','-7 days')
         ORDER BY r.created_at DESC LIMIT 150`).all();
       const [networkSeen,unverifiedIPv4]=await Promise.all([
-        env.DB.prepare(`SELECT user_id,ip,device_code FROM risk_events
+        env.DB.prepare(`SELECT user_id,ip,device_code,created_at FROM risk_events
           WHERE event_type='device_seen' AND user_id IS NOT NULL
           AND ip NOT IN ('unknown','local','') AND created_at>=datetime('now','-30 days')
           ORDER BY created_at DESC LIMIT 5000`).all(),
-        env.DB.prepare(`SELECT user_id,detail,ip,device_code FROM risk_events
+        env.DB.prepare(`SELECT user_id,detail,ip,device_code,created_at FROM risk_events
           WHERE event_type='browser_ipv4_report' AND user_id IS NOT NULL
           AND created_at>=datetime('now','-30 days')
           ORDER BY created_at DESC LIMIT 2000`).all()
@@ -1306,6 +1340,7 @@ async function handler(req, env) {
       return json({ events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
         network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
+        ipv4_inventory:ipv4Inventory(networkSeen.results,unverifiedIPv4.results),
         link_alerts:linkAlerts.results,link_alert_count:alertCount.n,link_alert_accounts:alertCount.accounts });
     }
     if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env) });
