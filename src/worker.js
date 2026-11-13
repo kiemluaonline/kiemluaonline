@@ -145,6 +145,103 @@ function ipv4Inventory(realIpRecords,reportedRecords){
  })).sort((a,b)=>b.account_count-a.account_count||String(b.last_seen).localeCompare(String(a.last_seen))).slice(0,100);
 }
 
+
+// Anti-Fraud 2.0: chấm điểm từ dữ liệu D1 đã có, không dùng dịch vụ trả phí.
+// Điểm chỉ là mức ưu tiên kiểm tra, không xác minh danh tính hay kết luận gian lận.
+// Chỉ tín hiệu IP KHÔNG BAO GIỜ đủ để đạt mức nghiêm trọng.
+function computeFraudProfiles(users,events,withdrawals,completions){
+ const deviceGroups=new Map(),networkGroups=new Map(),paymentGroups=new Map();
+ const accountEvents=new Map(),accountNetworks=new Map(),hourlyClaims=new Map();
+ const addGroup=(map,key,userId)=>{
+  if(!key||!userId)return;
+  if(!map.has(key))map.set(key,new Set());
+  map.get(key).add(userId);
+ };
+ const current=Date.now();
+ for(const e of events){
+  if(!e.user_id)continue;
+  const stats=accountEvents.get(e.user_id)||{captcha:0,link:0,devices:new Set()};
+  if(e.event_type==='captcha_wrong')stats.captcha++;
+  if(e.event_type==='link_ip_quota_denied'||e.event_type==='link_browser_quota_denied')stats.link++;
+  accountEvents.set(e.user_id,stats);
+  if(e.event_type!=='device_seen')continue;
+  if(e.detail==='browser_id'&&e.device_code){
+    addGroup(deviceGroups,e.device_code,e.user_id);
+    stats.devices.add(e.device_code);
+  }
+  const ip=String(e.ip||'');
+  const net=ip.includes(':')?ipv6Network(ip):(isPublicIPv4(ip)||/^((192\.0\.2)|(198\.51\.100)|(203\.0\.113))\./.test(ip)?ip:null);
+  // Các IP ví dụ của test được phép nhóm để mô phỏng, không chấp nhận IPv4
+  // do trình duyệt tự gửi cho điểm rủi ro.
+  if(net){
+    addGroup(networkGroups,net,e.user_id);
+    if(!accountNetworks.has(e.user_id))accountNetworks.set(e.user_id,new Set());
+    accountNetworks.get(e.user_id).add(net);
+  }
+ }
+ for(const w of withdrawals){
+  if(!w.user_id||!w.bank_account||!w.bank_name)continue;
+  const dest=String(w.bank_name).trim().toLowerCase()+'|'+String(w.bank_account).replace(/\s/g,'');
+  addGroup(paymentGroups,dest,w.user_id);
+ }
+ for(const c of completions){
+  if(!c.user_id||!c.created_at)continue;
+  const timestamp=Date.parse(String(c.created_at).replace(' ','T')+'Z');
+  if(Number.isFinite(timestamp)&&timestamp<=current&&current-timestamp<=3600000)
+    hourlyClaims.set(c.user_id,(hourlyClaims.get(c.user_id)||0)+1);
+ }
+ const groupMax=map=>{
+  const totals=new Map();
+  for(const members of map.values()){
+    if(members.size<2)continue;
+    for(const userId of members)totals.set(userId,Math.max(totals.get(userId)||0,members.size));
+  }
+  return totals;
+ };
+ const deviceMax=groupMax(deviceGroups),networkMax=groupMax(networkGroups),paymentMax=groupMax(paymentGroups);
+ return users.filter(u=>u.role==='member').map(u=>{
+  const activity=accountEvents.get(u.id)||{captcha:0,link:0,devices:new Set()};
+  const reasons=[];
+  let points=0,strongSignals=0;
+  const add=(score,reason,strong=false)=>{
+   points+=score;reasons.push(reason);
+   if(strong)strongSignals++;
+  };
+  const receivers=paymentMax.get(u.id)||0;
+  const devices=deviceMax.get(u.id)||0;
+  const networks=networkMax.get(u.id)||0;
+  const claims=hourlyClaims.get(u.id)||0;
+  if(receivers>=2)add(45,`${receivers} tài khoản dùng chung kênh nhận tiền (cần xác minh chủ sở hữu)`,true);
+  if(devices>=2)add(35,`${devices} tài khoản có cùng mã trình duyệt (mã có thể bị thay đổi)`,true);
+  if(activity.link>=3)add(20,`${activity.link} cảnh báo hạn mức link trong 14 ngày`);
+  if(claims>=12)add(15,`${claims} lần gửi nhiệm vụ trong một giờ`);
+  if(activity.captcha>=5)add(10,`${activity.captcha} lần trả lời CAPTCHA sai trong 14 ngày`);
+  if(networks>=3)add(10,`${networks} tài khoản cùng IP/dải IPv6 (không chứng minh gian lận)`);
+  const ipCount=accountNetworks.get(u.id)?.size||0;
+  if(ipCount>=5)add(5,`${ipCount} mạng IP khác nhau trong 14 ngày (có thể do đổi mạng)`);
+  const score=Math.min(100,points);
+  const level=score>=65&&strongSignals>0&&reasons.length>=2?'serious':score>=25?'review':'low';
+  return {user_id:u.id,name:u.name,email:u.email,status:u.status,
+   score,level,reasons,signals:reasons.length,
+   payout_shared_accounts:receivers,device_shared_accounts:devices,
+   network_shared_accounts:networks,claims_last_hour:claims};
+ }).sort((a,b)=>b.score-a.score||a.email.localeCompare(b.email));
+}
+async function loadFraudProfiles(env,targetId=null){
+ // Các giới hạn bảo vệ D1 Free: không quét toàn bộ lịch sử của site.
+ // Khi chấm điểm cho một yêu cầu rút, luôn nạp đúng tài khoản đích dù cũ.
+ const [users,events,withdrawals,completions,selected]=await Promise.all([
+  env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE role='member' ORDER BY created_at DESC LIMIT 250").all(),
+  env.DB.prepare("SELECT user_id,event_type,detail,ip,device_code FROM risk_events WHERE user_id IS NOT NULL AND created_at>=datetime('now','-14 days') ORDER BY created_at DESC LIMIT 5000").all(),
+  env.DB.prepare("SELECT user_id,bank_name,bank_account FROM withdrawals WHERE created_at>=datetime('now','-90 days') ORDER BY created_at DESC LIMIT 3000").all(),
+  env.DB.prepare("SELECT user_id,created_at FROM task_completions WHERE created_at>=datetime('now','-1 hour') ORDER BY created_at DESC LIMIT 2000").all(),
+  targetId?env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE id=?").bind(targetId).first():Promise.resolve(null)
+ ]);
+ const members=users.results;
+ if(selected&&!members.some(u=>u.id===selected.id))members.push(selected);
+ return computeFraudProfiles(members,events.results,withdrawals.results,completions.results);
+}
+
 const browserDeviceId = req => {
  const value=str(req.headers.get('X-TL-Device'),80);
  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():'';
