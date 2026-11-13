@@ -70,6 +70,47 @@ function isPublicIPv4(value){
   && !(a===198&&b===51) && !(a===203&&b===0)
   && !(a===192&&b===0);
 }
+// Nhóm IPv6 /64 dùng cảnh báo mạng chung, không dùng để kết luận danh tính.
+function ipv6Network(ip) {
+ const value=String(ip||'').toLowerCase();
+ if(!value.includes(':')||value.includes('.')||!/^[0-9a-f:]+$/.test(value))return null;
+ const halves=value.split('::');if(halves.length>2)return null;
+ const left=halves[0]?halves[0].split(':'):[];
+ const right=halves.length===2&&halves[1]?halves[1].split(':'):[];
+ if(halves.length===2&&left.length+right.length>7)return null;
+ const parts=halves.length===2?[...left,...Array(8-left.length-right.length).fill('0'),...right]:left;
+ if(parts.length!==8||parts.some(p=>!/^[0-9a-f]{1,4}$/.test(p)))return null;
+ return parts.slice(0,4).map(p=>parseInt(p,16).toString(16)).join(':')+'::/64';
+}
+function networkAlerts(realIpRecords, reportedRecords) {
+ const grouped=new Map();
+ const add=(key,type,source,account,device,realIp)=>{
+  if(!key||!account)return;
+  const mapKey=source+'|'+type+'|'+key;
+  if(!grouped.has(mapKey))grouped.set(mapKey,{
+   address:key,ip_type:type,source,accounts:new Set(),devices:new Set(),samples:new Set()
+  });
+  const g=grouped.get(mapKey);
+  g.accounts.add(account);
+  if(device)g.devices.add(device);
+  if(realIp)g.samples.add(realIp);
+ };
+ for(const r of realIpRecords){
+   const type=String(r.ip).includes(':')?'IPv6 /64':'IPv4';
+   const addr=type==='IPv4'?r.ip:ipv6Network(r.ip);
+   add(addr,type,'cloudflare',r.user_id,r.device_code,r.ip);
+ }
+ // IPv4 do trình duyệt tự báo chưa xác minh, luôn chỉ mức cần kiểm tra.
+ for(const r of reportedRecords){
+   if(isPublicIPv4(r.detail))add(r.detail,'IPv4','browser',r.user_id,r.device_code,r.ip);
+ }
+ return [...grouped.values()].filter(g=>g.accounts.size>=2).map(g=>({
+   address:g.address,ip_type:g.ip_type,source:g.source,
+   account_count:g.accounts.size,device_count:g.devices.size,
+   severity:g.source==='cloudflare'&&g.accounts.size>=5&&g.devices.size>=2?'serious':'review',
+   sample_ip:[...g.samples].slice(0,3)
+ })).sort((a,b)=>(b.severity==='serious')-(a.severity==='serious')||b.account_count-a.account_count).slice(0,70);
+}
 const browserDeviceId = req => {
  const value=str(req.headers.get('X-TL-Device'),80);
  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():'';
@@ -165,6 +206,22 @@ async function auth(req, env, role = null) {
   if (user.status !== 'active') fail(403, 'Tài khoản đã bị tạm khóa.');
   if (role && user.role !== role) fail(403, 'Chỉ quản trị viên được dùng chức năng này.');
   return user;
+}
+// Thông tin tài khoản bị khóa chỉ dành cho phiên của chính thành viên hoặc
+// người đã nhập đúng mật khẩu. Việc khóa không tự hủy các khoản Lúa đã ghi.
+async function suspendedInfo(env, userId) {
+ const [reason,rows]=await Promise.all([
+   env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('account_hold:'+userId).first(),
+   env.DB.prepare('SELECT id,amount,vnd_amount,status,admin_note,created_at FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 5').bind(userId).all()
+ ]);
+ const withdrawals=rows.results.map(row=>{
+   const w=presentWithdrawal(row);
+   return {id:w.id,amount:w.amount,vnd_amount:w.vnd_amount,status:w.status,
+    admin_note:w.admin_note,created_at:w.created_at};
+ });
+ return {account_status:'suspended',reason:reason?.value||'Tài khoản cần được xác minh thêm.',
+   pending_withdrawals:withdrawals.filter(w=>w.status==='pending'||w.status==='approved').length,
+   withdrawals};
 }
 async function createSession(req, env, userId) {
   const token = newToken();
@@ -737,13 +794,21 @@ async function handler(req, env) {
     const correct = user && password && await checkPassword(password, user);
     await env.DB.prepare('INSERT INTO login_attempts(id,ip,email,success) VALUES(?,?,?,?)').bind(id(), ip, email, correct ? 1 : 0).run();
     if (!correct) { await event(env, req, 'login_failed', user?.id || null, email); fail(401, 'Email hoặc mật khẩu không đúng.'); }
-    if (user.status !== 'active') fail(403, 'Tài khoản đã bị tạm khóa.');
+    if (user.status !== 'active')
+      return json({error:'Tài khoản đang tạm khóa để kiểm tra.',...(await suspendedInfo(env,user.id))},403);
     return json({ ok: true }, 200, { 'Set-Cookie': await createSession(req, env, user.id) });
   }
   if (m === 'POST' && p === '/api/auth/logout') {
     const token = cookies(req)['__Host-kl_session'] || cookies(req).kl_session;
     if (token && /^[a-f0-9]{64}$/.test(token)) await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(token)).run();
     return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie(req, '', 0) });
+  }
+  // Phiên bị tạm khóa vẫn xem được tình trạng xét duyệt và rút tiền của chính mình.
+  if (m === 'GET' && p === '/api/account-status') {
+    const current=await userSession(req,env);
+    if(!current)fail(401,'Bạn cần đăng nhập.');
+    return json(current.status==='suspended'
+      ?await suspendedInfo(env,current.id):{account_status:'active'});
   }
   if (m === 'GET' && p === '/api/me') {
     const me = await auth(req, env);
@@ -1057,16 +1122,30 @@ async function handler(req, env) {
           AND created_at>=datetime('now','-7 days') ORDER BY created_at DESC LIMIT 500`).all();
       const latest=new Map();
       for (const row of observations.results) if (!latest.has(row.user_id)) latest.set(row.user_id,row);
-      return json({ users: rows.results.map(u=>({...u,ipv4_observation:latest.get(u.id)||null})) });
+      const suspendedRows=await env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'account_hold:%'").all();
+      const holds=new Map(suspendedRows.results.map(x=>[x.key.slice('account_hold:'.length),x.value]));
+      return json({ users: rows.results.map(u=>({...u,ipv4_observation:latest.get(u.id)||null,
+        suspension_reason:holds.get(u.id)||''})) });
     }
     const userEdit = p.match(/^\/api\/admin\/users\/([^/]+)$/);
     if (m === 'PATCH' && userEdit) {
       const b = await readBody(req);
       if (!['active', 'suspended'].includes(b.status)) fail(400, 'Trạng thái không hợp lệ.');
       if (userEdit[1] === admin.id) fail(403, 'Bạn không thể tự khóa tài khoản Admin của mình.');
-      const result = await env.DB.prepare("UPDATE users SET status=? WHERE id=? AND role='member'").bind(b.status, userEdit[1]).run();
-      if (!result.meta?.changes) fail(404, 'Không tìm thấy thành viên.');
-      await event(env, req, 'admin_user_status', admin.id, `${userEdit[1]}:${b.status}`);
+      const reason=str(b.suspension_reason,240);
+      if(b.status==='suspended' && reason.length<10)
+        fail(400,'Cần ghi lý do tạm khóa rõ ràng (ít nhất 10 ký tự).');
+      const target=await env.DB.prepare("SELECT id FROM users WHERE id=? AND role='member'").bind(userEdit[1]).first();
+      if(!target)fail(404,'Không tìm thấy thành viên.');
+      const holdKey='account_hold:'+target.id;
+      const statements=[
+       env.DB.prepare("UPDATE users SET status=? WHERE id=? AND role='member'").bind(b.status,target.id),
+       b.status==='suspended'
+        ?env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(holdKey,reason)
+        :env.DB.prepare('DELETE FROM settings WHERE key=?').bind(holdKey)
+      ];
+      await env.DB.batch(statements);
+      await event(env, req, 'admin_user_status', admin.id, `${target.id}:${b.status}`);
       return json({ ok: true });
     }
     if (m === 'GET' && p === '/api/admin/reviews') {
@@ -1123,6 +1202,10 @@ async function handler(req, env) {
       if (status === 'paid' && !note) fail(400, 'Nhập mã giao dịch hoặc ghi chú thanh toán thật trước khi xác nhận.');
       const w = await env.DB.prepare('SELECT * FROM withdrawals WHERE id=?').bind(wd[1]).first();
       if (!w || w.status !== 'pending') fail(409, 'Yêu cầu không còn chờ xử lý.');
+      if(['approved','paid'].includes(status)){
+       const owner=await env.DB.prepare('SELECT status FROM users WHERE id=?').bind(w.user_id).first();
+       if(owner?.status==='suspended')fail(409,'Tài khoản đang tạm khóa để đối chiếu. Không được duyệt hoặc ghi thanh toán khi chưa giải quyết.');
+      }
       const wasApproved = String(w.admin_note || '').startsWith(WITHDRAWAL_APPROVED_PREFIX);
       if (status === 'approved' && wasApproved) fail(409, 'Yêu cầu đã được duyệt trước đó.');
       if (status === 'paid' && !wasApproved) fail(409, 'Bạn phải duyệt yêu cầu trước khi xác nhận đã thanh toán.');
@@ -1188,8 +1271,19 @@ async function handler(req, env) {
         WHERE r.event_type='browser_ipv4_report'
          AND r.created_at>=datetime('now','-7 days')
         ORDER BY r.created_at DESC LIMIT 150`).all();
+      const [networkSeen,unverifiedIPv4]=await Promise.all([
+        env.DB.prepare(`SELECT user_id,ip,device_code FROM risk_events
+          WHERE event_type='device_seen' AND user_id IS NOT NULL
+          AND ip NOT IN ('unknown','local','') AND created_at>=datetime('now','-30 days')
+          ORDER BY created_at DESC LIMIT 5000`).all(),
+        env.DB.prepare(`SELECT user_id,detail,ip,device_code FROM risk_events
+          WHERE event_type='browser_ipv4_report' AND user_id IS NOT NULL
+          AND created_at>=datetime('now','-30 days')
+          ORDER BY created_at DESC LIMIT 2000`).all()
+      ]);
       return json({ events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
+        network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
         link_alerts:linkAlerts.results,link_alert_count:alertCount.n,link_alert_accounts:alertCount.accounts });
     }
     if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env) });
