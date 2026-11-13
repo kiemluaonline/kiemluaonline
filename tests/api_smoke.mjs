@@ -83,6 +83,44 @@ assert.equal(observedUsers.data.users.find(x=>x.id===userMe.data.user.id).ipv4_o
 const observedRisks=await call('/api/admin/risk-events','GET',undefined,admCookie);
 assert.ok(observedRisks.data.ipv4_observations.some(x=>x.observed_ipv4==='125.235.15.67'&&x.cloudflare_ip===realIPv6));
 
+ // Kiểm tra frontend thu thập IPv4 tự động ngay cả khi KHÔNG mở trang Nhiệm vụ.
+ // Giả lập trình duyệt, không yêu cầu kết nối tới dịch vụ IP thật.
+ const frontendSource=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ assert.match(frontendSource,/setTimeout\(\(\)=>captureMemberIPv4\(\)\.catch\(\(\)=>\{\}\),0\)/,
+   'loadMe must trigger optional background IPv4 collection for members with IPv6.');
+ const captureStart=frontendSource.indexOf('const IPV4_AUTO_STORAGE_KEY=');
+ const captureEnd=frontendSource.indexOf('function updateIPv4Diagnostics(',captureStart);
+ assert.ok(captureStart>0&&captureEnd>captureStart);
+ const {runInNewContext}=await import('node:vm');
+ const browserStore=new Map(),captureRequests=[];
+ const memberState={me:{user:{id:'member-1',role:'member'},ip:realIPv6}};
+ const fakeBrowser={
+   state:memberState,
+   sessionStorage:{
+     getItem:key=>browserStore.get(key)||null,
+     setItem:(key,value)=>browserStore.set(key,String(value))
+   },
+   resolvePublicIPv4:async()=> '125.235.15.67',
+   api:async(...args)=>{captureRequests.push(args);return {ok:true};}
+ };
+ const captureAuto=runInNewContext(frontendSource.slice(captureStart,captureEnd)
+   +'\n captureMemberIPv4',fakeBrowser);
+ await captureAuto();
+ assert.equal(captureRequests.length,1);
+ assert.equal(captureRequests[0][0],'/api/me/ipv4-report');
+ assert.equal(captureRequests[0][1],'POST');
+ assert.equal(captureRequests[0][2].ip,'125.235.15.67');
+ await captureAuto();
+ assert.equal(captureRequests.length,1,'Do not query IPv4 services repeatedly for unchanged member IP.');
+ memberState.me.ip='2401:d800:26c9:8e5d:39ba:4b48:aafa:1746';
+ await captureAuto();
+ assert.equal(captureRequests.length,2,'A changed IPv6 network should be checked again.');
+ memberState.me.user.role='admin';
+ await captureAuto();
+ assert.equal(captureRequests.length,2,'Do not send automatic IPv4 reports for the Admin.');
+ console.log('PASS: frontend captures genuine IPv4 on member sign-in over IPv6, caches checks, retries on different IP and skips Admin.');
+
+
 assert.equal(userMe.data.device_registered,true);
 const changedIp=await call('/api/me','GET',undefined,cookie,'198.51.100.22');
 assert.equal(changedIp.data.device_code,userMe.data.device_code,'Same browser ID must survive IP change');
