@@ -384,7 +384,7 @@ assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.
 const feeBefore=(await call('/api/me','GET',undefined,cookie)).data.balance;
 const withFee=await call('/api/withdrawals','POST',
  {amount:20,payment_method:'bank',bank_name:'Vietcombank',
-  bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie);
+  bank_account:'1234567890',bank_owner:'NGUYEN VAN A',expected_fee_lua:3},cookie);
 assert.equal(withFee.status,200,JSON.stringify(withFee));
 assert.equal(withFee.data.amount_lua,20);
 assert.equal(withFee.data.fee_lua,3);
@@ -405,12 +405,12 @@ assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
 assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'100000'},admCookie)).status,200);
 assert.equal((await call('/api/withdrawals','POST',
- {amount:20,payment_method:'bank',bank_name:'Vietcombank',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie)).status,400,
+ {amount:20,payment_method:'bank',bank_name:'Vietcombank',bank_account:'1234567890',bank_owner:'NGUYEN VAN A',expected_fee_lua:100000},cookie)).status,400,
  'Withdraw amount alone is insufficient when fee is larger than remaining balance');
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
 assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'5'},admCookie)).status,200);
 const feeInvalid=await call('/api/withdrawals','POST',
- {amount:20,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'},cookie);
+ {amount:20,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A',expected_fee_lua:5},cookie);
 assert.equal(feeInvalid.status,200,JSON.stringify(feeInvalid));
 assert.equal(feeInvalid.data.total_lua,25);
 assert.equal((await call('/api/admin/withdrawals/'+feeInvalid.data.id,'POST',{status:'approved'},admCookie)).status,200);
