@@ -33,7 +33,7 @@ export async function shopAPI(req, env, H) {
     const link = str(body.link, 900), category = str(body.category, 30);
     if (title.length < 3) fail(400, 'Tên sản phẩm phải có ít nhất 3 ký tự.');
     if (!categories.includes(category)) fail(400, 'Nhóm sản phẩm không hợp lệ.');
-    if (!goodLink(link)) fail(400, 'Cần link TikTok Shop Affiliate HTTPS hợp lệ.');
+    if (!goodLink(link)) fail(400, 'Cần link TikTok Shop HTTPS hợp lệ.');
     return {title, description, link, category, active:body.is_active === true || String(body.is_active) === '1' ? 1 : 0};
   };
   const shopContacts = async () => {
