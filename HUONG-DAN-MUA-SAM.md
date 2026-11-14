@@ -31,7 +31,7 @@ Trạng thái hiển thị đúng:
 4. **Từ chối**: đơn hủy, hoàn trả hoặc không đủ điều kiện; không cộng Lúa.
 
 ### Lúa dự kiến khi Tạm duyệt – Chờ giải quyết (migration 0004)
-- Sau khi Admin đối chiếu đơn hợp lệ, bắt buộc nhập số Lúa **dự kiến nhận** (ví dụ: 2.000) cùng ghi chú kiểm tra trước khi bấm Tạm duyệt.
+- Sau khi Admin đối chiếu đơn hợp lệ, bắt buộc nhập số Lúa **dự kiến nhận** (ví dụ: 2.000) cùng ghi chú kiểm tra trước khi bấm Tạm duyệt. Đơn đã tạm duyệt từ trước có thể được Admin nhập/chỉnh Lúa dự kiến trong mục **Duyệt đơn TikTok**, không ảnh hưởng ví.
 - Thành viên chỉ nhìn thấy `🌾 Lúa dự kiến nhận ~ 2.000` ở trạng thái **Tạm duyệt – Chờ giải quyết**, kèm câu: **Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật sau khi đối soát hoàn tất. Đơn không đủ điều kiện sẽ không được nhận thưởng.**
 - Lúa dự kiến **không cộng vào ví**, không hiển thị hoa hồng thực tế, tỷ lệ chia hoặc số tiền Admin nhận.
 - Sau khi TikTok quyết toán và Admin đối chiếu, chỉ số Lúa **thực tế** mới được ghi vào ví đúng một lần. Nếu đơn bị từ chối, không phát Lúa.
