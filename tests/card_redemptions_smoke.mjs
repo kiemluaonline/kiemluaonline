@@ -150,10 +150,10 @@ sqlite.prepare("INSERT INTO settings(key,value) VALUES('card_fee_lua','7000') ON
 const beforeFee=balance();
 const infoWithFee=await call('/api/card-redemptions');
 assert.equal(infoWithFee.data.fee_lua,7000);
-assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000})).status,400,
+assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000,expected_fee_lua:7000})).status,400,
  'Need to afford card AND fee rather than just denomination');
 assert.equal(balance(),beforeFee);
-const charged=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000});
+const charged=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000,expected_fee_lua:7000});
 assert.equal(charged.status,201,JSON.stringify(charged));
 assert.equal(charged.data.amount_lua,10000);
 assert.equal(charged.data.fee_lua,7000);
@@ -176,7 +176,7 @@ assert.equal(balance(),beforeFee,'Original price AND fee refunded');
 assert.equal((await call('/api/admin/card-redemptions/'+charged.data.id,'POST',
  {action:'rejected',note:'Nhấn lại'},'admin')).status,409);
 assert.equal(balance(),beforeFee,'Rejection must not refund twice');
-const charged2=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000});
+const charged2=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000,expected_fee_lua:2000});
 assert.equal(charged2.data.fee_lua,2000,'New requests use updated fee');
 assert.equal(balance(),beforeFee-12000);
 assert.equal((await call('/api/admin/card-redemptions/'+charged2.data.id,'POST',{action:'approved'},'admin')).status,200);
