@@ -150,8 +150,8 @@ sqlite.prepare("INSERT INTO settings(key,value) VALUES('card_fee_lua','7000') ON
 const beforeFee=balance();
 const infoWithFee=await call('/api/card-redemptions');
 assert.equal(infoWithFee.data.fee_lua,7000);
-assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000,expected_fee_lua:7000})).status,400,
- 'Need to afford card AND fee rather than just denomination');
+const deniedFeeBalance=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000,expected_fee_lua:7000});
+assert.equal(deniedFeeBalance.status,400,'Need to afford card AND fee rather than just denomination: '+JSON.stringify(deniedFeeBalance));
 assert.equal(balance(),beforeFee);
 const charged=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000,expected_fee_lua:7000});
 assert.equal(charged.status,201,JSON.stringify(charged));
