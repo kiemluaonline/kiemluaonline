@@ -29,10 +29,6 @@ export async function shopPage(ctx){
   const visible=data.products.filter(x=>activeCategory==='all'||x.category===activeCategory);
   const ready=data.requests.filter(x=>x.status==='ready'&&x.product_link);
   const fresh=ready.filter(x=>!x.seen_at);
-  // Gộp sản phẩm trong gian hàng với sản phẩm tìm theo yêu cầu để báo đơn tại MỘT khu riêng.
-  const reportProducts=new Map();
-  for(const p of data.products)reportProducts.set(p.id,p.title);
-  for(const r of ready){if(r.product_id&&!reportProducts.has(r.product_id))reportProducts.set(r.product_id,r.product_title||'Sản phẩm theo yêu cầu');}
   if(fresh.length)await api('/api/shop/requests/read','POST',{}).catch(()=>{});
   const contact=(which)=>!!data.contacts[which];
   return `<div class="shop-page">
@@ -60,17 +56,10 @@ export async function shopPage(ctx){
    </section>
    <section class="shop-order-entry shop-report-section" id="shop-report-order" aria-label="Báo đơn hàng sau khi mua">
     <div class="shop-report-heading"><div><strong>📦 Đã mua hàng? Báo đơn tại đây</strong>
-      <span>Chọn sản phẩm đã mua từ trang trưng bày của Admin, sau đó nhập mã đơn TikTok để được xét thưởng Lúa.</span></div>
+      <span>Sau khi mua qua trang trưng bày của Admin, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.</span></div>
       <button type="button" class="btn alt sm shop-report-history" data-go="shop-orders">Lịch sử đơn hàng</button>
     </div>
-    <div class="shop-report-picker">
-      <label for="shop-report-product">Sản phẩm bạn đã mua</label>
-      <select id="shop-report-product" ${reportProducts.size?'':'disabled'}>
-        <option value="">-- Chọn sản phẩm --</option>
-        ${[...reportProducts.entries()].map(([id,title])=>`<option value="${esc(id)}">${esc(title)}</option>`).join('')}
-      </select>
-      <button type="button" class="btn shop-report-open" data-action="shop-report-selected" ${reportProducts.size?'':'disabled'}>📦 Đã mua? Báo đơn</button>
-    </div>
+    <button type="button" class="btn shop-report-open" data-action="shop-report-order">📦 Đã mua? Báo đơn</button>
    </section>
    <section class="shop-request-section" id="shop-request">
     <div class="shop-request-art"><div class="shop-request-art-icon">💬</div><span>Ảnh & link gửi qua ứng dụng nhắn tin</span><div class="shop-request-spark">✧</div></div>
