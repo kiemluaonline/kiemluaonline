@@ -74,7 +74,7 @@ const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'p
 assert.equal(invalidEstimate.status,400,'Bắt buộc nhập ước tính hợp lệ trước khi tạm duyệt');
 const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'HOA_HONG_BI_MAT_123: Đã tìm thấy đúng ID và sản phẩm TikTok',estimated_reward_lua:2000},'admin1');
 assert.equal(provisional.status,200);
-assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note.includes('đối chiếu'),true);
+assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note.includes('HOA_HONG_BI_MAT_123'),true,'Admin retains private verification notes');
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Pending commission must NOT pay');
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,1);
 orders=(await call('/api/shop/orders')).data.orders;
