@@ -717,4 +717,9 @@ window.TramExtraTranslations = {
   "Yêu cầu đang chờ Admin duyệt.": "Daim ntawv thov tseem tos Admin pom zoo.",
   "Tiền đã được Admin xác nhận chuyển.": "Admin tau lees tias xa nyiaj tiav.",
   "Rút tối thiểu": "Rho nyiaj tsawg kawg",
+  " Tối đa số dư": "Siv tag nrho cov Lúa uas rho tau",
+  "Tối đa số dư": "Rho ntau tshaj ntawm cov Lúa",
+  "Số dư chưa đủ rút tối thiểu 5.000đ và phí tương ứng.": "Cov Lúa seem tsis txaus rho 5.000đ thiab them tus nqi.",
+  "Chưa tải được tài khoản ngân hàng đã lưu. Bạn vẫn có thể nhập tài khoản thủ công để rút tiền. Admin cần kiểm tra bảng payout_accounts trong Cloudflare D1 và phiên bản Worker đang chạy.": "Thauj tsis tau cov ntaub ntawv txhab nyiaj twb khaws. Koj tseem sau tau tus as khauj txhab nyiaj thaum thov rho. Admin yuav tsum kuaj payout_accounts hauv Cloudflare D1 thiab Worker version.",
+  "Không thể tải danh sách tài khoản ngân hàng đã lưu.": "Thauj tsis tau cov ntaub ntawv txhab nyiaj twb khaws.",
 };
