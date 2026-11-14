@@ -1,3 +1,8 @@
+// Native browser confirmation uses the currently selected language.
+function askShopConfirm(message){
+ const label=window.TramI18n?.translateLabel(message)??message;
+ return window.confirm(label);
+}
 export function shopCategories(){
   return [['all','Tất cả','✨'],['beauty','Làm đẹp','🧴'],['fashion','Thời trang','👟'],['home','Nhà cửa','🏡'],['technology','Công nghệ','🎧'],['other','Khác','🎁']];
 }
@@ -152,12 +157,12 @@ export async function handleShopAction(action,el,ctx){
   if(action==='shop-request-ready'){
     const id=el.dataset.id, sel=document.querySelector('[data-shop-product-for="'+id+'"]');
     if(!sel?.value)throw new Error('Hãy chọn sản phẩm đã bật công khai.');
-    if(!confirm('Xác nhận đã có đúng sản phẩm khách yêu cầu? Hệ thống sẽ thông báo trên website của khách.'))return true;
+    if(!askShopConfirm('Xác nhận đã có đúng sản phẩm khách yêu cầu? Hệ thống sẽ thông báo trên website của khách.'))return true;
     await api('/api/admin/shop/requests/'+encodeURIComponent(id),'POST',{status:'ready',product_id:sel.value});
     toast('Đã có sản phẩm! Website sẽ thông báo cho khách.');await navigate('admin-shop');return true;
   }
   if(action==='shop-request-reject'){
-    if(!confirm('Đánh dấu không tìm thấy sản phẩm này?'))return true;
+    if(!askShopConfirm('Đánh dấu không tìm thấy sản phẩm này?'))return true;
     await api('/api/admin/shop/requests/'+encodeURIComponent(el.dataset.id),'POST',{status:'rejected'});
     toast('Đã cập nhật yêu cầu.');await navigate('admin-shop');return true;
   }
@@ -177,7 +182,7 @@ export async function handleShopSubmit(kind,b,ctx){
   }
   if(kind==='shop-fulfill'){
     if(!b.request_id)throw new Error('Chưa xác định được mã yêu cầu cần xử lý.');
-    if(!confirm('Đã kiểm tra đúng sản phẩm, đúng link sản phẩm và mã yêu cầu của khách? Website sẽ thông báo tự động.'))return true;
+    if(!askShopConfirm('Đã kiểm tra đúng sản phẩm, đúng link sản phẩm và mã yêu cầu của khách? Website sẽ thông báo tự động.'))return true;
     const result=await api('/api/admin/shop/requests/'+encodeURIComponent(b.request_id),'POST',{
       status:'ready_new',title:b.title,link:b.link,category:b.category||'other',description:''
     });
