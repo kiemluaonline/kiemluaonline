@@ -10,6 +10,59 @@ const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
 const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
+let paidRotationTimer=null,paidRefreshTimer=null;
+function stopPaidRotation(){
+ if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
+ if(paidRefreshTimer!==null){clearInterval(paidRefreshTimer);paidRefreshTimer=null;}
+}
+function paymentSlides(payments){
+ return payments.map((p,i)=>`<div class="paid-slide" data-payment-index="${i}" ${i?'hidden':''}>
+  <strong>✓ ADMIN XÁC NHẬN ĐÃ CHUYỂN</strong>
+  <p>TK ${esc(p.masked_account)} • ${fmt(p.vnd_amount)} ₫</p>
+  <small>Ghi nhận ${dt(p.at)}. Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.</small>
+ </div>`).join('');
+}
+function displayPaidRotation(index){
+ const box=document.getElementById('paid-rotation');if(!box)return;
+ const slides=[...box.querySelectorAll('.paid-slide')];
+ if(!slides.length)return;
+ const next=((index%slides.length)+slides.length)%slides.length;
+ slides.forEach((slide,i)=>{slide.hidden=i!==next;});
+ box.dataset.active=String(next);
+ const count=box.querySelector('.paid-rotation-count');if(count)count.textContent=(next+1)+'/'+slides.length;
+}
+function startPaidRotation(){
+ stopPaidRotation();
+ const box=document.getElementById('paid-rotation');if(!box)return;
+ const slides=box.querySelectorAll('.paid-slide');
+ if(slides.length>1&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  paidRotationTimer=setInterval(()=>{
+   if(!box.isConnected||state.view!=='tasks'){stopPaidRotation();return;}
+   if(!document.hidden)displayPaidRotation(Number(box.dataset.active||0)+1);
+  },6000);
+ }
+ // Nhận thêm các giao dịch mới được Admin đánh dấu "Đã thanh toán" khi vẫn mở trang.
+ paidRefreshTimer=setInterval(async()=>{
+  if(!box.isConnected||state.view!=='tasks'){stopPaidRotation();return;}
+  if(document.hidden)return;
+  try{
+   const r=await api('/api/task-dashboard');
+   if(!box.isConnected||state.view!=='tasks')return;
+   const records=r.recent_payments||[];
+   const signature=records.map(x=>x.id).join('|');
+   if(signature!==box.dataset.signature){
+    box.dataset.signature=signature;
+    const slidesHost=box.querySelector('.paid-rotation-slides');
+    if(slidesHost)slidesHost.innerHTML=records.length?paymentSlides(records):
+     '<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p>';
+    const controls=box.querySelector('.paid-rotation-controls');
+    if(controls)controls.hidden=records.length<=1;
+    displayPaidRotation(0);
+    startPaidRotation();
+   }
+  }catch{ /* Mất kết nối tạm thời: giữ danh sách thanh toán đã tải, không hiện giao dịch giả. */ }
+ },90000);
+}
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
   ['BVBank','BVBank (hỗ trợ số tài khoản liên kết ZaloPay 99ZP)'],['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
@@ -303,12 +356,23 @@ function renderShell(){
   <nav class="nav">${nav.map(([key,symbol,name])=>`<button data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`).join('')}</nav>
   <div class="sidebar-bottom"><strong>${esc(user.name)}</strong>${esc(user.email)}<button data-action="logout">Đăng xuất ↗</button></div>
  </aside><button type="button" class="menu-backdrop" tabindex="-1" data-action="close-menu" aria-label="Đóng menu"></button><section class="main-area"><header class="topbar"><div class="topbar-leading"><button type="button" class="menu-toggle" id="menu-toggle" data-action="toggle-menu" aria-controls="site-menu" aria-expanded="false" aria-label="Mở menu"><span aria-hidden="true">☰</span></button><div class="topbar-title"><h1 id="topTitle">Bảng điều khiển</h1><p>Quản lý minh bạch • Cập nhật theo dữ liệu thật</p></div></div>
- <div class="top-right">${languageSwitcher()}<span class="balance-pill" id="topBalance">🌾 ${fmt(state.me.balance)} Lúa</span><span class="avatar" title="${esc(user.name)}">${esc(user.name[0]?.toUpperCase()||'T')}</span></div></header>
+ <div class="top-right">${languageSwitcher()}<span class="balance-pill" id="topBalance">🌾 ${fmt(state.me.balance)} Lúa</span>
+ <button type="button" class="header-icon-button" id="header-notice-button" data-action="toggle-notifications" aria-label="Mở thông báo" aria-expanded="false" aria-controls="header-notification-panel" title="Thông báo">
+  <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span class="header-notice-badge" id="header-notice-badge" hidden></span>
+ </button>
+ <button type="button" class="avatar header-avatar" data-go="profile" title="Hồ sơ: ${esc(user.name)}" aria-label="Mở hồ sơ của tôi">${esc(user.name[0]?.toUpperCase()||'T')}</button></div>
+ <section id="header-notification-panel" class="header-notification-panel" aria-label="Thông báo tài khoản" hidden>
+   <div class="header-notification-title"><strong>🔔 Thông báo</strong><button type="button" data-action="close-notifications" aria-label="Đóng thông báo">×</button></div>
+   <div class="header-notification-content" id="header-notification-content">Nhấn chuông để tải thông báo.</div>
+ </section></header>
  <main class="content" id="viewContent"></main></section></div><div id="modal-root"></div>`;
  setMenuOpen(false);
+ refreshHeaderNotifications(false).catch(()=>{});
 }
 async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderHome();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
 async function navigate(view){
+ stopPaidRotation();
+ closeHeaderNotifications();
  state.view=view;
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
  const found=nav.find(n=>n[0]===view);
@@ -325,6 +389,7 @@ async function navigate(view){
  }
  if(view==='withdrawals'){const withdrawForm=root.querySelector('form[data-form="withdraw"]');updateWithdrawalFields(withdrawForm);updateWithdrawalPreview(withdrawForm);}
  if(view==='withdrawals')updatePayoutAccountFields(root.querySelector('form[data-form="payout-account"]'));
+ if(view==='tasks')startPaidRotation();
  if(state.me?.user.role==='member'){
   api('/api/shop/orders/alerts').then(r=>{
    document.querySelectorAll('[data-go="shop-orders"]').forEach(btn=>{
@@ -423,12 +488,19 @@ const adminIP = (ip,observed=null) => {
 };
 
 function taskDashboardCard(d,quotas={}){
- const p=d.latest_payment;
- const payment=p
- ?`<strong>✓ ADMIN XÁC NHẬN ĐÃ CHUYỂN</strong><p>TK ${esc(p.masked_account)} • ${fmt(p.vnd_amount)} ₫</p><small>Ghi nhận ${dt(p.at)}. Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.</small>`
- :`<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p><small>Không sử dụng giao dịch minh họa.</small>`;
+ const payments=d.recent_payments|| (d.latest_payment?[d.latest_payment]:[]);
+ const signature=payments.map(p=>p.id||p.at).join('|');
+ const payment=payments.length?paymentSlides(payments)
+  :'<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p><small>Không sử dụng giao dịch minh họa.</small>';
  return `<div class="task-dashboard">
-  <section class="card task-payment">${payment}</section>
+  <section class="card task-payment" id="paid-rotation" data-active="0" data-signature="${esc(signature)}" aria-label="Các giao dịch đã thanh toán">
+    <div class="paid-rotation-slides">${payment}</div>
+    <div class="paid-rotation-controls" ${payments.length<=1?'hidden':''}>
+     <button type="button" data-action="paid-prev" aria-label="Giao dịch đã thanh toán trước">‹</button>
+     <span class="paid-rotation-count">1/${payments.length}</span>
+     <button type="button" data-action="paid-next" aria-label="Giao dịch đã thanh toán tiếp theo">›</button>
+    </div>
+  </section>
   <div class="task-stats">
     <div class="card task-stat"><span>🌾 LÚA HÔM NAY</span><strong>+${fmt(d.today_lua)} Lúa</strong></div>
     <div class="card task-stat"><span>☑ TỔNG LÚA LINK ĐÃ DUYỆT</span><strong>${fmt(d.link_lua)} Lúa</strong></div>
@@ -1162,6 +1234,14 @@ app.addEventListener('click',async e=>{
    if(amountInput){amountInput.value=String(max);updateWithdrawalPreview(form);}
    return;
   }
+  if(act==='paid-prev'||act==='paid-next'){
+   const box=document.getElementById('paid-rotation');if(!box)return;
+   displayPaidRotation(Number(box.dataset.active||0)+(act==='paid-next'?1:-1));return;
+  }
+  if(act==='toggle-notifications'){
+   await refreshHeaderNotifications(true);return;
+  }
+  if(act==='close-notifications'){closeHeaderNotifications();return;}
   if(act==='open-auth'){
    state.authMode=el.dataset.authMode==='register'?'register':'login';
    renderAuth();window.scrollTo(0,0);return;
