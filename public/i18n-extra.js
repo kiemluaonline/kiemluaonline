@@ -494,5 +494,14 @@ window.TramExtraTranslations = {
   "Lúa": "Lúa",
   "Xem & mua ngay": "Saib thiab yuav tam sim no",
   "🛍️ Xem & mua ngay – Tích Lúa 🌾": "🛍️ Saib thiab yuav tam sim no – Sau Lúa 🌾",
-  "🌾 Đơn hợp lệ, đã giải quyết mới nhận Lúa": "🌾 Tsuas tau Lúa thaum daim xaj raug cai thiab ua tiav lawm"
+  "🌾 Đơn hợp lệ, đã giải quyết mới nhận Lúa": "🌾 Tsuas tau Lúa thaum daim xaj raug cai thiab ua tiav lawm",
+  "Quy định quan trọng để nhận Lúa": "Cov cai tseem ceeb kom tau Lúa",
+  "Chỉ đơn hàng mua qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm do Trạm Có Lúa giới thiệu mới được xét thưởng Lúa.": "Tsuas yog cov khoom uas koj yuav ntawm Admin nplooj tso khoom hauv TikTok Shop lossis cov link khoom uas Trạm Có Lúa qhia xwb thiaj raug txiav txim seb puas tau Lúa.",
+  "Nếu tự tìm mua ở bên ngoài, dù là cùng sản phẩm và có gửi ID đơn hàng, bạn vẫn không được tính Lúa. Admin sẽ kiểm tra nguồn đơn trước khi duyệt.": "Yog koj mus nrhiav yuav ntawm lwm qhov, txawm yog tib yam khoom thiab koj xa tus ID xaj los, yuav tsis suav Lúa. Admin yuav kuaj seb daim xaj tuaj qhov twg ua ntej pom zoo.",
+  "Chỉ mua qua trang trưng bày hoặc liên kết sản phẩm do Admin giới thiệu mới đủ điều kiện xét Lúa. Mua ngoài rồi gửi ID không được tính. Đơn mua cần được Admin xác minh; nhấp liên kết hoặc đặt hàng chưa tự động phát sinh thưởng.": "Tsuas yuav ntawm Admin nplooj tso khoom lossis link uas Admin qhia thiaj muaj cai thov Lúa. Yuav sab nraud ces xa ID los yeej tsis suav. Admin yuav tsum kuaj daim xaj; qhib link lossis xaj khoom xwb tsis tau Lúa tam sim.",
+  "⚠️ Chỉ xét Lúa cho đơn mua đúng trang trưng bày của Admin": "⚠️ Tsuas xyuas Lúa rau cov khoom yuav ntawm Admin nplooj tso khoom",
+  "Đơn phải được đặt qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm tại Trạm Có Lúa. Mua ở nơi khác sẽ không được tính thưởng Lúa, kể cả khi gửi ID đơn hàng.": "Koj yuav tsum xaj ntawm Admin nplooj tso khoom hauv TikTok Shop lossis link khoom ntawm Trạm Có Lúa. Yog yuav lwm qhov, txawm xa ID xaj los yeej tsis tau Lúa.",
+  "⚠️ Lưu ý trước khi gửi ID đơn hàng": "⚠️ Nco ntsoov ua ntej xa tus ID xaj khoom",
+  "Bạn phải mua qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm do Trạm Có Lúa giới thiệu. Nếu mua bên ngoài, ID đơn hàng sẽ không được xét thưởng Lúa dù bạn gửi về website.": "Koj yuav tsum yuav ntawm Admin nplooj tso khoom hauv TikTok Shop lossis link khoom uas Trạm Có Lúa qhia. Yog yuav sab nraud, txawm xa ID rau lub vev xaib los yeej tsis suav Lúa.",
+  "Nội dung có sẵn. Chỉ tạm duyệt sau khi đã kiểm tra đúng ID, sản phẩm và xác minh đơn phát sinh từ trang trưng bày hoặc liên kết do Admin giới thiệu. ID trùng khớp thôi chưa đủ.": "Cov lus no twb npaj tseg lawm. Tsuas pom zoo ib ntus thaum kuaj tus ID, yam khoom thiab paub tseeb tias daim xaj los ntawm Admin nplooj tso khoom lossis link. Tus ID sib phim xwb tseem tsis txaus."
 };
