@@ -77,6 +77,9 @@ export async function cardRedemptionsAPI(req,env,H){
    const carrier=str(b.carrier,30),denomination=intValue(b.denomination_vnd);
    if(!CARD_CARRIERS.includes(carrier)||!CARD_DENOMINATIONS.includes(denomination))
      fail(400,'Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.');
+   // Khách phải nhìn thấy đúng số phí trước khi máy chủ giữ Lúa.
+   if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
+     fail(409,'Phí đổi thẻ đã thay đổi. Vui lòng tải lại để xem phí mới trước khi xác nhận.');
    const cost=denomination*rate;
    if(!safeFee||!Number.isSafeInteger(cost)||cost<=0||!Number.isSafeInteger(cost+fee)||cost+fee>1000000000)
      fail(409,'Tỷ giá chưa phù hợp để đổi mệnh giá thẻ này.');
