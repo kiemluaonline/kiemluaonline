@@ -26,12 +26,12 @@ Các thay đổi đã được lưu trong GitHub, **không đồng nghĩa Cloudf
 
 Trạng thái hiển thị đúng:
 1. **Chờ xác minh**: khách mới gửi mã đơn. Không cộng Lúa.
-2. **Tạm duyệt – Chờ giải quyết**: Admin đã đối chiếu đơn, đã nhận và thanh toán. Vẫn chưa cộng Lúa.
-3. **Đã giải quyết**: Admin đã đối chiếu hoa hồng THỰC NHẬN được TikTok quyết toán, nhập hoa hồng và số Lúa thưởng hợp lệ; ghi ví Lúa đúng một lần.
+2. **Tạm duyệt – Chờ giải quyết**: Admin tìm thấy đúng ID đơn hàng và sản phẩm; hàng có thể chưa giao hoặc chưa thanh toán. Lúa dự kiến chưa cộng ví.
+3. **Đã giải quyết**: Admin đã kiểm tra đơn đã giao, thanh toán, không hoàn/hủy và hoa hồng đã được TikTok quyết toán; Admin chỉ nhập **Lúa chính thức** và ghi ví một lần. Không yêu cầu nhập tiền hoa hồng TikTok.
 4. **Từ chối**: đơn hủy, hoàn trả hoặc không đủ điều kiện; không cộng Lúa.
 
 ### Lúa dự kiến khi Tạm duyệt – Chờ giải quyết (migration 0004)
-- Sau khi Admin đối chiếu đơn hợp lệ, bắt buộc nhập số Lúa **dự kiến nhận** (ví dụ: 2.000) cùng ghi chú kiểm tra trước khi bấm Tạm duyệt. Đơn đã tạm duyệt từ trước có thể được Admin nhập/chỉnh Lúa dự kiến trong mục **Duyệt đơn TikTok**, không ảnh hưởng ví.
+- Sau khi Admin kiểm tra ID đơn và sản phẩm trùng khớp, nhập số Lúa **dự kiến nhận** (ví dụ: 2.000) rồi tạm duyệt; ghi chú kiểm tra là câu mặc định có sẵn, Admin không cần gõ. Có thể chỉnh Lúa dự kiến ở đơn đang tạm duyệt, không ảnh hưởng ví.
 - Thành viên chỉ nhìn thấy `🌾 Lúa dự kiến nhận ~ 2.000` ở trạng thái **Tạm duyệt – Chờ giải quyết**, kèm câu: **Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật sau khi đối soát hoàn tất. Đơn không đủ điều kiện sẽ không được nhận thưởng.**
 - Lúa dự kiến **không cộng vào ví**, không hiển thị hoa hồng thực tế, tỷ lệ chia hoặc số tiền Admin nhận.
 - Sau khi TikTok quyết toán và Admin đối chiếu, chỉ số Lúa **thực tế** mới được ghi vào ví đúng một lần. Nếu đơn bị từ chối, không phát Lúa.
@@ -39,7 +39,7 @@ Trạng thái hiển thị đúng:
 - Việc commit vào GitHub không có nghĩa bản mới đã triển khai trên Cloudflare. Kiểm tra deployment trước khi kiểm thử tài khoản thật.
 
 Thành viên có menu **Đơn hàng & Lúa**, theo dõi tiến độ, thông báo đổi trạng thái và tổng Lúa nhận từ mua sắm.
-Admin có menu **Duyệt đơn TikTok**. Chỉ Admin nhìn thấy hoa hồng thực nhận, tỷ giá Lúa/VNĐ, mã đối soát và ghi chú riêng.
+Admin có menu **Duyệt đơn TikTok**. Admin nhập mã đơn đã đối chiếu, số Lúa chính thức và xác nhận điều kiện trước khi cộng Lúa. Không nhập/lưu mới số tiền hoa hồng hoặc tính phần trăm chia khách. Các cột dữ liệu cũ về hoa hồng vẫn được giữ nguyên trong D1 để tránh làm mất lịch sử.
 
 ### Bật chức năng mới trên Cloudflare D1
 
@@ -50,7 +50,7 @@ Migration dùng `CREATE TABLE IF NOT EXISTS`, chỉ bổ sung các bảng `shop_
 Sau đó kiểm tra bản Worker GitHub mới nhất đã deploy lên Cloudflare. Không mặc định một lần commit đồng nghĩa đã triển khai.
 Lưu ý: Các bảng thuộc migration 0002 vẫn cần tồn tại (đã kích hoạt ở bước mua sắm trước).
 
-Trong **Admin → Cài đặt**, phải đặt `lua_per_vnd` hợp lệ (>0) trước khi giải quyết và cộng Lúa. Lúa thưởng quy đổi không được lớn hơn hoa hồng thực tế, và tỷ lệ chia thưởng **không công bố cho khách**.
+**Mua sắm nhận Lúa:** Admin chọn số Lúa thưởng trực tiếp, không bắt buộc nhập số hoa hồng, không có công thức chia phần trăm và không dùng `lua_per_vnd` để giới hạn thưởng đơn hàng. Tỷ giá `lua_per_vnd` vẫn tồn tại trong **Cài đặt** và được dùng cho phần rút tiền theo quy tắc cũ; không được xóa hoặc sửa. Admin phải tự bảo đảm số Lúa thưởng phù hợp với ngân sách; hệ thống vẫn giới hạn tối đa 10 triệu Lúa cho một đơn và chống cộng trùng.
 
 **Không dùng mã đơn do khách tự điền làm bằng chứng duy nhất.** Nếu chưa thể đối chiếu chính xác mã đơn với dữ liệu Affiliate trong TikTok, tiếp tục để Chờ xác minh hoặc Tạm duyệt; không ghi thưởng. Khách không tải ảnh lên website.
 Cần kiểm tra chính sách TikTok Shop và điều kiện chương trình trước khi phát thưởng thực tế.
