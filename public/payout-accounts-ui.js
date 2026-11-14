@@ -4,12 +4,17 @@ let knownAccounts=[];
 const tr=s=>window.TramI18n?.translateLabel?.(s)??s;
 const ask=s=>window.confirm(tr(s));
 const paymentLabel=a=>a.payment_method==='zalopay'?'ZaloPay':a.bank_name;
-export async function payoutAccountsPage({api,esc,heading,bankList,embedded=false}){
- let data;
- try{data=await api('/api/payout-accounts');}
- catch{
-  return `<div class="saved-payout-page">${heading('🏦 Tài khoản nhận tiền','Lưu thông tin để lần sau rút tiền không phải nhập lại.')}
-    <div class="callout">⚠️ Chưa tải được tài khoản nhận tiền. Admin cần chạy bảng dữ liệu mới trước; bạn vẫn có thể nhập thông tin thủ công khi rút tiền.</div></div>`;
+export async function payoutAccountsPage({api,esc,heading,bankList,embedded=false,initialData=null}){
+ let data=initialData;
+ try{
+  if(data?.unavailable)throw new Error('Không thể tải danh sách tài khoản ngân hàng đã lưu.');
+  if(!data)data=await api('/api/payout-accounts');
+ }catch{
+  // Có thể thiếu bảng payout_accounts, phiên bản Worker chưa đồng bộ hoặc lỗi kết nối.
+  // Đừng khẳng định Admin chưa chạy SQL; rút thủ công vẫn dùng được.
+  const warning='<div class="callout">⚠️ Chưa tải được tài khoản ngân hàng đã lưu. Bạn vẫn có thể nhập tài khoản thủ công để rút tiền. Admin cần kiểm tra bảng payout_accounts trong Cloudflare D1 và phiên bản Worker đang chạy.</div>';
+  return embedded?`<div class="saved-payout-page saved-payout-embedded">${warning}</div>`
+    :`<div class="saved-payout-page">${heading('🏦 Tài khoản nhận tiền','Lưu thông tin để lần sau rút tiền không phải nhập lại.')}${warning}</div>`;
  }
  knownAccounts=data.accounts||[];
  const current=knownAccounts.find(a=>a.id===editAccountId&&a.payment_method==='bank');
