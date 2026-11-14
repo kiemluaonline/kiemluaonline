@@ -67,7 +67,13 @@ export async function adminShopOrdersPage(ctx){
        <p class="sorder-estimate-help">Khách sẽ thấy Lúa dự kiến kèm thông báo “có thể tăng hoặc giảm”. Chưa cộng ví và không công khai hoa hồng.</p>
        <button class="btn" type="submit">✓ Tạm duyệt – Chờ giải quyết</button></form>`:''}
      ${o.status==='provisional'?`<div class="sorder-admin-state">Đã xác minh: ${esc(o.verification_note||'Đang chờ hoa hồng TikTok quyết toán.')}</div>
-       <div class="sorder-admin-estimate">🌾 Lúa dự kiến đang hiển thị cho khách: <strong>~ ${fmt(o.estimated_reward_lua||0)} Lúa</strong><small>Chưa cộng ví. Số Lúa thực tế khi quyết toán có thể khác.</small></div>
+       <div class="sorder-admin-estimate">🌾 Lúa dự kiến đang hiển thị cho khách: <strong>${Number(o.estimated_reward_lua)>0?`~ ${fmt(o.estimated_reward_lua)} Lúa`:'Chưa thiết lập'}</strong><small>Chưa cộng ví. Số Lúa thực tế khi quyết toán có thể khác.</small></div>
+       <form class="sorder-admin-form sorder-edit-estimate" data-form="shop-order-estimate">
+         <input type="hidden" name="id" value="${esc(o.id)}">
+         <label for="shop-estimate-update-${esc(o.id)}">Cập nhật Lúa dự kiến (không ảnh hưởng ví)</label>
+         <input id="shop-estimate-update-${esc(o.id)}" name="estimated_reward_lua" type="number" inputmode="numeric" min="1" max="10000000" step="1" required value="${Number(o.estimated_reward_lua)||''}" placeholder="Ví dụ 2000">
+         <button type="submit" class="btn alt">✎ Cập nhật Lúa dự kiến</button>
+       </form>
        <form class="sorder-admin-form sorder-settle-form" data-form="shop-order-resolve">
          <input type="hidden" name="id" value="${esc(o.id)}">
          <label for="shop-settlement-${esc(o.id)}">Mã đơn / mã đối soát TikTok đã giải quyết</label><input id="shop-settlement-${esc(o.id)}" name="settled_reference" minlength="8" maxlength="90" required placeholder="Mã trong danh sách đơn Affiliate">
@@ -112,13 +118,16 @@ export async function handleShopOrderSubmit(kind,b,ctx){
   document.getElementById('modal-root').innerHTML='';
   toast(result.message);await navigate('shop-orders');return true;
  }
- if(!['shop-order-provisional','shop-order-resolve','shop-order-reject'].includes(kind))return false;
+ if(!['shop-order-provisional','shop-order-estimate','shop-order-resolve','shop-order-reject'].includes(kind))return false;
  const id=encodeURIComponent(b.id||'');
  if(!b.id)throw new Error('Không xác định được đơn hàng.');
  let payload;
  if(kind==='shop-order-provisional'){
   if(!confirm('Đã kiểm tra trên TikTok Affiliate: đúng đơn, hàng đã nhận và đã thanh toán? Chuyển sang Tạm duyệt – Chờ giải quyết?'))return true;
   payload={status:'provisional',admin_note:b.admin_note,estimated_reward_lua:Number(b.estimated_reward_lua)};
+ }else if(kind==='shop-order-estimate'){
+  if(!confirm('Cập nhật số Lúa dự kiến cho khách? Đây chỉ là số ước tính, chưa cộng vào ví.'))return true;
+  payload={status:'estimate',estimated_reward_lua:Number(b.estimated_reward_lua)};
  }else if(kind==='shop-order-resolve'){
   if(!confirm('XÁC NHẬN: Hoa hồng đơn này đã được TikTok quyết toán THẬT, đã đối chiếu đúng khách và số Lúa? Website sẽ cộng Lúa vào ví NGAY MỘT LẦN.'))return true;
   payload={status:'resolved',commission_vnd:Number(b.commission_vnd),reward_lua:Number(b.reward_lua),settled_reference:b.settled_reference};
