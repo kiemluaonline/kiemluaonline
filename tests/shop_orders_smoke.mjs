@@ -55,6 +55,9 @@ const oid=report.data.id;
 let orders=(await call('/api/shop/orders')).data.orders;
 assert.equal(orders.length,1);
 assert.equal(orders[0].status,'pending');
+assert.ok(!('admin_note' in orders[0]),'Admin notes must never be returned to buyers');
+assert.ok(!('verification_note' in orders[0]),'Verification notes must never be returned to buyers');
+assert.ok(!(await call('/api/shop/orders')).data.events.some(e=>'detail' in e),'Internal audit details must not be sent to buyer');
 assert.equal(orders[0].estimated_reward_lua,0,'Chưa xác minh thì không hiển thị Lúa dự kiến');
 assert.ok(!('commission_vnd' in orders[0]),'Do not expose Admin commission');
 assert.ok(!('settled_reference' in orders[0]),'Do not expose secret TikTok reconciliation ID');
@@ -65,11 +68,11 @@ assert.equal((await call('/api/shop/orders','GET',undefined,'user2')).data.order
 const adminView=(await call('/api/admin/shop/orders','GET',undefined,'admin1')).data;
 assert.equal(adminView.orders.length,1);
 assert.equal(adminView.orders[0].order_reference,ref);
-const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
+const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(premature.status,409);
-const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Khách đã nhận và thanh toán, đối chiếu đơn hợp lệ',estimated_reward_lua:0},'admin1');
+const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Đã tìm thấy ID đơn TikTok Affiliate, chờ giao hàng',estimated_reward_lua:0},'admin1');
 assert.equal(invalidEstimate.status,400,'Bắt buộc nhập ước tính hợp lệ trước khi tạm duyệt');
-const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Khách đã nhận và thanh toán, đối chiếu đơn hợp lệ',estimated_reward_lua:2000},'admin1');
+const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'HOA_HONG_BI_MAT_123: Đã tìm thấy đúng ID và sản phẩm TikTok',estimated_reward_lua:2000},'admin1');
 assert.equal(provisional.status,200);
 assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note.includes('đối chiếu'),true);
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Pending commission must NOT pay');
@@ -80,6 +83,8 @@ assert.equal(orders[0].estimated_reward_lua,2000,'Member sees Admin estimate onl
 assert.equal(orders[0].reward_lua,0,'Estimate must never add to wallet');
 assert.ok(!('commission_vnd' in orders[0]),'Commission must remain private while provisional');
 assert.ok(!('verification_note' in orders[0]),'Admin verification note must stay hidden');
+assert.ok(!('admin_note' in orders[0]),'Admin-only review notes must stay hidden');
+assert.ok(!(await call('/api/shop/orders')).data.events.some(e=>'detail' in e),'Buyer never receives audit details');
 const estimatePage=await shopOrdersPage({
  api:async p=>p==='/api/shop/orders'?{orders,events:[]}:{unread:0},
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
@@ -87,6 +92,7 @@ assert.match(estimatePage,/Lúa dự kiến nhận/);
 assert.match(estimatePage,/~ 2000/);
 assert.match(estimatePage,/có thể tăng hoặc giảm/);
 assert.match(estimatePage,/Chưa cộng vào ví Lúa/);
+assert.doesNotMatch(estimatePage,/HOA_HONG_BI_MAT_123|hoa hồng|Affiliate/i,'Buyer UI must not disclose affiliate commission or internal records');
 const pendingAdminForm=await adminShopOrdersPage({
  api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1}),
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
@@ -112,14 +118,17 @@ assert.match(editEstimateAdminPage,/data-form="shop-order-estimate"/);
 assert.match(editEstimateAdminPage,/Lúa dự kiến đang hiển thị cho khách/);
 const duplicateCheck=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Lặp lại'},'admin1');
 assert.equal(duplicateCheck.status,409);
-const overpay=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:500,reward_lua:2000,settled_reference:ref},'admin1');
+const overpay=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:500,reward_lua:2000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(overpay.status,400);
 assert.equal(db.prepare("SELECT status FROM shop_orders WHERE id=?").get(oid).status,'provisional');
-const settled=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
+const missingFinalConfirmation=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
+assert.equal(missingFinalConfirmation.status,400,'Final delivery/payment/settlement acknowledgement required');
+assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Missing final proof acknowledgement must never pay');
+const settled=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(settled.status,200);
 assert.equal(settled.data.reward_lua,3000);
 assert.equal(db.prepare("SELECT SUM(amount) n FROM wallet_entries WHERE user_id='user1' AND reference_type='shop_order'").get().n,3000);
-const repeated=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
+const repeated=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(repeated.status,409);
 const forbiddenUpdateAfterResolved=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:4000},'admin1');
 assert.equal(forbiddenUpdateAfterResolved.status,409,'Cannot revise estimate after real Lua was settled');
@@ -135,6 +144,7 @@ const page=await shopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(page,/Đã giải quyết/);
 assert.match(page,/\+3000 Lúa/);
+assert.doesNotMatch(page,/hoa hồng|Affiliate|HOA_HONG_BI_MAT_123/i,'Buyer order history must not reveal Admin compensation');
 assert.doesNotMatch(page,/Lúa dự kiến nhận/,'Đơn đã giải quyết chỉ hiển thị Lúa thực tế');
 const adminPage=await adminShopOrdersPage({
  api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1}),
@@ -145,10 +155,19 @@ assert.equal(read.status,200);
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,0);
 const second=await call('/api/shop/orders','POST',{product_id:prodId,order_reference:'TIKTOKORDER11223344'},'user2');
 assert.equal(second.status,201);
-const reject=await call('/api/admin/shop/orders/'+second.data.id,'POST',{status:'rejected',reason:'Đơn không đủ điều kiện hoa hồng'},'admin1');
+const reject=await call('/api/admin/shop/orders/'+second.data.id,'POST',{status:'rejected',reason:'HOA_HONG_BI_MAT_123; đơn không đủ điều kiện'},'admin1');
 assert.equal(reject.status,200);
 assert.equal(db.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE user_id='user2'").get().n,0);
 assert.equal((await call('/api/shop/orders','GET',undefined,'user2')).data.orders[0].status,'rejected');
+const rejectedBuyerData=(await call('/api/shop/orders','GET',undefined,'user2')).data;
+assert.ok(!('admin_note' in rejectedBuyerData.orders[0]),'Rejected Admin reason must be private');
+assert.ok(rejectedBuyerData.events.every(e=>!('detail' in e)),'Rejected audit reason must be private');
+const rejectedBuyerPage=await shopOrdersPage({
+ api:async p=>p==='/api/shop/orders'?rejectedBuyerData:{unread:0},
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x
+});
+assert.match(rejectedBuyerPage,/Đơn hàng không đủ điều kiện nhận Lúa/);
+assert.doesNotMatch(rejectedBuyerPage,/HOA_HONG_BI_MAT_123|hoa hồng|Affiliate/i);
 assert.equal((await call('/api/shop/orders/alerts','GET',undefined,'user2')).data.unread,1);
 const noAdmin=await call('/api/admin/shop/orders','GET',undefined,'user1');
 assert.equal(noAdmin.status,403);
