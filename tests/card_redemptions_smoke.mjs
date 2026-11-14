@@ -3,6 +3,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {cardRedemptionsAPI} from '../src/card-redemptions.js';
+import {cardRedemptionsPage,adminCardRedemptionsPage} from '../public/card-redemptions-ui.js';
 
 const sqlite=new DatabaseSync(':memory:');
 for(const m of ['0001_init.sql','0002_shop.sql','0003_shop_orders.sql','0004_shop_estimated_lua.sql','0005_cards.sql']){
@@ -101,6 +102,18 @@ const member2=await call('/api/card-redemptions','GET',undefined,'other');
 assert.equal(member2.data.redemptions.length,0);
 assert.ok(!JSON.stringify((await call('/api/admin/card-redemptions','GET',undefined,'admin')).data).includes('PIN1234567890'),'Admin listing does not return secrets');
 assert.equal(balance(),40000,'Delivery does not double debit Lua');
+const safeText=x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
+const viewCtx={esc:safeText,heading:(title,sub)=>'<h1>'+title+'</h1><p>'+sub+'</p>',dt:x=>x};
+const memberHTML=await cardRedemptionsPage({...viewCtx,api:async()=>issued.data});
+assert.match(memberHTML,/Đổi Lúa, nhận thẻ cào/);
+assert.match(memberHTML,/Sao chép mã thẻ/);
+assert.match(memberHTML,/PIN1234567890/,'Recipient can view their own delivered PIN');
+const adminLatest=await call('/api/admin/card-redemptions','GET',undefined,'admin');
+const adminHTML=await adminCardRedemptionsPage({...viewCtx,api:async()=>adminLatest.data});
+assert.match(adminHTML,/Quản lý đổi thẻ cào/);
+assert.match(adminHTML,/CARD_VOUCHER_SECRET/);
+assert.doesNotMatch(adminHTML,/PIN1234567890|SERIAL123456/,'Admin UI must never receive previously issued card codes');
+assert.match(adminHTML,/card-generate-key/,'iPhone Admin can generate voucher encryption key locally');
 const second=await call('/api/card-redemptions','POST',{carrier:'MobiFone',denomination_vnd:20000});
 assert.equal(second.status,201);
 assert.equal(balance(),20000);
@@ -119,4 +132,17 @@ delete env.CARD_VOUCHER_SECRET;
 const noSecret=(await call('/api/card-redemptions')).data.redemptions.find(x=>x.id===id);
 assert.ok(noSecret.delivery_error,'Missing key does not leak voucher or allow incorrect display');
 assert.ok(!noSecret.card_details);
+// Không cho phát trùng cùng seri dù tạo nhiều yêu cầu thẻ khác nhau.
+env.CARD_VOUCHER_SECRET='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+await call('/api/admin/card-redemptions/settings','POST',{enabled:'1'},'admin');
+const repeatCard=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000});
+assert.equal(repeatCard.status,201);
+assert.equal((await call('/api/admin/card-redemptions/'+repeatCard.data.id,'POST',{action:'approved'},'admin')).status,200);
+const blockedSerial=await call('/api/admin/card-redemptions/'+repeatCard.data.id,'POST',
+ {action:'delivered',serial:'SERIAL123456',pin:'DIFFERENT123456'},'admin');
+assert.equal(blockedSerial.status,409,'A physical prepaid card cannot be issued twice');
+assert.equal(sqlite.prepare("SELECT status FROM card_redemptions WHERE id=?").get(repeatCard.data.id).status,'approved');
+assert.equal((await call('/api/admin/card-redemptions/'+repeatCard.data.id,'POST',
+ {action:'rejected',note:'Không có mã thẻ khác để phát.'},'admin')).status,200);
+assert.equal(balance(),40000,'No Lua lost when Admin cannot issue duplicate card');
 console.log('PASS: card redemption defaults off, secure code encryption, member privacy, one-time debit, approval, refusal/refund and disabled gates.');
