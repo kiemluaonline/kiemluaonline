@@ -923,8 +923,8 @@ async function adminSettings(){
  ${select('withdrawals_enabled','Cho phép yêu cầu rút',[['0','Tắt'],['1','Bật']],s.withdrawals_enabled)}</div>
  <div class="form-row">${field('checkin_reward','Lúa thưởng điểm danh',s.checkin_reward,'type="number" min="0" max="10000000" required')}
  ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}</div>
- <div class="form-row">${field('min_withdraw_lua','Tối thiểu rút (Lúa)',s.min_withdraw_lua,'type="number" min="0" max="10000000" required')}
- ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}</div>
+ <p class="note">Mức rút tối thiểu đã cố định là 5.000đ theo tỷ giá Lúa/VNĐ bên dưới. Không cần đặt ngưỡng Lúa riêng.</p>
+ ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}
  <h3>💸 Phí rút tiền và đổi thẻ cào</h3>
  <p class="note">Rút 5.000đ – 24.999đ: thu thêm 2.000đ bằng Lúa. Rút từ 25.000đ: miễn phí. Khách nhận đủ số tiền muốn rút. Mức phí rút tự động theo số tiền, Admin không cần cài đặt. Nếu yêu cầu bị từ chối, hoàn toàn bộ Lúa đã giữ gồm phí. Yêu cầu cũ vẫn giữ nguyên phí lúc gửi.</p>
  ${field('card_fee_lua','Phí mỗi lần đổi thẻ cào (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
