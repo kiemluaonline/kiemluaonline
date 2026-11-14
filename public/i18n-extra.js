@@ -492,5 +492,7 @@ window.TramExtraTranslations = {
   "Gửi khi đủ thời gian": "Xa thaum sijhawm txaus",
   "Xác nhận hoàn thành": "Lees tias ua tiav",
   "Lúa": "Lúa",
-  "Xem & mua ngay": "Saib thiab yuav tam sim no"
+  "Xem & mua ngay": "Saib thiab yuav tam sim no",
+  "🛍️ Xem & mua ngay – Tích Lúa 🌾": "🛍️ Saib thiab yuav tam sim no – Sau Lúa 🌾",
+  "🌾 Đơn hợp lệ, đã giải quyết mới nhận Lúa": "🌾 Tsuas tau Lúa thaum daim xaj raug cai thiab ua tiav lawm"
 };
