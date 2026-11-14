@@ -873,7 +873,7 @@ async function handler(req, env) {
       google_auth_enabled: googleReady(env), gmail_google_required: googleReady(env),
       checkin_reward: int(settings.checkin_reward), referral_reward: int(settings.referral_reward),
       withdrawals_enabled: settings.withdrawals_enabled === '1' && int(settings.lua_per_vnd) > 0,
-      min_withdraw_lua: Math.max(int(settings.min_withdraw_lua), WITHDRAW_MIN_VND*int(settings.lua_per_vnd)),
+      min_withdraw_lua: WITHDRAW_MIN_VND*int(settings.lua_per_vnd),
       lua_per_vnd: int(settings.lua_per_vnd),
       withdrawal_fee_lua: 0, // Chỉ để tương thích client cũ; phí thực tế tính theo số tiền rút.
       withdrawal_min_vnd: WITHDRAW_MIN_VND, withdrawal_free_from_vnd: WITHDRAW_FREE_FROM_VND,
@@ -1350,9 +1350,8 @@ async function handler(req, env) {
     if (!positive(amount, 1000000000)) fail(400, 'Số Lúa muốn rút không hợp lệ.');
     if (amount % rate !== 0) fail(400, `Số Lúa cần chia hết cho ${rate} để quy đổi ra VNĐ.`);
     const vndAmount = amount/rate;
-    const minimumLua = Math.max(int(settings.min_withdraw_lua), WITHDRAW_MIN_VND*rate);
-    if (vndAmount < WITHDRAW_MIN_VND || amount < minimumLua)
-      fail(400, `Rút tối thiểu ${WITHDRAW_MIN_VND.toLocaleString('vi-VN')}đ (và đáp ứng mức Lúa tối thiểu nếu Admin đặt cao hơn).`);
+    if (vndAmount < WITHDRAW_MIN_VND)
+      fail(400, `Rút tối thiểu ${WITHDRAW_MIN_VND.toLocaleString('vi-VN')}đ.`);
     const fee = withdrawalFeeFor(amount,rate);
     if (!Number.isSafeInteger(fee) || !Number.isSafeInteger(amount+fee) || amount+fee>1000000000)
       fail(409,'Khoản rút và phí vượt giới hạn cho phép.');
