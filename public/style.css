@@ -618,14 +618,43 @@ html[lang="hmn"] .language-legal-notice{display:block}
 .withdraw-history-item p{font-size:13px;line-height:1.6;margin:11px 0 0;color:#557365}
 
 
-/* Thẻ thanh toán tự luân phiên các lệnh paid thật, không lộ số tài khoản. */
-.task-payment .paid-slide[hidden],.paid-rotation-controls[hidden]{display:none!important}
-.paid-slide{min-height:105px;animation:paid-slide-in .28s ease}
-@keyframes paid-slide-in{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-.paid-rotation-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:8px}
-.paid-rotation-controls button{border:1px solid #b8deca;background:#fff;color:#156244;width:32px;height:32px;border-radius:10px;font-size:22px;display:grid;place-items:center;line-height:1}
-.paid-rotation-count{font-weight:800;font-size:12px;color:#366c54;font-variant-numeric:tabular-nums}
-.paid-rotation-controls button:focus-visible{outline:2px solid #15845f;outline-offset:2px}
+/* Thẻ thanh toán giao dịch thật: tự chuyển mượt, không mũi tên và số 2/2. */
+.task-payment{
+ position:relative;isolation:isolate;overflow:hidden;
+ background:linear-gradient(122deg,#ebfaf1 0%,#f7fdf8 62%,#e5f6ed 100%);
+ border:1px solid #a3e3bb;
+ box-shadow:0 12px 33px #1b75441c;
+ padding:19px 21px 21px;
+}
+.task-payment:before{
+ content:"";position:absolute;right:-72px;top:-95px;width:220px;height:220px;
+ pointer-events:none;border-radius:50%;
+ background:radial-gradient(circle,#b3e5c15e,transparent 68%);z-index:-1;
+}
+.task-payment .paid-slide[hidden]{display:none!important}
+.paid-slide{position:relative;min-height:106px;animation:paid-slide-in .62s cubic-bezier(.2,.7,.2,1) both}
+.paid-status-line{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.paid-status-line strong{font-size:13px;letter-spacing:.35px;font-weight:850;color:#146947}
+.paid-status-dot{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:#2ab56b;box-shadow:0 0 0 5px #bcecc944}
+.task-payment .paid-highlight{margin:10px 0 6px!important;color:#165b43;font-size:clamp(22px,4vw,30px);font-weight:900;line-height:1.1;letter-spacing:-.6px}
+.task-payment .paid-highlight span{font-weight:800;font-size:16px;color:#518568}
+.paid-bank-line{font-size:13px;color:#3d7357;margin:3px 0 9px;line-height:1.5}
+.paid-bank-line b{font-weight:850;color:#215a43;letter-spacing:.2px}
+.task-payment .paid-disclaimer{display:block;font-size:11px;line-height:1.65;color:#6b9078;max-width:96%}
+.paid-slide-progress{display:none}
+.task-payment.has-paid-rotation .paid-slide-progress{
+ position:absolute;display:block;left:0;bottom:-21px;height:3px;width:100%;
+ background:linear-gradient(90deg,#2dac70,#67c59a);
+ transform-origin:left center;animation:paid-progress 6s linear both;
+}
+@keyframes paid-slide-in{from{opacity:0;transform:translateY(10px) scale(.992)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes paid-progress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media(max-width:570px){
+ .task-payment{padding:18px 18px 21px}
+ .task-payment .paid-highlight{font-size:25px}
+ .task-payment .paid-disclaimer{font-size:10.5px}
+ .task-payment.has-paid-rotation .paid-slide-progress{bottom:-21px}
+}
 
 /* Hai nút trên góc phải: chuông và truy cập Hồ sơ, luôn hiện trên iPhone. */
 .topbar{position:relative;z-index:30}
@@ -656,4 +685,4 @@ html[lang="hmn"] .language-legal-notice{display:block}
  .topbar .balance-pill{padding:7px 8px;font-size:12px}
  .header-notification-panel{position:fixed;top:74px;left:12px;right:12px;width:auto;max-height:75dvh}
 }
-@media(prefers-reduced-motion:reduce){.paid-slide{animation:none}}
+@media(prefers-reduced-motion:reduce){.paid-slide,.task-payment.has-paid-rotation .paid-slide-progress{animation:none}}
