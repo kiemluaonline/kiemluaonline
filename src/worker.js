@@ -1760,7 +1760,7 @@ export default {
   },
   async fetch(req, env) {
     if (!new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
-    if (!['GET', 'POST', 'PATCH', 'PUT'].includes(req.method)) return json({ error: 'Phương thức không được hỗ trợ.' }, 405);
+    if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return json({ error: 'Phương thức không được hỗ trợ.' }, 405);
     try { return await handler(req, env); }
     catch (e) {
       if (e instanceof HttpError) return json({ error: e.message, ...e.extra }, e.status);
