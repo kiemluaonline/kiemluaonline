@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { shopOrdersAPI } from '../src/shop-orders.js';
+import { shopOrdersAPI, ORDER_CHECK_NOTE, ORDER_REJECTION_REASONS } from '../src/shop-orders.js';
 import { shopOrdersPage,adminShopOrdersPage } from '../public/shop-orders-ui.js';
 
 const db=new DatabaseSync(':memory:');
@@ -78,13 +78,20 @@ assert.equal((await call('/api/shop/orders','GET',undefined,'user2')).data.order
 const adminView=(await call('/api/admin/shop/orders','GET',undefined,'admin1')).data;
 assert.equal(adminView.orders.length,1);
 assert.equal(adminView.orders[0].order_reference,ref);
+assert.equal(adminView.verification_note,ORDER_CHECK_NOTE);
+assert.deepEqual(adminView.rejection_reasons,ORDER_REJECTION_REASONS);
+assert.equal(ORDER_REJECTION_REASONS['0'],'Không tìm thấy thông tin đơn hàng tương ứng với ID đã cung cấp.');
+assert.equal(ORDER_REJECTION_REASONS['1'],'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.');
+assert.equal(ORDER_REJECTION_REASONS['2'],'Đơn hàng đã được hoàn trả hoặc hoàn tiền nên không đủ điều kiện nhận Lúa.');
+assert.equal(ORDER_REJECTION_REASONS['3'],'Sau khi kiểm tra, đơn hàng chưa đáp ứng điều kiện nhận thưởng của chương trình.');
 const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(premature.status,409);
-const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Đã tìm thấy ID đơn TikTok Affiliate, chờ giao hàng',estimated_reward_lua:0},'admin1');
+const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',estimated_reward_lua:0},'admin1');
 assert.equal(invalidEstimate.status,400,'Bắt buộc nhập ước tính hợp lệ trước khi tạm duyệt');
-const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'HOA_HONG_BI_MAT_123: Đã tìm thấy đúng ID và sản phẩm TikTok',estimated_reward_lua:2000},'admin1');
+const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Ghi chú do client tự sửa, phải bị bỏ qua',estimated_reward_lua:2000},'admin1');
 assert.equal(provisional.status,200);
-assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note.includes('HOA_HONG_BI_MAT_123'),true,'Admin retains private verification notes');
+assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note,ORDER_CHECK_NOTE,'Only exact preset verification text is stored');
+assert.equal(db.prepare('SELECT admin_note FROM shop_orders WHERE id=?').get(oid).admin_note,ORDER_CHECK_NOTE,'Any client-provided verification note is ignored');
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Pending commission must NOT pay');
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,1);
 orders=(await call('/api/shop/orders')).data.orders;
@@ -111,6 +118,9 @@ const pendingAdminForm=await adminShopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(pendingAdminForm,/name="estimated_reward_lua"/);
 assert.match(pendingAdminForm,/placeholder="Ví dụ 2000"/);
+assert.match(pendingAdminForm,/sorder-preset-note/,'Admin sees fixed verification sentence');
+assert.match(pendingAdminForm,/Đã kiểm tra ID đơn hàng, thông tin sản phẩm trùng khớp/);
+assert.doesNotMatch(pendingAdminForm,/name="admin_note"|shop-verify-[^"]+" name="admin_note"/,'Admin cannot type verification note');
 const invalidUpdate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:-5},'admin1');
 assert.equal(invalidUpdate.status,400);
 const updatedEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:2500},'admin1');
@@ -171,8 +181,14 @@ assert.equal(read.status,200);
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,0);
 const second=await call('/api/shop/orders','POST',{product_id:prodId,order_reference:'TIKTOKORDER11223344'},'user2');
 assert.equal(second.status,201);
-const reject=await call('/api/admin/shop/orders/'+second.data.id,'POST',{status:'rejected',reason:'HOA_HONG_BI_MAT_123; đơn không đủ điều kiện'},'admin1');
+const invalidRejection=await call('/api/admin/shop/orders/'+second.data.id,'POST',{status:'rejected',reason:'Nội dung tự nhập'},'admin1');
+assert.equal(invalidRejection.status,400,'Only preset reason codes can reject orders');
+const invalidCode=await call('/api/admin/shop/orders/'+second.data.id,'POST',{status:'rejected',reason_code:'9'},'admin1');
+assert.equal(invalidCode.status,400);
+assert.equal(db.prepare('SELECT status FROM shop_orders WHERE id=?').get(second.data.id).status,'pending');
+const reject=await call('/api/admin/shop/orders/'+second.data.id,'POST',{status:'rejected',reason_code:'2'},'admin1');
 assert.equal(reject.status,200);
+assert.equal(db.prepare('SELECT admin_note FROM shop_orders WHERE id=?').get(second.data.id).admin_note,ORDER_REJECTION_REASONS['2']);
 assert.equal(db.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE user_id='user2'").get().n,0);
 assert.equal((await call('/api/shop/orders','GET',undefined,'user2')).data.orders[0].status,'rejected');
 const rejectedBuyerData=(await call('/api/shop/orders','GET',undefined,'user2')).data;
@@ -183,6 +199,7 @@ const rejectedBuyerPage=await shopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x
 });
 assert.match(rejectedBuyerPage,/Đơn hàng không đủ điều kiện nhận Lúa/);
+assert.doesNotMatch(rejectedBuyerPage,/hoàn trả hoặc hoàn tiền|hoa hồng|Affiliate/i,'Detailed Admin rejection note stays private');
 assert.match(rejectedBuyerPage,/Không được cộng Lúa/);
 assert.match(rejectedBuyerPage,/sorder-card-rejected/);
 assert.doesNotMatch(rejectedBuyerPage,/Tiến trình đơn hàng|Bước 1\/3|Bước 2\/3|Bước 3\/3/,'Rejected is a separate outcome, not a fourth timeline step');
@@ -190,4 +207,23 @@ assert.doesNotMatch(rejectedBuyerPage,/HOA_HONG_BI_MAT_123|hoa hồng|Affiliate/
 assert.equal((await call('/api/shop/orders/alerts','GET',undefined,'user2')).data.unread,1);
 const noAdmin=await call('/api/admin/shop/orders','GET',undefined,'user1');
 assert.equal(noAdmin.status,403);
+const adminRejectPage=await adminShopOrdersPage({
+ api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1,verification_note:ORDER_CHECK_NOTE,rejection_reasons:ORDER_REJECTION_REASONS}),
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x
+});
+assert.match(adminRejectPage,/name="reason_code"/);
+assert.match(adminRejectPage,/value="0"/);
+assert.match(adminRejectPage,/value="1"/);
+assert.match(adminRejectPage,/value="2"/);
+assert.match(adminRejectPage,/value="3"/);
+assert.match(adminRejectPage,/Đơn hàng đã được hoàn trả hoặc hoàn tiền/);
+assert.doesNotMatch(adminRejectPage,/name="reason"|name="admin_note"/,'No free-form order notes in Admin UI');
+for(const code of ['0','1','3']){
+ const created=await call('/api/shop/orders','POST',{product_id:prodId,order_reference:'ORDEREXTRATEST'+code+'555555'},'user2');
+ assert.equal(created.status,201);
+ const result=await call('/api/admin/shop/orders/'+created.data.id,'POST',{status:'rejected',reason_code:code},'admin1');
+ assert.equal(result.status,200);
+ assert.equal(db.prepare('SELECT admin_note FROM shop_orders WHERE id=?').get(created.data.id).admin_note,ORDER_REJECTION_REASONS[code]);
+}
+assert.equal(db.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE user_id='user2'").get().n,0,'Rejected orders cannot add Lua');
 console.log('PASS: TikTok order reporting, manual verification, settled commission, one-time credit, statuses, alerts and private earnings.');
