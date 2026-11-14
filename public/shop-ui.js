@@ -95,11 +95,26 @@ export async function adminShopPage(ctx){
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Danh sách sản phẩm</h2><p>Bật/tắt hoặc sửa sản phẩm mà không ảnh hưởng nhiệm vụ cũ.</p></div></div>
    ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc(p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
    </section>
-   <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Yêu cầu sản phẩm từ khách</h2><p>Khách đã gửi ảnh hoặc link qua kênh nhắn tin, kèm mã SP. Chọn đúng sản phẩm rồi nhấn “Đã có sản phẩm”.</p></div><span class="shop-count">${pending.length} đang chờ</span></div>
+   <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Yêu cầu sản phẩm từ khách</h2><p>Đối chiếu mã SP ở đầu thẻ với mã khách gửi trên Zalo/Telegram. Bạn có thể chọn sản phẩm có sẵn hoặc nhập link Affiliate mới ngay tại yêu cầu để tự báo khách.</p></div><span class="shop-count">${pending.length} đang chờ</span></div>
    ${d.requests.length?`<div class="shop-admin-requests">${d.requests.map(r=>`<article class="shop-admin-request"><div class="shop-request-top"><strong>${esc(r.code)}</strong><span class="shop-state shop-state-${esc(r.status)}">${r.status==='pending'?'Chờ xử lý':r.status==='ready'?'Đã có sản phẩm':'Từ chối'}</span></div>
     <p><strong>${esc(r.name)}</strong> · ${esc(r.email)}</p><p>${esc(r.note)} · ${r.channel==='zalo'?'Zalo':'Telegram'}</p>
     ${r.status==='pending'?`<div class="shop-admin-resolution"><label for="shop-resolve-${esc(r.id)}">Chọn sản phẩm đã thêm</label><select id="shop-resolve-${esc(r.id)}" data-shop-product-for="${esc(r.id)}"><option value="">-- Chọn sản phẩm --</option>${opts}</select>
-     <div class="shop-admin-buttons"><button type="button" class="btn sm" data-action="shop-request-ready" data-id="${esc(r.id)}" ${opts?'':'disabled'}>✓ Đã có sản phẩm</button><button type="button" class="btn danger sm" data-action="shop-request-reject" data-id="${esc(r.id)}">Không tìm thấy</button></div></div>`:`<p class="note">${r.status==='ready'?`Đã liên kết: ${esc(r.product_title||'Sản phẩm')}`:'Đã đánh dấu không tìm thấy'}</p>`}
+     <div class="shop-admin-buttons"><button type="button" class="btn sm" data-action="shop-request-ready" data-id="${esc(r.id)}" ${opts?'':'disabled'}>✓ Đã có sản phẩm</button><button type="button" class="btn danger sm" data-action="shop-request-reject" data-id="${esc(r.id)}">Không tìm thấy</button></div>
+${!opts?'<p class="shop-quick-hint">Bạn chưa thêm sản phẩm nào. Có thể thêm trực tiếp bên dưới để báo khách ngay.</p>':''}
+<div class="shop-quick-divider"><span>HOẶC THÊM SẢN PHẨM MỚI</span></div>
+<form class="shop-quick-form" data-form="shop-fulfill">
+ <input type="hidden" name="request_id" value="${esc(r.id)}">
+ <label for="shopquick-title-${esc(r.id)}">Tên sản phẩm <span aria-hidden="true">*</span></label>
+ <input id="shopquick-title-${esc(r.id)}" name="title" type="text" maxlength="110" minlength="3" required placeholder="Tên sản phẩm tìm được trên TikTok Shop">
+ <label for="shopquick-link-${esc(r.id)}">Link TikTok Shop Affiliate <span aria-hidden="true">*</span></label>
+ <input id="shopquick-link-${esc(r.id)}" name="link" type="url" maxlength="900" required placeholder="https://vt.tiktok.com/...">
+ <label for="shopquick-category-${esc(r.id)}">Danh mục</label>
+ <select id="shopquick-category-${esc(r.id)}" name="category">
+  <option value="other">Theo yêu cầu / Khác</option><option value="beauty">Làm đẹp</option><option value="fashion">Thời trang</option><option value="home">Nhà cửa</option><option value="technology">Công nghệ</option>
+ </select>
+ <button type="submit" class="btn shop-quick-submit">＋ Thêm sản phẩm & thông báo khách</button>
+ <p class="note">Website tự cập nhật trạng thái cho đúng khách. Không cần nhắn Zalo/Telegram; khách sẽ thấy khi đăng nhập hoặc tải lại trang.</p>
+</form></div>`:`<p class="note">${r.status==='ready'?`Đã liên kết: ${esc(r.product_title||'Sản phẩm')}`:'Đã đánh dấu không tìm thấy'}</p>`}
     </article>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có yêu cầu sản phẩm nào.</p>'}
    </section><p class="note section">Lưu ý: Chức năng này mới quản lý sản phẩm và yêu cầu. Chưa xác minh đơn hàng TikTok hoặc tự động cộng Lúa.</p>`;
 }
@@ -159,6 +174,14 @@ export async function handleShopSubmit(kind,b,ctx){
     if(b.id)await api('/api/admin/shop/products/'+encodeURIComponent(b.id),'PATCH',payload);
     else await api('/api/admin/shop/products','POST',payload);
     state.shopEdit=null;toast('Đã lưu sản phẩm TikTok Shop Affiliate.');await navigate('admin-shop');return true;
+  }
+  if(kind==='shop-fulfill'){
+    if(!b.request_id)throw new Error('Chưa xác định được mã yêu cầu cần xử lý.');
+    if(!confirm('Đã kiểm tra đúng sản phẩm, đúng link Affiliate và mã yêu cầu của khách? Website sẽ thông báo tự động.'))return true;
+    const result=await api('/api/admin/shop/requests/'+encodeURIComponent(b.request_id),'POST',{
+      status:'ready_new',title:b.title,link:b.link,category:b.category||'other',description:''
+    });
+    toast(result.message);await navigate('admin-shop');return true;
   }
   if(kind==='shop-contact'){
     await api('/api/admin/shop/contact','PUT',{zalo:b['shop-zalo']||'',telegram:b['shop-telegram']||''});
