@@ -176,3 +176,20 @@
 .sorder-admin .sorder-reject-form label{color:#8a493e}
 .sorder-admin .sorder-reject-form .btn{white-space:normal}
 @media(max-width:560px){.sorder-admin .sorder-preset-note{padding:12px}.sorder-admin .sorder-reject-form{padding:12px}}
+
+/* Quy định xuất xứ đơn: hiển thị cho khách ở lịch sử và khi báo ID. */
+.sorder-origin-policy,.sorder-report-policy{
+ border:1px solid #e8d4a2;border-radius:15px;
+ background:#fffaf0;color:#705827;padding:14px 16px;line-height:1.65;
+}
+.sorder-origin-policy{margin:-6px 0 19px}
+.sorder-origin-policy strong,.sorder-report-policy strong{
+ display:block;font-size:12px;font-weight:850;line-height:1.5
+}
+.sorder-origin-policy p,.sorder-report-policy p{
+ margin:7px 0 0;font-size:11px;line-height:1.7;color:#7b6845
+}
+.sorder-report-policy{margin:11px 0 15px}
+@media(max-width:570px){
+ .sorder-origin-policy,.sorder-report-policy{padding:12px 13px}
+}
