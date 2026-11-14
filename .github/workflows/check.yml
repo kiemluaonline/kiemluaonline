@@ -15,3 +15,4 @@ jobs:
           node-version: '22'
       - run: npm run check:google
       - run: npm run check
+      - run: python3 tests/schema_check.py
