@@ -1,3 +1,4 @@
+import { shopAPI } from './shop.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -840,6 +841,10 @@ async function handler(req, env) {
   const u = new URL(req.url), p = u.pathname, m = req.method;
   if (!env.DB) fail(500, 'Chưa kết nối cơ sở dữ liệu D1.');
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(m)) requireSameOrigin(req);
+  if (p === '/api/shop' || p.startsWith('/api/shop/') || p === '/api/admin/shop' || p.startsWith('/api/admin/shop/')) {
+    const shopResult = await shopAPI(req, env, { auth, readBody, fail, json, id, str });
+    if (shopResult) return shopResult;
+  }
   if (m === 'GET' && p === '/api/meta') {
     const settings = await getSettings(env);
     const admin = await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin'").first();
