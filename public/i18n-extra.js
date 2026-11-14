@@ -590,5 +590,8 @@ window.TramExtraTranslations = {
   "Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.": "Lub tuam txhab xov tooj lossis tus nqi npav tsis raug.",
   "Số dư Lúa không đủ để đổi thẻ hoặc yêu cầu chưa được lưu.": "Koj cov Lúa tsis txaus lossis daim ntawv thov tseem tsis tau khaws.",
   "Seri thẻ này đã được phát cho một yêu cầu khác. Không phát trùng thẻ.": "Daim npav seri no twb muab rau lwm daim ntawv thov lawm. Tsis txhob muab npav ob zaug.",
-  "Cần đặt CARD_VOUCHER_SECRET (64 ký tự hex) và tỷ giá Lúa/VNĐ hợp lệ trước khi bật.": "Yuav tsum teeb CARD_VOUCHER_SECRET (64 cim hex) thiab tus nqi pauv Lúa/VNĐ ua ntej qhib."
+  "Cần đặt CARD_VOUCHER_SECRET (64 ký tự hex) và tỷ giá Lúa/VNĐ hợp lệ trước khi bật.": "Yuav tsum teeb CARD_VOUCHER_SECRET (64 cim hex) thiab tus nqi pauv Lúa/VNĐ ua ntej qhib.",
+  "⚠️ Chưa tải được chức năng đổi thẻ cào. Tính năng có thể đang chờ thiết lập hoặc kết nối máy chủ gặp sự cố. Vui lòng thử lại sau; ví Lúa của bạn không bị thay đổi bởi việc mở trang.": "⚠️ Thauj tsis tau kev pauv daim npav. Tej zaum tseem tos teeb lossis server muaj teeb meem. Thov sim dua tom qab; qhib nplooj no tsis hloov koj cov Lúa.",
+  "⚠️ Không tải được quản lý thẻ cào. Hãy kiểm tra kết nối máy chủ và bảo đảm đã sao lưu D1, chạy migrations/0005_cards.sql trong Cloudflare D1 Console trước khi bật dịch vụ.": "⚠️ Thauj tsis tau nplooj tswj daim npav. Thov kuaj server thiab xyuas tias twb khaws D1 thiab khiav migrations/0005_cards.sql hauv Cloudflare D1 Console ua ntej qhib.",
+  "Kiểm tra Chống gian lận và đối chiếu tài khoản trước khi phát thẻ, vì mã thẻ sau khi phát không thể thu hồi.": "Kuaj Kev tiv thaiv kev dag thiab tus as khauj ua ntej muab daim npav; thaum muab tus lej lawm rov thim tsis tau."
 };
