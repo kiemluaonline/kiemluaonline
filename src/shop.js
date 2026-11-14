@@ -1,3 +1,20 @@
+// Giới hạn miền Zalo thật; chấp nhận cả link hồ sơ và link QR chia sẻ trên iPhone.
+export function normalizeZaloContact(raw) {
+  const value=String(raw||'').trim();
+  if(!value)return '';
+  if(/^0[0-9]{9}$/.test(value))return 'https://zalo.me/'+value;
+  let u;
+  try { u=new URL(value); } catch { return null; }
+  if(u.protocol!=='https:' || u.username || u.password || u.hash || (u.port && u.port!=='443'))return null;
+  const host=u.hostname.toLowerCase();
+  if(['zalo.me','www.zalo.me'].includes(host) && u.pathname.length>1)return u.href;
+  if(['zaloapp.com','www.zaloapp.com'].includes(host)
+    && /^\/qr\/p\/[A-Za-z0-9_-]+\/?$/.test(u.pathname)
+    && (!u.search || (u.searchParams.size===1 && u.searchParams.get('src')==='qr')))
+    return u.href;
+  return null;
+}
+
 export async function shopAPI(req, env, H) {
   const {auth, readBody, fail, json, id, str} = H;
   const path = new URL(req.url).pathname;
@@ -71,17 +88,9 @@ export async function shopAPI(req, env, H) {
   if (path === '/api/admin/shop/contact' && method === 'PUT') {
     const body = await readBody(req);
     const zaloRaw = str(body.zalo,180), telegramRaw = str(body.telegram,180);
-    let zalo = '', telegram = '';
-    if (zaloRaw) {
-      if (/^0[0-9]{9}$/.test(zaloRaw)) zalo='https://zalo.me/'+zaloRaw;
-      else {
-        try {
-          const u=new URL(zaloRaw);
-          if(u.protocol!=='https:' || !['zalo.me','www.zalo.me'].includes(u.hostname) || !u.pathname || u.pathname==='/' || u.username || u.password) fail(400,'Link Zalo chưa hợp lệ.');
-          zalo=u.href;
-        } catch(e) { if(e.status) throw e; fail(400,'Nhập số Zalo 10 chữ số hoặc link https://zalo.me/...'); }
-      }
-    }
+    const zalo = normalizeZaloContact(zaloRaw);
+    if(zalo===null)fail(400,'Link Zalo chưa hợp lệ. Hãy dùng số điện thoại Zalo, link zalo.me hoặc link QR zaloapp.com/qr/p/...');
+    let telegram = '';
     if (telegramRaw) {
       let name=telegramRaw.replace(/^@/,'');
       if (telegramRaw.startsWith('https://')) {
