@@ -9,6 +9,11 @@ async function codeKey(secret){
  if(!validSecret(secret))throw Error('Chưa có khóa bảo mật mã thẻ.');
  return crypto.subtle.importKey('raw',hexToBytes(secret),'AES-GCM',false,['encrypt','decrypt']);
 }
+async function serialFingerprint(secret,carrier,serial){
+ const key=await crypto.subtle.importKey('raw',hexToBytes(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const value=new TextEncoder().encode(carrier+':'+serial.toUpperCase());
+ return bytesToHex(new Uint8Array(await crypto.subtle.sign('HMAC',key,value)));
+}
 async function encryptCard(secret,carrier,serial,pin){
  const key=await codeKey(secret),iv=crypto.getRandomValues(new Uint8Array(12));
  const payload=JSON.stringify({carrier,serial,pin});
@@ -149,10 +154,13 @@ export async function cardRedemptionsAPI(req,env,H){
    const serial=str(b.serial,45).replace(/\s/g,''),pin=str(b.pin,45).replace(/\s/g,'');
    if(!/^[A-Za-z0-9]{6,40}$/.test(serial)||!/^[A-Za-z0-9]{8,40}$/.test(pin))
      fail(400,'Nhập đúng số seri (6–40 ký tự) và mã thẻ (8–40 ký tự), chỉ chữ hoặc số.');
+   const fingerprint=await serialFingerprint(env.CARD_VOUCHER_SECRET,row.carrier,serial);
+   const duplicate=await db.prepare('SELECT id FROM card_redemptions WHERE card_serial_fingerprint=?').bind(fingerprint).first();
+   if(duplicate)fail(409,'Seri thẻ này đã được phát cho một yêu cầu khác. Không phát trùng thẻ.');
    const encrypted=await encryptCard(env.CARD_VOUCHER_SECRET,row.carrier,serial,pin);
    const result=await db.prepare(`UPDATE card_redemptions SET status='delivered',
-     card_payload_encrypted=?,delivered_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
-     WHERE id=? AND status='approved' AND card_payload_encrypted=''`).bind(encrypted,rid).run();
+     card_payload_encrypted=?,card_serial_fingerprint=?,delivered_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+     WHERE id=? AND status='approved' AND card_payload_encrypted=''`).bind(encrypted,fingerprint,rid).run();
    if(!result.meta?.changes)fail(409,'Yêu cầu đã thay đổi; mã thẻ chưa được ghi. Hãy tải lại.');
    return json({ok:true,message:'Đã phát thẻ! Chỉ thành viên nhận thẻ mới xem được seri và mã thẻ.'});
  }
