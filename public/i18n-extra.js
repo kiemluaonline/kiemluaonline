@@ -491,5 +491,6 @@ window.TramExtraTranslations = {
   "⚠ Tạm khóa – Đang xác minh": "⚠ Kaw ib ntus – Tab tom kuaj",
   "Gửi khi đủ thời gian": "Xa thaum sijhawm txaus",
   "Xác nhận hoàn thành": "Lees tias ua tiav",
-  "Lúa": "Lúa"
+  "Lúa": "Lúa",
+  "Xem & mua ngay": "Saib thiab yuav tam sim no"
 };
