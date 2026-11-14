@@ -1,5 +1,5 @@
-import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-product-privacy-v5';
-import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-reward-only-v7';
+import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-hmoob-all-v8';
+import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-hmoob-all-v8';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm(window.TramI18n?.translateLabel(message)??message);
 const localizedPrompt=(message,defaultValue='')=>window.prompt(window.TramI18n?.translateLabel(message)??message,defaultValue);
