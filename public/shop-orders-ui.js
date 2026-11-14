@@ -1,6 +1,6 @@
 // Native browser confirmation uses the currently selected language.
 function askOrderConfirm(message){
- const label=window.TramI18n?.translateLabel(message)??message;
+ const label=(typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message);
  return window.confirm(label);
 }
 export function shopOrderMeta(status) {
