@@ -67,10 +67,8 @@ export async function shopAPI(req, env, H) {
     const contacts = await shopContacts();
     if (!contacts[channel]) fail(409,'Kênh liên hệ này chưa được Admin thiết lập.');
     const note = str(body.note,240) || 'Khách gửi ảnh hoặc liên kết sản phẩm qua tin nhắn.';
-    const used = await db.prepare("SELECT COUNT(*) AS day_total,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending_total FROM shop_requests WHERE user_id=? AND date(created_at,'+7 hours')=date('now','+7 hours')").bind(user.id).first();
-    if (Number(used?.day_total||0)>=5) fail(429,'Bạn đã gửi đủ 5 yêu cầu hôm nay. Vui lòng quay lại ngày mai.');
-    const pending = await db.prepare("SELECT COUNT(*) AS n FROM shop_requests WHERE user_id=? AND status='pending'").bind(user.id).first();
-    if (Number(pending?.n||0)>=15) fail(429,'Bạn đang có nhiều yêu cầu chờ xử lý. Vui lòng chờ Admin.');
+    // Yêu cầu mua sắm không áp dụng hạn mức lượt/ngày hay số yêu cầu chờ.
+    // Quy định này chỉ thuộc /api/shop/requests, không ảnh hưởng hạn mức nhiệm vụ khác.
     const requestId = id(), code = 'SP-'+requestId.replaceAll('-','').slice(0,10).toUpperCase();
     await db.prepare("INSERT INTO shop_requests(id,code,user_id,channel,note,status) VALUES(?,?,?,?,?,'pending')").bind(requestId,code,user.id,channel,note).run();
     return json({ok:true,code,contact_url:contacts[channel],message:'Đã tạo mã yêu cầu. Hãy gửi mã cùng ảnh hoặc link sản phẩm cho Admin.'},201);
