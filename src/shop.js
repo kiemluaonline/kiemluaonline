@@ -124,7 +124,26 @@ export async function shopAPI(req, env, H) {
   const requestMatch = path.match(/^\/api\/admin\/shop\/requests\/([0-9a-f-]{36})$/i);
   if (requestMatch && method === 'POST') {
     const body=await readBody(req), status=str(body.status,16);
-    if (!['ready','rejected'].includes(status)) fail(400,'Trạng thái yêu cầu không hợp lệ.');
+    if (!['ready','ready_new','rejected'].includes(status)) fail(400,'Trạng thái yêu cầu không hợp lệ.');
+    // Cách nhanh: Admin tạo sản phẩm và hoàn tất yêu cầu trong MỘT giao dịch D1.
+    // Không tạo sản phẩm mồ côi, không cập nhật lại yêu cầu đã được xử lý.
+    if (status==='ready_new') {
+      const data=validateProduct({...body,category:body.category||'other',is_active:true});
+      const productId=id();
+      const result=await db.batch([
+        db.prepare(`INSERT INTO shop_products(id,title,description,link,category,is_active)
+          SELECT ?,?,?,?,?,1 WHERE EXISTS
+          (SELECT 1 FROM shop_requests WHERE id=? AND status='pending')`)
+          .bind(productId,data.title,data.description,data.link,data.category,requestMatch[1]),
+        db.prepare(`UPDATE shop_requests SET status='ready',product_id=?,
+          updated_at=CURRENT_TIMESTAMP,seen_at=NULL
+          WHERE id=? AND status='pending'`).bind(productId,requestMatch[1])
+      ]);
+      if (!result[0].meta?.changes || !result[1].meta?.changes)
+        fail(409,'Yêu cầu đã được xử lý hoặc không tồn tại. Hãy tải lại danh sách.');
+      return json({ok:true,product_id:productId,
+        message:'Đã thêm sản phẩm và gửi thông báo trên website cho khách.'});
+    }
     const productId=status==='ready'?str(body.product_id,50):null;
     if (status==='ready') {
       if (!productId) fail(400,'Hãy chọn sản phẩm đã thêm vào danh sách trước.');
