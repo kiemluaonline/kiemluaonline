@@ -1157,14 +1157,14 @@ assert.equal((await call('/api/payout-accounts/'+bank2id+'/default','POST',{},ne
 const newDefaults=(await call('/api/payout-accounts','GET',undefined,newLogin.cookie)).data.accounts;
 assert.equal(newDefaults.find(x=>x.id===bank2id).is_default,1);
 assert.equal(newDefaults.find(x=>x.id===bankId).is_default,0);
-assert.equal((await call('/api/payout-accounts/'+bank2id,'DELETE',undefined,newLogin.cookie)).status,200);
+assert.equal((await call('/api/payout-accounts/'+bank2id,'DELETE',{},newLogin.cookie)).status,200);
 const defaultAfterDelete=(await call('/api/payout-accounts','GET',undefined,newLogin.cookie)).data.accounts;
 assert.equal(defaultAfterDelete.find(x=>x.id===bankId).is_default,1,'Deleting a default account promotes remaining bank');
 assert.equal((await call('/api/admin/withdrawals/'+savedRequest.data.id,'POST',{
  status:'rejected',admin_note:'Kiểm thử hoàn số Lúa đầy đủ'
 },admCookie)).status,200);
 assert.equal((await call('/api/me','GET',undefined,newLogin.cookie)).data.balance,savedBalance);
-assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',undefined,newLogin.cookie)).status,200);
+assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',{},newLogin.cookie)).status,200);
 assert.equal((await call('/api/history','GET',undefined,newLogin.cookie)).data.withdrawals.find(x=>x.id===savedRequest.data.id).bank_account,
  '99ZP987654321','Deleting saved account keeps withdrawal history intact');
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/saved_account_id/);
