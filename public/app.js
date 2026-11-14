@@ -1,8 +1,8 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-hmoob-all-v8';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-hmoob-all-v8';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
-const localizedConfirm=message=>window.confirm(window.TramI18n?.translateLabel(message)??message);
-const localizedPrompt=(message,defaultValue='')=>window.prompt(window.TramI18n?.translateLabel(message)??message,defaultValue);
+const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
+const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message),defaultValue);
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
