@@ -759,4 +759,9 @@ window.TramExtraTranslations = {
   "Đã chuyển đến TK": "Twb xa rau tus as khauj",
   "Ghi nhận": "Tau sau tseg",
   "Thông tin do Admin xác nhận, không phải thông báo từ ngân hàng.": "Admin yog tus lees paub xwb, tsis yog ntawv ceeb toom los ntawm txhab nyiaj.",
+  "Sau khi mua qua trang trưng bày của Admin, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.": "Tom qab yuav ntawm Admin lub khw tso saib lawm, xa TikTok tus lej xaj xwb. Tsis tas xaiv yam khoom; Admin mam kuaj qhov chaw yuav ua ntej pom zoo rau Lúa.",
+  "Sau khi mua qua gian hàng hoặc liên kết của Admin, vào mục “Báo đơn hàng” riêng và nhập ID đơn TikTok, không cần chọn sản phẩm. Admin sẽ kiểm tra nguồn mua trước khi xét Lúa.": "Thaum yuav hauv Admin lub khw los sis ntawm nws tus link lawm, mus rau qhov qhia daim xaj thiab sau TikTok ID xwb. Tsis tas xaiv yam khoom. Admin mam kuaj qhov chaw yuav.",
+  "Sau khi mua qua gian hàng của Admin, nhập ID đơn TikTok tại mục “Báo đơn hàng” riêng để theo dõi thưởng Lúa.": "Thaum yuav ntawm Admin lub khw lawm, sau TikTok ID rau hauv qhov qhia daim xaj cais kom saib Lúa.",
+  "Vào TikTok → Đơn hàng → Chi tiết đơn, sao chép mã đơn và nhập dưới đây. Không cần chọn sản phẩm; Admin sẽ đối chiếu ID, sản phẩm và nguồn mua.": "Mus rau TikTok → Cov ntawv xaj → Xov xwm daim xaj, luam tus lej xaj rau hauv qab no. Tsis tas xaiv yam khoom; Admin mam txheeb ID, yam khoom thiab qhov chaw yuav.",
+  "Chưa tải được các giao dịch đã thanh toán. Bạn có thể tải lại trang để thử.": "Thauj tsis tau cov kev them nyiaj tiav. Koj rov rub nplooj ntawv sim dua.",
 };
