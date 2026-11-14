@@ -1205,17 +1205,21 @@ async function handler(req, env) {
   }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
-    const [todayLua,linkLua,submittedToday,latest] = await Promise.all([
+    const [todayLua,linkLua,submittedToday,recent] = await Promise.all([
       env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM wallet_entries WHERE user_id=? AND amount>0 AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
       env.DB.prepare("SELECT COALESCE(SUM(c.reward),0) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=? AND c.status='approved' AND t.category='link'").bind(me.id).first(),
       env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
-      env.DB.prepare("SELECT bank_account,vnd_amount,reviewed_at FROM withdrawals WHERE status='paid' ORDER BY reviewed_at DESC LIMIT 1").first()
+      env.DB.prepare("SELECT id,bank_account,vnd_amount,reviewed_at FROM withdrawals WHERE status='paid' AND reviewed_at IS NOT NULL ORDER BY reviewed_at DESC,id DESC LIMIT 12").all()
     ]);
     return json({
       today_lua:todayLua.n,link_lua:linkLua.n,submitted_today:submittedToday.n,
       next_reset_at:Date.parse(today+'T00:00:00+07:00')+DAY,
       ip:clientIP(req),device_code:await deviceCode(req,env),device_registered:Boolean(browserDeviceId(req)),
-      latest_payment:latest?{masked_account:maskedAccount(latest.bank_account),vnd_amount:latest.vnd_amount,at:latest.reviewed_at}:null
+      // Các khoản đã chi thật do Admin xác nhận; không công khai user_id hoặc số TK đầy đủ.
+      recent_payments:recent.results.map(w=>({id:w.id,masked_account:maskedAccount(w.bank_account),
+        vnd_amount:w.vnd_amount,at:w.reviewed_at})),
+      latest_payment:recent.results[0]?{masked_account:maskedAccount(recent.results[0].bank_account),
+        vnd_amount:recent.results[0].vnd_amount,at:recent.results[0].reviewed_at}:null
     });
   }
   const startMatch = p.match(/^\/api\/tasks\/([^/]+)\/start$/);
