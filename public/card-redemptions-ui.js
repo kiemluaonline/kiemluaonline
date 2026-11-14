@@ -82,6 +82,7 @@ export async function adminCardRedemptionsPage(ctx){
      <button class="btn alt" type="button" data-action="card-generate-key">🔑 Tạo và sao chép khóa bí mật</button>
     </div>
   </div>
+  <div class="cards-warning" role="note">⚠️ Kiểm tra Chống gian lận và đối chiếu tài khoản trước khi phát thẻ, vì mã thẻ sau khi phát không thể thu hồi.</div>
   <div class="cards-section-head"><h3>Yêu cầu đổi thẻ từ thành viên</h3><span>${items.length} yêu cầu</span></div>
   ${items.length?`<div class="cards-history">${items.map(i=>`<article class="card cards-admin-item">
    <div class="cards-item-top"><strong>${esc(i.carrier)} • ${money(i.denomination_vnd)}đ</strong><span class="cards-status cards-status-${esc(i.status)}">${cardStatus[i.status]||'Đang xử lý'}</span></div>
