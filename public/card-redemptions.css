@@ -1,0 +1,71 @@
+/* Đổi thẻ cào • mobile-first, tách biệt rút ngân hàng và ZaloPay. */
+.cards-page{max-width:1190px;margin:auto;color:#1b4733}
+.cards-page h3{font-size:18px;color:#1f553d}
+.cards-hero{display:flex;align-items:center;gap:17px;justify-content:space-between;
+ padding:27px 30px;border-radius:23px;margin:20px 0 21px;
+ color:#fff;background:linear-gradient(125deg,#104d3b,#197857);overflow:hidden}
+.cards-hero>div:first-child{min-width:0}
+.cards-hero h2{font-size:clamp(24px,4.2vw,35px);line-height:1.25;margin:8px 0}
+.cards-hero p{max-width:610px;color:#ddf4e7;font-size:13px;line-height:1.7;margin:0}
+.cards-hero-kicker{font-size:10px;font-weight:900;letter-spacing:1.5px;color:#e5d7a3}
+.cards-hero-icon{font-size:75px;opacity:.9;line-height:1}
+.cards-warning{background:#fff6df;border:1px solid #ead49b;color:#7e612a;border-radius:13px;
+ padding:13px 15px;margin:12px 0;font-size:12px;line-height:1.65}
+.cards-columns{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px;align-items:start}
+.cards-exchange-form,.cards-howto{padding:24px;border-radius:18px}
+.cards-exchange-form{display:flex;flex-direction:column;gap:9px}
+.cards-exchange-form label,.cards-deliver-form label,.cards-settings-row label{font-weight:800;color:#37644b;font-size:12px}
+.cards-exchange-form select,.cards-settings-row select,.cards-deliver-form input{
+ display:block;width:100%;max-width:100%;min-width:0;min-height:47px;
+ border:1px solid #cadfcf;border-radius:12px;background:#fff;
+ color:#194934;font-size:14px;padding:11px 13px;outline:none}
+.cards-exchange-form select:focus,.cards-settings-row select:focus,.cards-deliver-form input:focus{
+ border-color:#228c61;box-shadow:0 0 0 3px #23855721}
+.cards-primary{width:100%;min-height:49px;border-radius:12px;font-size:14px}
+.cards-balance{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+ padding:13px 15px;border:1px solid #d5e9d8;border-radius:12px;background:#edf8ee;font-size:12px;color:#507760}
+.cards-balance strong{font-size:16px;color:#1d754c}
+.cards-note{font-size:11px;line-height:1.7;color:#72897a;margin:6px 0 12px}
+.cards-howto ol{list-style:none;padding:0;margin:0;display:grid;gap:13px;counter-reset:cardsteps}
+.cards-howto li{counter-increment:cardsteps;position:relative;padding:2px 0 0 45px;min-height:41px}
+.cards-howto li:before{content:counter(cardsteps);position:absolute;left:0;top:0;width:31px;height:31px;
+ display:grid;place-items:center;border-radius:50%;background:#e1f3e6;color:#176d46;font-weight:900}
+.cards-howto li b{display:block;font-size:12px;color:#27583e}
+.cards-howto li span{display:block;font-size:11px;line-height:1.6;color:#779285;margin-top:4px}
+.cards-section-head{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:27px 0 13px}
+.cards-section-head h3{margin:0}.cards-section-head span{font-size:12px;color:#618472}
+.cards-history{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cards-item,.cards-admin-item{padding:19px;background:#fff;border:1px solid #dfece1;border-radius:18px;min-width:0}
+.cards-item-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cards-item-top strong{font-size:15px;color:#26543b}
+.cards-status{padding:7px 10px;border-radius:99px;font-size:10px;font-weight:850;background:#fff2d5;color:#986921;line-height:1.4}
+.cards-status-approved{background:#e4f0fd;color:#336a9c}
+.cards-status-delivered{background:#e0f4e5;color:#21764b}
+.cards-status-rejected{background:#fae5e3;color:#a34841}
+.cards-meta{display:flex;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;font-size:11px;
+ color:#6b8775;line-height:1.65;margin:13px 0}
+.cards-secret{border-top:1px solid #e0eae3;padding-top:12px;margin-top:12px}
+.cards-secret summary{cursor:pointer;list-style:disclosure-closed;font-weight:850;color:#217349;font-size:12px}
+.cards-secret-panel{background:#f2f9f3;border-radius:14px;margin-top:11px;padding:15px;display:grid;gap:14px}
+.cards-secret-panel>div{display:grid;gap:7px}
+.cards-secret-panel small{font-size:11px;color:#65856e}
+.cards-secret-panel code{word-break:break-all;font-size:16px;font-weight:800;color:#20533c}
+.cards-secret-panel .btn{max-width:170px}
+.cards-refunded{font-size:12px;color:#a04d42}
+.cards-success{font-size:12px;font-weight:800;color:#1d7950}
+.cards-empty{padding:26px;color:#72927c}
+.cards-admin-settings{margin:19px 0}
+.cards-settings-row{display:flex;gap:11px;flex-wrap:wrap;align-items:end;margin-top:12px}
+.cards-settings-row label{width:100%}
+.cards-settings-row select{flex:1;min-width:170px}
+.cards-settings-row .btn{min-height:46px}
+.cards-admin-item>p{font-size:12px}
+.cards-light{font-size:11px;color:#768d81}
+.cards-admin-actions{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}
+.cards-deliver-form{display:grid;gap:10px;background:#f2f9f3;border:1px solid #dcebdd;border-radius:14px;padding:14px}
+.cards-deliver-form .btn{min-height:46px;white-space:normal}
+@media(max-width:800px){.cards-columns,.cards-history{grid-template-columns:1fr}}
+@media(max-width:560px){.cards-hero{padding:22px 17px;border-radius:18px;gap:5px}
+.cards-hero-icon{font-size:44px}.cards-hero h2{font-size:24px}
+.cards-hero p{font-size:11px}.cards-exchange-form,.cards-howto{padding:17px}
+.cards-item,.cards-admin-item{padding:15px}.cards-settings-row .btn{width:100%}}
