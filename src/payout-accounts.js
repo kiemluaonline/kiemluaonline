@@ -3,18 +3,16 @@ const MAX_SAVED=10;
 const isUUID=s=>/^[0-9a-f-]{36}$/i.test(String(s));
 export const validPayoutAccount=(body,str,fail)=>{
  const method=str(body.payment_method,20);
- if(!['bank','zalopay'].includes(method))fail(400,'Chọn ngân hàng hoặc ZaloPay.');
- const bank=method==='zalopay'?'ZaloPay':str(body.bank_name,90);
+ if(method!=='bank')fail(400,'Hiện chỉ hỗ trợ lưu tài khoản ngân hàng.');
+ const bank=str(body.bank_name,90);
  const number=str(body.account_number,40).replace(/\s/g,'');
  const owner=str(body.account_owner,100);
  const nickname=str(body.nickname,40);
- if(method==='bank'&&(!bank||bank.length<2||bank.toLowerCase()==='zalopay'))
+ if(!bank||bank.length<2||bank.toLowerCase()==='zalopay')
    fail(400,'Tên ngân hàng nhận tiền không hợp lệ.');
  // BVBank có số tài khoản định danh do ZaloPay cung cấp (ví dụ 99ZP...), không chỉ số.
- if(method==='bank' && !(bank.toLowerCase()==='bvbank'?/^[a-z0-9]{5,30}$/i.test(number):/^[0-9]{5,30}$/.test(number)))
+ if(!(bank.toLowerCase()==='bvbank'?/^[a-z0-9]{5,30}$/i.test(number):/^[0-9]{5,30}$/.test(number)))
    fail(400,bank.toLowerCase()==='bvbank'?'Số tài khoản BVBank cần 5–30 ký tự chữ hoặc số.':'Số tài khoản ngân hàng phải có 5–30 chữ số.');
- if(method==='zalopay'&&!/^0[0-9]{9}$/.test(number))
-   fail(400,'Số điện thoại ZaloPay cần đúng 10 số, bắt đầu bằng 0.');
  if(owner.length<3||owner.length>100||/[<>\r\n]/.test(owner))
    fail(400,'Tên chủ tài khoản phải từ 3–100 ký tự, không chứa ký tự đặc biệt không hợp lệ.');
  return {payment_method:method,bank_name:bank,account_number:number,account_owner:owner,nickname};
@@ -58,6 +56,7 @@ export async function payoutAccountsAPI(req,env,H){
  const rid=match[1],row=await db.prepare('SELECT * FROM payout_accounts WHERE id=? AND user_id=?').bind(rid,me.id).first();
  if(!row)fail(404,'Không tìm thấy tài khoản nhận tiền của bạn.');
  if(m==='POST'&&match[2]==='default'){
+  if(row.payment_method!=='bank')fail(400,'Tài khoản ví cũ không còn hỗ trợ đặt mặc định cho lần rút mới.');
   await db.batch([
    db.prepare('UPDATE payout_accounts SET is_default=0 WHERE user_id=? AND payment_method=?').bind(me.id,row.payment_method),
    db.prepare('UPDATE payout_accounts SET is_default=1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?').bind(rid,me.id)
