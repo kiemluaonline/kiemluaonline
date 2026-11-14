@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS shop_orders (
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','provisional','resolved','rejected')),
   customer_note TEXT NOT NULL DEFAULT '',
   admin_note TEXT NOT NULL DEFAULT '',
+  verification_note TEXT NOT NULL DEFAULT '',
   commission_vnd INTEGER NOT NULL DEFAULT 0 CHECK(commission_vnd>=0),
   reward_lua INTEGER NOT NULL DEFAULT 0 CHECK(reward_lua>=0),
   rate_snapshot INTEGER NOT NULL DEFAULT 0 CHECK(rate_snapshot>=0),
