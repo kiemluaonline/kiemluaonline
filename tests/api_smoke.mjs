@@ -382,6 +382,10 @@ const feeMeta=await call('/api/meta');
 assert.equal(feeMeta.data.withdrawal_fee_lua,3);
 assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.settings.card_fee_lua,'7');
 const feeBefore=(await call('/api/me','GET',undefined,cookie)).data.balance;
+const blockedOldBrowser=await call('/api/withdrawals','POST',
+ {amount:20,payment_method:'bank',bank_name:'Vietcombank',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie);
+assert.equal(blockedOldBrowser.status,409,'Old Safari form cannot trigger hidden new fee');
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
 const withFee=await call('/api/withdrawals','POST',
  {amount:20,payment_method:'bank',bank_name:'Vietcombank',
   bank_account:'1234567890',bank_owner:'NGUYEN VAN A',expected_fee_lua:3},cookie);
