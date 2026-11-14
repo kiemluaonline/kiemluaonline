@@ -455,8 +455,10 @@ assert.equal(legacyPaid.status,'paid');
 assert.equal(legacyPaid.payment_method,'zalopay');
 const rotatingPaid=await call('/api/task-dashboard','GET',undefined,cookie);
 assert.equal(rotatingPaid.data.recent_payments.length,2,'Multiple truly paid requests become ticker slides');
-assert.equal(rotatingPaid.data.recent_payments[0].id,oldPaidID,'Newest paid request comes first');
-assert.equal(rotatingPaid.data.recent_payments[1].id,w2.data.id);
+assert.ok(rotatingPaid.data.recent_payments.some(x=>x.id===oldPaidID));
+assert.ok(rotatingPaid.data.recent_payments.some(x=>x.id===w2.data.id));
+// SQLite reviewed_at chỉ chính xác đến giây; nhiều khoản trong cùng giây sẽ xếp theo ID.
+assert.ok(rotatingPaid.data.recent_payments[0].at>=rotatingPaid.data.recent_payments[1].at);
 assert.ok(rotatingPaid.data.recent_payments.every(x=>!('bank_account' in x)&&!('user_id' in x)));
 assert.equal(rotatingPaid.data.latest_payment.masked_account,rotatingPaid.data.recent_payments[0].masked_account);
 
