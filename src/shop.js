@@ -45,7 +45,7 @@ export async function shopAPI(req, env, H) {
     const user = await auth(req,env);
     const [products, requests, contacts] = await Promise.all([
       db.prepare("SELECT id,title,description,link,category,created_at FROM shop_products WHERE is_active=1 ORDER BY created_at DESC LIMIT 100").all(),
-      db.prepare("SELECT r.id,r.code,r.note,r.channel,r.status,r.created_at,r.updated_at,r.seen_at,p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link FROM shop_requests r LEFT JOIN shop_products p ON p.id=r.product_id WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 60").bind(user.id).all(),
+      db.prepare("SELECT r.id,r.code,r.note,r.channel,r.status,r.product_id,r.created_at,r.updated_at,r.seen_at,p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link FROM shop_requests r LEFT JOIN shop_products p ON p.id=r.product_id WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 60").bind(user.id).all(),
       shopContacts()
     ]);
     return json({products:products.results,requests:requests.results,contacts});
