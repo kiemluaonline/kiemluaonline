@@ -3,7 +3,7 @@
 ## Cấu hình của Admin
 Trên iPhone, vào **Admin → Cài đặt → 💸 Phí xử lý rút tiền và đổi thẻ cào**:
 
-- **Phí mỗi lần rút tiền (Lúa) – ngân hàng / ZaloPay**: một khoản phí cố định cộng thêm cho mỗi yêu cầu rút, áp dụng chung hai kênh.
+- **Phí mỗi lần rút tiền (Lúa) – ngân hàng (bao gồm BVBank)**: một khoản phí cố định cộng thêm cho mỗi yêu cầu rút, áp dụng chung hai kênh.
 - **Phí mỗi lần đổi thẻ cào (Lúa)**: một khoản phí cố định khác, cộng thêm khi đổi thẻ Viettel, VinaPhone, MobiFone.
 - Mặc định **0 Lúa** cho cả hai. Admin chọn mức phí, rồi nhấn **Lưu cài đặt**. **Không tự đặt phí thay Admin**.
 - Mức phí nằm trong khoảng **0–10.000.000 Lúa/yêu cầu**. Không thu % và không tự trừ phí vào số tiền/thẻ thực nhận.
