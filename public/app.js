@@ -17,9 +17,11 @@ function stopPaidRotation(){
 }
 function paymentSlides(payments){
  return payments.map((p,i)=>`<div class="paid-slide" data-payment-index="${i}" ${i?'hidden':''}>
-  <strong>✓ ADMIN XÁC NHẬN ĐÃ CHUYỂN</strong>
-  <p>TK ${esc(p.masked_account)} • ${fmt(p.vnd_amount)} ₫</p>
-  <small>Ghi nhận ${dt(p.at)}. Trạng thái do Admin cập nhật, không phải xác nhận tự động từ ngân hàng.</small>
+  <div class="paid-status-line"><span class="paid-status-dot" aria-hidden="true"></span><strong>ADMIN XÁC NHẬN ĐÃ CHUYỂN</strong></div>
+  <p class="paid-highlight">${fmt(p.vnd_amount)} <span>₫</span></p>
+  <div class="paid-bank-line">Đã chuyển đến TK <b>${esc(p.masked_account)}</b></div>
+  <small class="paid-disclaimer">Ghi nhận ${dt(p.at)}. Thông tin do Admin xác nhận, không phải thông báo từ ngân hàng.</small>
+  <span class="paid-slide-progress" aria-hidden="true"></span>
  </div>`).join('');
 }
 function displayPaidRotation(index){
@@ -29,7 +31,6 @@ function displayPaidRotation(index){
  const next=((index%slides.length)+slides.length)%slides.length;
  slides.forEach((slide,i)=>{slide.hidden=i!==next;});
  box.dataset.active=String(next);
- const count=box.querySelector('.paid-rotation-count');if(count)count.textContent=(next+1)+'/'+slides.length;
 }
 function startPaidRotation(){
  stopPaidRotation();
@@ -55,8 +56,7 @@ function startPaidRotation(){
     const slidesHost=box.querySelector('.paid-rotation-slides');
     if(slidesHost)slidesHost.innerHTML=records.length?paymentSlides(records):
      '<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p>';
-    const controls=box.querySelector('.paid-rotation-controls');
-    if(controls)controls.hidden=records.length<=1;
+    box.classList.toggle('has-paid-rotation',records.length>1);
     displayPaidRotation(0);
     startPaidRotation();
    }
@@ -598,13 +598,8 @@ function taskDashboardCard(d,quotas={}){
  const payment=payments.length?paymentSlides(payments)
   :'<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p><small>Không sử dụng giao dịch minh họa.</small>';
  return `<div class="task-dashboard">
-  <section class="card task-payment" id="paid-rotation" data-active="0" data-signature="${esc(signature)}" aria-label="Các giao dịch đã thanh toán">
+  <section class="card task-payment ${payments.length>1?'has-paid-rotation':''}" id="paid-rotation" data-active="0" data-signature="${esc(signature)}" aria-label="Các giao dịch đã thanh toán">
     <div class="paid-rotation-slides">${payment}</div>
-    <div class="paid-rotation-controls" ${payments.length<=1?'hidden':''}>
-     <button type="button" data-action="paid-prev" aria-label="Giao dịch đã thanh toán trước">‹</button>
-     <span class="paid-rotation-count">1/${payments.length}</span>
-     <button type="button" data-action="paid-next" aria-label="Giao dịch đã thanh toán tiếp theo">›</button>
-    </div>
   </section>
   <div class="task-stats">
     <div class="card task-stat"><span>🌾 LÚA HÔM NAY</span><strong>+${fmt(d.today_lua)} Lúa</strong></div>
@@ -1338,10 +1333,6 @@ app.addEventListener('click',async e=>{
    const amountInput=form.querySelector('[name="amount"]');
    if(amountInput){amountInput.value=String(max);updateWithdrawalPreview(form);}
    return;
-  }
-  if(act==='paid-prev'||act==='paid-next'){
-   const box=document.getElementById('paid-rotation');if(!box)return;
-   displayPaidRotation(Number(box.dataset.active||0)+(act==='paid-next'?1:-1));return;
   }
   if(act==='toggle-notifications'){
    await refreshHeaderNotifications(true);return;
