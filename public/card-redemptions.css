@@ -69,3 +69,28 @@
 .cards-hero-icon{font-size:44px}.cards-hero h2{font-size:24px}
 .cards-hero p{font-size:11px}.cards-exchange-form,.cards-howto{padding:17px}
 .cards-item,.cards-admin-item{padding:15px}.cards-settings-row .btn{width:100%}}
+
+/* Minh bạch phí: cùng ngôn ngữ thiết kế cho rút tiền và đổi thẻ cào. */
+.cards-fee-preview,.withdraw-fee-preview{
+ display:grid;gap:9px;background:linear-gradient(130deg,#f2f9ef,#f8fbf4);
+ border:1px solid #d1e5d4;border-radius:15px;padding:16px;
+ color:#286246;font-size:12px;line-height:1.55
+}
+.cards-fee-preview>strong,.withdraw-fee-preview>strong{
+ color:#184d34;font-size:14px;margin-bottom:3px
+}
+.cards-fee-preview>div,.withdraw-fee-preview>div{
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px
+}
+.cards-fee-preview b,.withdraw-fee-preview b{font-variant-numeric:tabular-nums;color:#18563b}
+.cards-fee-preview .cards-fee-total,.withdraw-fee-preview .withdraw-fee-total{
+ margin-top:3px;border-top:1px solid #d0e5d5;padding-top:11px;
+ font-size:14px;font-weight:900
+}
+.cards-fee-preview .cards-note,.withdraw-fee-preview .note{
+ color:#60826c;margin:1px 0 0;line-height:1.65;font-size:11px
+}
+@media(max-width:570px){
+ .cards-fee-preview,.withdraw-fee-preview{padding:13px;border-radius:13px}
+ .cards-fee-preview .cards-fee-total,.withdraw-fee-preview .withdraw-fee-total{font-size:13px}
+}
