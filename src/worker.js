@@ -23,7 +23,7 @@ function presentWithdrawal(w) {
 const DEFAULTS = {
   site_name: 'Trạm Có Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
-  withdrawals_enabled: '0', announcement: '',
+  withdrawals_enabled: '0', withdrawal_fee_lua: '0', card_fee_lua: '0', announcement: '',
   quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
   quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1'
@@ -862,7 +862,8 @@ async function handler(req, env) {
       google_auth_enabled: googleReady(env), gmail_google_required: googleReady(env),
       checkin_reward: int(settings.checkin_reward), referral_reward: int(settings.referral_reward),
       withdrawals_enabled: settings.withdrawals_enabled === '1' && int(settings.lua_per_vnd) > 0,
-      min_withdraw_lua: int(settings.min_withdraw_lua), lua_per_vnd: int(settings.lua_per_vnd) });
+      min_withdraw_lua: int(settings.min_withdraw_lua), lua_per_vnd: int(settings.lua_per_vnd),
+      withdrawal_fee_lua: int(settings.withdrawal_fee_lua) });
   }
   if (m === 'POST' && p === '/api/setup') {
     const b = await readBody(req), email = normEmail(b.email), password = b.password;
@@ -1296,7 +1297,10 @@ async function handler(req, env) {
             CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN '[Ảnh bằng chứng đã gửi]' WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN '[Bằng chứng đã xóa sau xét duyệt]' ELSE c.evidence END AS evidence,
             c.ip,c.device_code,c.created_at,c.reviewed_at,t.title FROM task_completions c JOIN tasks t ON t.id=c.task_id
           WHERE c.user_id=? ORDER BY c.created_at DESC LIMIT 80`).bind(me.id).all(),
-      env.DB.prepare('SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all()
+      env.DB.prepare(`SELECT w.*,
+        COALESCE((SELECT -e.amount-w.amount FROM wallet_entries e
+          WHERE e.user_id=w.user_id AND e.reference_type='withdraw_hold' AND e.reference_id=w.id LIMIT 1),0) AS fee_lua
+        FROM withdrawals w WHERE w.user_id=? ORDER BY w.created_at DESC LIMIT 80`).bind(me.id).all()
     ]);
     return json({ wallet_entries: walletEntries.results, completions: completionRows.results,
       withdrawals: withdrawals.results.map(presentWithdrawal) });
@@ -1328,9 +1332,12 @@ async function handler(req, env) {
   if (m === 'POST' && p === '/api/withdrawals') {
     const me = await auth(req, env), b = await readBody(req), settings = await getSettings(env);
     const rate = int(settings.lua_per_vnd), amount = Number(b.amount);
+    const fee = int(settings.withdrawal_fee_lua);
     if (settings.withdrawals_enabled !== '1' || rate <= 0) fail(403, 'Admin chưa bật chức năng rút tiền hoặc chưa đặt tỷ giá.');
     if (!positive(amount, 1000000000) || amount < int(settings.min_withdraw_lua)) fail(400, `Yêu cầu tối thiểu ${settings.min_withdraw_lua} Lúa.`);
     if (amount % rate !== 0) fail(400, `Số Lúa cần chia hết cho ${rate} để quy đổi ra VNĐ.`);
+    if (!Number.isSafeInteger(fee) || fee < 0 || fee > 10000000 || !Number.isSafeInteger(amount+fee) || amount+fee>1000000000)
+      fail(409,'Phí rút tiền chưa hợp lệ, vui lòng liên hệ Admin.');
     // Dùng các cột ngân hàng sẵn có để lưu 2 kênh nhận tiền, không cần migration D1.
     // Dữ liệu cũ không có payment_method vẫn được hiểu là chuyển khoản ngân hàng.
     const method = str(b.payment_method || 'bank', 20);
@@ -1347,14 +1354,15 @@ async function handler(req, env) {
     const results = await env.DB.batch([
       env.DB.prepare(`INSERT INTO withdrawals(id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner)
         SELECT ?,?,?,?,?,?,?,? WHERE (SELECT COALESCE(SUM(amount),0) FROM wallet_entries WHERE user_id=?) >= ?`)
-        .bind(wid, me.id, amount, amount / rate, rate, bank, account, owner, me.id, amount),
+        .bind(wid, me.id, amount, amount / rate, rate, bank, account, owner, me.id, amount+fee),
       env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
-        SELECT ?,?,-?,'Giữ Lúa cho yêu cầu rút','withdraw_hold',? WHERE EXISTS
+        SELECT ?,?,-?,'Giữ Lúa rút tiền (bao gồm phí)','withdraw_hold',? WHERE EXISTS
         (SELECT 1 FROM withdrawals WHERE id=? AND user_id=? AND status='pending')`)
-        .bind(id(), me.id, amount, wid, wid, me.id)
+        .bind(id(), me.id, amount+fee, wid, wid, me.id)
     ]);
-    if (!results[0].meta?.changes) fail(400, 'Số dư Lúa không đủ để rút.');
-    return json({ ok: true, message: 'Yêu cầu rút tiền đã được lưu, chờ Admin xử lý.', id: wid });
+    if (!results[0].meta?.changes || !results[1].meta?.changes) fail(400, 'Số dư Lúa không đủ cho khoản rút và phí xử lý.');
+    return json({ ok: true, message: 'Yêu cầu rút tiền đã lưu, bao gồm phí xử lý. Đang chờ Admin duyệt.', id: wid,
+      amount_lua: amount, fee_lua: fee, total_lua: amount+fee });
   }
   // -------------------- KHU VỰC ADMIN --------------------
   if (isPath(p, '/api/admin/')) {
@@ -1541,7 +1549,10 @@ async function handler(req, env) {
       return json({ ok: true });
     }
     if (m === 'GET' && p === '/api/admin/withdrawals') {
-      const rows = await env.DB.prepare(`SELECT w.*,u.email,u.name,u.status AS account_status FROM withdrawals w JOIN users u ON u.id=w.user_id
+      const rows = await env.DB.prepare(`SELECT w.*,u.email,u.name,u.status AS account_status,
+        COALESCE((SELECT -e.amount-w.amount FROM wallet_entries e
+          WHERE e.user_id=w.user_id AND e.reference_type='withdraw_hold' AND e.reference_id=w.id LIMIT 1),0) AS fee_lua
+        FROM withdrawals w JOIN users u ON u.id=w.user_id
         ORDER BY CASE WHEN w.status='pending' THEN 0 ELSE 1 END,w.created_at DESC LIMIT 150`).all();
       return json({ withdrawals: rows.results.map(presentWithdrawal) });
     }
@@ -1596,10 +1607,10 @@ async function handler(req, env) {
           WHERE id=? AND status='pending'${condition}`)
           .bind(dbStatus, dbNote, w.id),
         env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
-          SELECT ?,?,?,'Hoàn Lúa do từ chối rút','withdraw_refund',? WHERE ?='rejected' AND EXISTS
+          SELECT ?,?,(SELECT -hold.amount FROM wallet_entries hold WHERE hold.user_id=? AND hold.reference_type='withdraw_hold' AND hold.reference_id=? LIMIT 1),'Hoàn toàn bộ Lúa rút và phí','withdraw_refund',? WHERE ?='rejected' AND EXISTS
           (SELECT 1 FROM withdrawals WHERE id=? AND status='rejected')
           ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
-          .bind(id(), w.user_id, w.amount, w.id, dbStatus, w.id)
+          .bind(id(), w.user_id, w.user_id, w.id, w.id, dbStatus, w.id)
       ]);
       if (!results[0].meta?.changes) fail(409, 'Yêu cầu đã được xử lý hoặc thay đổi.');
       if(payoutRiskOverride)
@@ -1697,7 +1708,7 @@ async function handler(req, env) {
         if (!(key in body)) continue;
         const value = str(body[key], key === 'announcement' ? 1000 : 100);
         if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
-        if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd'].includes(key)
+        if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
         if(key==='quota_link_ip_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn IP.');
         if(key==='quota_link_device_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn trình duyệt.');
