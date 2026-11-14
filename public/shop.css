@@ -121,3 +121,29 @@
 .shop-quick-form .note{margin:2px 0 0}
 .shop-quick-hint{font-size:12px;color:#a06520;background:#fff8e7;border:1px solid #f1e2c4;border-radius:10px;padding:10px 12px;line-height:1.55}
 @media(max-width:570px){.shop-quick-form{padding:12px}.shop-quick-form .shop-quick-submit{font-size:12px}}
+
+/* Nút Xem sản phẩm: vùng chạm lớn, nổi bật và dễ sử dụng trên iPhone. */
+.shop-product-bottom>.shop-cta-shop{
+ display:flex;align-items:center;justify-content:center;gap:9px;
+ width:100%;min-height:52px;box-sizing:border-box;
+ padding:13px 15px;border-radius:13px;
+ background:#146348;color:#fff;
+ font-size:14px;font-weight:850;line-height:1.4;text-align:center;
+ text-decoration:none;white-space:normal;
+ box-shadow:0 5px 14px rgba(19,86,59,.14);
+ transition:background .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+.shop-product-bottom>.shop-cta-shop:hover{
+ background:#0d503b;color:#fff;text-decoration:none;
+ box-shadow:0 7px 17px rgba(19,86,59,.2);
+}
+.shop-product-bottom>.shop-cta-shop:focus-visible{
+ outline:3px solid #efbd63;outline-offset:3px;
+}
+.shop-product-bottom>.shop-cta-shop:active{transform:scale(.985)}
+@media(max-width:570px){
+ .shop-product-bottom>.shop-cta-shop{min-height:54px;font-size:14px;padding:14px 12px}
+}
+@media(prefers-reduced-motion:reduce){
+ .shop-product-bottom>.shop-cta-shop{transition:none}
+}
