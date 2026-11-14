@@ -29,7 +29,16 @@ export async function shopOrdersPage(ctx){
      return `<article class="sorder-card"><div class="sorder-card-top"><div><span class="sorder-eyebrow">MÃ ĐƠN TIKTOK</span><strong>${esc(o.order_reference)}</strong></div><span class="sorder-status sorder-status-${meta.color}">${meta.symbol} ${meta.text}</span></div>
        <div class="sorder-product"><span>🛒</span><div><strong>${esc(o.product_title)}</strong><small>Báo đơn: ${esc(dt(o.created_at))}</small></div></div>
        ${o.status==='rejected'?`<div class="sorder-rejection">Lý do từ chối: ${esc(o.admin_note||'Đơn không đủ điều kiện.')}</div>`:shopOrderSteps(o.status)}
-       ${o.status==='resolved'?`<div class="sorder-award"><span>🌾 Lúa đã nhận</span><strong>+${fmt(o.reward_lua)} Lúa</strong></div>`:`<div class="sorder-wait">Chưa ghi Lúa vào ví. ${o.status==='provisional'?'Đang chờ hoa hồng được giải quyết.':o.status==='rejected'?'Đơn không đủ điều kiện nhận thưởng.':'Admin cần xác minh đơn hàng.'}</div>`}
+       ${o.status==='resolved'
+         ?`<div class="sorder-award"><span>🌾 Lúa đã nhận</span><strong>+${fmt(o.reward_lua)} Lúa</strong></div>`
+         :o.status==='provisional'&&Number(o.estimated_reward_lua)>0
+           ?`<div class="sorder-estimate" aria-label="Lúa dự kiến chưa chính thức">
+              <div class="sorder-estimate-head"><span>🌾 Lúa dự kiến nhận</span><span class="sorder-estimate-sparkle">✦</span></div>
+              <div class="sorder-estimate-amount">~ ${fmt(o.estimated_reward_lua)} <small>Lúa</small></div>
+              <div class="sorder-estimate-wallet">♧ Chưa cộng vào ví Lúa</div>
+              <p><strong>Lưu ý:</strong> Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật sau khi đối soát hoàn tất. Đơn không đủ điều kiện sẽ không được nhận thưởng.</p>
+             </div>`
+           :`<div class="sorder-wait">Chưa ghi Lúa vào ví. ${o.status==='provisional'?'Chưa có số Lúa dự kiến; đang chờ hoa hồng được giải quyết.':o.status==='rejected'?'Đơn không đủ điều kiện nhận thưởng.':'Admin cần xác minh đơn hàng.'}</div>`}
        <details class="sorder-timeline"><summary>Xem lịch sử xử lý <span>⌄</span></summary><ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${esc(e.detail||'Trạng thái đã cập nhật')}</p></li>`).join('')}</ol></details>
        </article>`;
    }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Khi mua sản phẩm trong gian hàng, hãy bấm “Báo đã đặt hàng” để lưu đơn tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
@@ -53,8 +62,12 @@ export async function adminShopOrdersPage(ctx){
      <p><b>${esc(o.name)}</b> · ${esc(o.email)}</p><p>🛍️ <b>${esc(o.product_title)}</b></p><p>📅 ${esc(dt(o.created_at))}</p>${o.customer_note?`<p>Ghi chú khách: ${esc(o.customer_note)}</p>`:''}
      ${o.status==='pending'?`<form class="sorder-admin-form" data-form="shop-order-provisional"><input type="hidden" name="id" value="${esc(o.id)}">
        <label for="shop-verify-${esc(o.id)}">Ghi chú đối soát riêng cho Admin</label><textarea id="shop-verify-${esc(o.id)}" name="admin_note" minlength="10" maxlength="300" required placeholder="Đã thấy đơn trong Affiliate, đã nhận hàng và thanh toán..."></textarea>
+       <label for="shop-estimate-${esc(o.id)}">🌾 Lúa dự kiến nhận (chỉ Admin nhập)</label>
+       <input id="shop-estimate-${esc(o.id)}" name="estimated_reward_lua" type="number" inputmode="numeric" min="1" max="10000000" step="1" required placeholder="Ví dụ 2000">
+       <p class="sorder-estimate-help">Khách sẽ thấy Lúa dự kiến kèm thông báo “có thể tăng hoặc giảm”. Chưa cộng ví và không công khai hoa hồng.</p>
        <button class="btn" type="submit">✓ Tạm duyệt – Chờ giải quyết</button></form>`:''}
      ${o.status==='provisional'?`<div class="sorder-admin-state">Đã xác minh: ${esc(o.verification_note||'Đang chờ hoa hồng TikTok quyết toán.')}</div>
+       <div class="sorder-admin-estimate">🌾 Lúa dự kiến đang hiển thị cho khách: <strong>~ ${fmt(o.estimated_reward_lua||0)} Lúa</strong><small>Chưa cộng ví. Số Lúa thực tế khi quyết toán có thể khác.</small></div>
        <form class="sorder-admin-form sorder-settle-form" data-form="shop-order-resolve">
          <input type="hidden" name="id" value="${esc(o.id)}">
          <label for="shop-settlement-${esc(o.id)}">Mã đơn / mã đối soát TikTok đã giải quyết</label><input id="shop-settlement-${esc(o.id)}" name="settled_reference" minlength="8" maxlength="90" required placeholder="Mã trong danh sách đơn Affiliate">
@@ -105,7 +118,7 @@ export async function handleShopOrderSubmit(kind,b,ctx){
  let payload;
  if(kind==='shop-order-provisional'){
   if(!confirm('Đã kiểm tra trên TikTok Affiliate: đúng đơn, hàng đã nhận và đã thanh toán? Chuyển sang Tạm duyệt – Chờ giải quyết?'))return true;
-  payload={status:'provisional',admin_note:b.admin_note};
+  payload={status:'provisional',admin_note:b.admin_note,estimated_reward_lua:Number(b.estimated_reward_lua)};
  }else if(kind==='shop-order-resolve'){
   if(!confirm('XÁC NHẬN: Hoa hồng đơn này đã được TikTok quyết toán THẬT, đã đối chiếu đúng khách và số Lúa? Website sẽ cộng Lúa vào ví NGAY MỘT LẦN.'))return true;
   payload={status:'resolved',commission_vnd:Number(b.commission_vnd),reward_lua:Number(b.reward_lua),settled_reference:b.settled_reference};
