@@ -1,3 +1,12 @@
+// Mẫu kết quả kiểm tra và lý do từ chối do Admin chọn, không nhận nội dung tùy ý.
+export const ORDER_CHECK_NOTE = 'Đã kiểm tra ID đơn hàng, thông tin sản phẩm trùng khớp. Đơn đang chờ hoàn tất.';
+export const ORDER_REJECTION_REASONS = Object.freeze({
+  '0':'Không tìm thấy thông tin đơn hàng tương ứng với ID đã cung cấp.',
+  '1':'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.',
+  '2':'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.',
+  '3':'Sau khi kiểm tra, đơn hàng chưa đáp ứng điều kiện nhận thưởng của chương trình.'
+});
+
 // Đơn TikTok Affiliate: khách tự báo mã đơn, Admin kiểm tra và quyết toán THỦ CÔNG.
 // Không suy luận người mua từ lượt click/link và không phát Lúa trước khi đối chiếu.
 export async function shopOrdersAPI(req,env,H){
@@ -95,8 +104,8 @@ export async function shopOrdersAPI(req,env,H){
     }
     if(status==='provisional'){
       if(order.status!=='pending')fail(409,'Chỉ đơn Chờ xác minh mới được tạm duyệt.');
-      const privateNote=str(b.admin_note,300);
-      if(privateNote.length<10)fail(400,'Nhập kết quả kiểm tra ID đơn hàng (ít nhất 10 ký tự).');
+      // Chỉ dùng mẫu chuẩn đã được lưu trên máy chủ, kể cả khi trình duyệt bị sửa.
+      const privateNote=ORDER_CHECK_NOTE;
       // Giá trị dự kiến do Admin tự xác nhận: KHÔNG cộng ví, không phải cam kết thưởng.
       if(!goodInteger(b.estimated_reward_lua,1,10000000))
         fail(400,'Hãy nhập Lúa dự kiến hợp lệ (số nguyên từ 1 đến 10 triệu Lúa).');
@@ -116,8 +125,10 @@ export async function shopOrdersAPI(req,env,H){
         message:'Tạm duyệt – Chờ giải quyết. Đã hiển thị Lúa dự kiến cho khách, chưa cộng ví.'});
     }
     if(status==='rejected'){
-      const reason=str(b.reason,300);
-      if(reason.length<6)fail(400,'Cần ghi lý do từ chối ít nhất 6 ký tự.');
+      const code=String(b.reason_code??'');
+      if(!Object.hasOwn(ORDER_REJECTION_REASONS,code))
+        fail(400,'Vui lòng chọn một lý do từ chối có sẵn.');
+      const reason=ORDER_REJECTION_REASONS[code];
       const results=await db.batch([
         db.prepare(`UPDATE shop_orders SET status='rejected',admin_note=?,
           updated_at=CURRENT_TIMESTAMP,reviewed_at=CURRENT_TIMESTAMP,seen_at=NULL
