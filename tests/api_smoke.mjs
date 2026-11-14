@@ -61,7 +61,9 @@ assert.match(frontendForWelcome,/data-action="toggle-notifications"/);
 assert.match(frontendForWelcome,/class="avatar header-avatar" data-go="profile"/);
 assert.match(frontendForWelcome,/function startPaidRotation\(\)/);
 assert.match(frontendForWelcome,/recent_payments/);
-assert.match(frontendForWelcome,/data-action="paid-next"/);
+assert.doesNotMatch(frontendForWelcome,/data-action="paid-next"/,'Paid ticker must be fully automatic without arrows');
+assert.doesNotMatch(frontendForWelcome,/paid-rotation-count/,'Do not show the 2\/2 counter');
+assert.match(frontendForWelcome,/paid-slide-progress/,'Automatic ticker retains a subtle progress animation');
 assert.match(frontendForWelcome,/async function collectHeaderNotices\(\)/);
 assert.match(frontendForWelcome,/api\('\/api\/history'\)/);
 assert.match(frontendForWelcome,/state\.me\?\.user\?\.id/);
@@ -98,6 +100,34 @@ assert.equal(extraSavedCalls,0,'Failed saved-account GET must not be repeated wh
 assert.match(missingSaved,/Cloudflare D1/);
 assert.doesNotMatch(missingSaved,/Admin cần chạy bảng dữ liệu mới trước/);
 assert.doesNotMatch(missingSaved,/TRẠM CÓ LÚA/);
+// Báo đơn tách khỏi thẻ mua; modal thu gọn vừa iPhone và không tự zoom.
+const {shopCard:renderShopCard,shopPage:renderShopPage}=await import('../public/shop-ui.js');
+const sampleProduct={id:'test-product-a',title:'Sản phẩm thử nghiệm',description:'Ví dụ',
+ category:'beauty',link:'https://www.tiktok.com/'};
+const productCardHTML=renderShopCard(sampleProduct,s=>String(s));
+assert.match(productCardHTML,/Xem & mua ngay – Tích Lúa/);
+assert.doesNotMatch(productCardHTML,/shop-report-order/,'Product cards must show only the buy link');
+const shopHTML=await renderShopPage({
+ api:async p=>{assert.equal(p,'/api/shop');return {
+  products:[sampleProduct],requests:[],contacts:{zalo:null,telegram:null}
+ };},
+ esc:s=>String(s),state:{shopCategory:'all'}
+});
+assert.match(shopHTML,/id="shop-report-order"/,'Report orders in a separate area below catalog');
+assert.match(shopHTML,/id="shop-report-product"/);
+assert.match(shopHTML,/data-action="shop-report-selected"/);
+assert.match(shopHTML,/option value="test-product-a"/);
+assert.ok(shopHTML.indexOf('id="shop-report-order"')>shopHTML.indexOf('class="shop-products"'),
+ 'Order report must be outside and after the product cards');
+const orderSource=readFileSync(new URL('../public/shop-orders-ui.js',import.meta.url),'utf8');
+const orderCss=readFileSync(new URL('../public/shop-orders.css',import.meta.url),'utf8');
+assert.doesNotMatch(orderSource,/root\.querySelector\('#sorder-report-id'\)\?\.focus\(\);/,
+ 'Safari iPhone should not auto-focus a small order ID input');
+assert.match(orderCss,/\.sorder-report-modal \.sorder-admin-form input/);
+assert.match(orderCss,/font-size:16px!important/,'iPhone input font-size must prevent auto zoom');
+assert.match(orderCss,/max-height:calc\(100dvh - 24px\)/);
+console.log('PASS: separate shop order report, purchase button, mobile modal sizing and no auto-focus zoom.');
+
 const brandMeta=await call('/api/meta');
 assert.equal(brandMeta.status,200);
 assert.equal(brandMeta.data.site_name,'Trạm Có Lúa');
