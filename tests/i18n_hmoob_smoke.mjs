@@ -26,6 +26,12 @@ vm.runInContext(read('i18n.js'),sandbox,{filename:'i18n.js'});
 const i18n=sandbox.window.TramI18n;
 assert.equal(i18n.getLanguage(),'hmn');
 assert.equal(i18n.translateLabel('Mua sắm nhận Lúa'),'Mus yuav khoom tau Lúa');
+assert.equal(i18n.translateLabel('Quản lý mua sắm'),'Tswj kev yuav khoom');
+assert.equal(i18n.translateLabel('Đã giải quyết & cộng Lúa'),'Ua tiav thiab ntxiv Lúa');
+assert.equal(i18n.translateLabel('Nếu từ chối, chọn lý do có sẵn'),'Yog tsis pom zoo, xaiv ib qho laj thawj');
+assert.equal(i18n.translateLabel('Danh mục sản phẩm'),'Pawg khoom');
+assert.equal(i18n.translateLabel('Không tìm thấy đơn hàng.'),'Nrhiav tsis pom daim xaj khoom.');
+assert.equal(i18n.translateLabel('Chính sách quyền riêng tư'),'Txoj cai ceev ntiag tug');
 assert.equal(i18n.translateLabel('Đơn hàng & Lúa'),'Cov khoom xaj & Lúa');
 assert.equal(i18n.translateLabel('Duyệt đơn TikTok'),'Tshuaj xyuas cov khoom xaj TikTok');
 assert.equal(i18n.translateLabel('Chờ xác minh'),'Tos tshuaj xyuas');
@@ -82,4 +88,16 @@ for(const item of required){
 // All pages have UI labels that can be translated while content entered by customers is untouched.
 for(const page of pages)assert.ok(page.length>100);
 assert.ok(pages[1].includes('Tôi muốn dầu gội đặc biệt'));
-console.log('PASS: Hmoob translations for shopping, order states, Admin reasons, dynamic counters and language switching.');
+// Các đoạn thông tin trong hai trang điều khoản có bản Hmoob nhưng giữ bản Việt làm gốc.
+for(const filename of ['terms.html','privacy.html']){
+ const html=read(filename);
+ const candidates=[...html.matchAll(/>([^<>]+)</g)].map(m=>m[1].trim())
+   .filter(x=>x.length>100&&/[À-ỹĐđ]/u.test(x));
+ assert.ok(candidates.length>=4);
+ for(const paragraph of candidates)
+  assert.notEqual(i18n.translateLabel(paragraph),paragraph,
+   'Missing Hmoob legal-page translation ('+filename+'): '+paragraph.slice(0,60));
+}
+assert.match(read('shop-ui.js'),/askShopConfirm/);
+assert.match(read('shop-orders-ui.js'),/askOrderConfirm/);
+console.log('PASS: Hmoob covers shopping, order states, Admin reasons, terms and privacy, dynamic counters and language switching.');
