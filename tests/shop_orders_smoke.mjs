@@ -68,6 +68,11 @@ const pendingPage=await shopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x
 });
 assert.match(pendingPage,/Đã tiếp nhận ID đơn hàng/);
+assert.match(pendingPage,/Chỉ xét Lúa cho đơn mua đúng trang trưng bày của Admin/);
+assert.match(pendingPage,/Mua ở nơi khác sẽ không được tính thưởng Lúa, kể cả khi gửi ID đơn hàng/);
+const reportUi=readFileSync(new URL('../public/shop-orders-ui.js',import.meta.url),'utf8');
+assert.match(reportUi,/Lưu ý trước khi gửi ID đơn hàng/);
+assert.match(reportUi,/Nếu mua bên ngoài, ID đơn hàng sẽ không được xét thưởng Lúa/);
 assert.match(pendingPage,/Bước 1\/3/);
 assert.match(pendingPage,/Lúa: Chưa xác định/);
 assert.match(pendingPage,/Cập nhật:/);
@@ -121,6 +126,7 @@ const pendingAdminForm=await adminShopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(pendingAdminForm,/name="estimated_reward_lua"/);
 assert.match(pendingAdminForm,/placeholder="Ví dụ 2000"/);
+assert.match(pendingAdminForm,/xác minh đơn phát sinh từ trang trưng bày hoặc liên kết do Admin giới thiệu/);
 assert.match(pendingAdminForm,/sorder-preset-note/,'Admin sees fixed verification sentence');
 assert.match(pendingAdminForm,/Đã kiểm tra ID đơn hàng, thông tin sản phẩm trùng khớp/);
 assert.doesNotMatch(pendingAdminForm,/name="admin_note"|shop-verify-[^"]+" name="admin_note"/,'Admin cannot type verification note');
