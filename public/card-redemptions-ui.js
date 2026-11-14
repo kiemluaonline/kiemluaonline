@@ -66,6 +66,10 @@ export async function adminCardRedemptionsPage(ctx){
       <button type="submit" class="btn">Lưu cấu hình đổi thẻ</button>
     </form>
     <p class="cards-note">Các nhà mạng: Viettel, VinaPhone, MobiFone. Mệnh giá: 10.000đ, 20.000đ, 50.000đ, 100.000đ, 200.000đ. Bạn cần chuẩn bị sẵn thẻ thật. Lúa được hoàn khi từ chối.</p>
+    <div class="cards-key-setup"><strong>🔐 Thiết lập khóa mã thẻ trên iPhone</strong>
+     <p>Nhấn tạo khóa để sao chép một giá trị bí mật ngẫu nhiên. Dán vào Cloudflare Workers → Settings → Variables and Secrets với tên <code>CARD_VOUCHER_SECRET</code>. Không gửi khóa cho ai, không đăng công khai và không đổi khóa sau khi đã phát thẻ.</p>
+     <button class="btn alt" type="button" data-action="card-generate-key">🔑 Tạo và sao chép khóa bí mật</button>
+    </div>
   </div>
   <div class="cards-section-head"><h3>Yêu cầu đổi thẻ từ thành viên</h3><span>${items.length} yêu cầu</span></div>
   ${items.length?`<div class="cards-history">${items.map(i=>`<article class="card cards-admin-item">
@@ -89,6 +93,14 @@ export async function adminCardRedemptionsPage(ctx){
  </div>`;
 }
 export async function handleCardAction(action,el,ctx){
+ if(action==='card-generate-key'){
+   if(!window.crypto?.getRandomValues)throw Error('Trình duyệt không hỗ trợ tạo khóa an toàn.');
+   const random=window.crypto.getRandomValues(new Uint8Array(32));
+   const key=[...random].map(v=>v.toString(16).padStart(2,'0')).join('');
+   await navigator.clipboard.writeText(key);
+   ctx.toast('Đã sao chép khóa bí mật 64 ký tự. Dán vào CARD_VOUCHER_SECRET trong Cloudflare và giữ bí mật.');
+   return true;
+ }
  if(!['card-admin-approve','card-admin-reject'].includes(action))return false;
  const {api,toast,navigate}=ctx;
  const rid=el.dataset.id||'';
