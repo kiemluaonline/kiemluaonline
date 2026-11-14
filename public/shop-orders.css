@@ -1,0 +1,78 @@
+
+/* Trạm Có Lúa – lịch sử mua sắm và xác minh đơn Affiliate. */
+.sorder-page{max-width:1200px;margin:auto;color:#1d4033}
+.sorder-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px}
+.sorder-summary-card{border:1px solid #dfece3;border-radius:20px;background:#fff;padding:22px;box-shadow:0 8px 24px #113d2c10;min-width:0;display:flex;flex-direction:column;gap:8px}
+.sorder-summary-card>span{font-size:12px;color:#608071;font-weight:750}.sorder-summary-card strong{font-size:31px;letter-spacing:-1px;color:#163f30}.sorder-summary-card small{font-size:11px;color:#789487}
+.sorder-summary-lua{background:linear-gradient(145deg,#e9f5de,#f6f9ec);border-color:#d8e8ca}
+.sorder-summary-lua strong{color:#166648}
+.sorder-intro{border-radius:20px;background:linear-gradient(120deg,#0a4735,#1d7150);padding:22px;display:flex;align-items:center;justify-content:space-between;gap:18px;color:#fff;margin-bottom:22px;flex-wrap:wrap}
+.sorder-intro>div{flex:1;min-width:215px}.sorder-intro strong{font-size:18px}.sorder-intro p{font-size:13px;line-height:1.75;color:#cce5d9;margin:9px 0 0}
+.sorder-intro .btn{background:#f0c96c;color:#214431;border-color:#f0c96c;white-space:normal}
+.sorder-notice{border:1px solid #b9e3c7;background:#eefaf0;color:#286747;border-radius:15px;padding:14px 16px;margin-bottom:20px;line-height:1.55;font-size:13px;font-weight:750}
+.sorder-section-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:27px 0 17px}
+.sorder-section-heading h2{font-size:23px;letter-spacing:-.4px;margin:0;color:#153f30}
+.sorder-section-heading span{font-size:12px;font-weight:800;color:#4f7d63;border-radius:20px;padding:7px 11px;background:#e9f4e8}
+.sorder-list,.sorder-admin-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.sorder-card,.sorder-admin-card{background:#fff;border:1px solid #dceadd;box-shadow:0 9px 22px #1d503a0e;border-radius:20px;padding:20px;min-width:0}
+.sorder-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sorder-card-top>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.sorder-card-top strong{overflow-wrap:anywhere;font-size:16px;color:#1f4436}
+.sorder-eyebrow{font-size:10px;letter-spacing:1.25px;font-weight:850;color:#7d9683}
+.sorder-status{display:inline-flex;align-items:center;gap:4px;border-radius:25px;padding:8px 11px;font-size:11px;line-height:1.35;font-weight:850}
+.sorder-status-pending{background:#fff0d4;color:#8c6018}
+.sorder-status-provisional{background:#eaf1fc;color:#355e9a}
+.sorder-status-resolved{background:#def3e2;color:#1b7047}
+.sorder-status-rejected{background:#ffe6e2;color:#a83c35}
+.sorder-product{display:flex;gap:12px;align-items:center;margin:18px 0;padding:12px;border-radius:14px;background:#f5f9f5}
+.sorder-product>span{font-size:25px;background:#e5f2e5;display:grid;place-items:center;width:46px;height:46px;border-radius:13px;flex:0 0 46px}
+.sorder-product>div{display:flex;flex-direction:column;min-width:0;gap:5px}.sorder-product strong{font-size:13px;overflow-wrap:anywhere}.sorder-product small{font-size:11px;color:#819789}
+.sorder-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:5px 0 13px}
+.sorder-step{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;color:#91a396;position:relative}
+.sorder-step:not(:last-child):after{content:"";position:absolute;top:14px;left:calc(50% + 21px);width:calc(100% - 33px);height:2px;background:#dae7dc}
+.sorder-step.is-done{color:#246b49}.sorder-step.is-done:not(:last-child):after{background:#8bc7a2}
+.sorder-step>span{display:grid;place-items:center;background:#e9efea;color:#8ba390;width:30px;height:30px;border-radius:50%;font-size:12px;font-weight:850}
+.sorder-step.is-done>span{background:#d7efde;color:#187149}
+.sorder-step small{font-size:10px;font-weight:750;line-height:1.5}
+.sorder-wait{padding:11px 13px;background:#f7faf6;border-radius:11px;color:#6d8375;font-size:12px;line-height:1.65;margin-top:5px}
+.sorder-rejection{padding:12px 14px;border:1px solid #f6cdc8;border-radius:13px;background:#fff4f1;color:#97433e;font-size:13px;line-height:1.6}
+.sorder-award{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;border:1px solid #bce5c6;border-radius:14px;background:#ecf9ec;padding:14px;margin-top:12px}
+.sorder-award>span{font-size:12px;color:#35734c}.sorder-award strong{font-size:18px;color:#167146}
+.sorder-timeline{border-top:1px solid #e6eee8;margin-top:18px;padding-top:14px}
+.sorder-timeline summary{list-style:none;cursor:pointer;font-size:12px;color:#3b7655;font-weight:850;display:flex;justify-content:space-between}
+.sorder-timeline summary::-webkit-details-marker{display:none}
+.sorder-timeline ol{margin:13px 0 0;padding-left:24px;border-left:2px solid #cfe5d1;list-style:none}
+.sorder-timeline li{position:relative;margin:0 0 15px;padding-left:9px}
+.sorder-timeline li:before{content:"";position:absolute;width:9px;height:9px;border-radius:50%;background:#70b18d;left:-29px;top:3px}
+.sorder-timeline li strong{font-size:12px;color:#2e6850}.sorder-timeline li small{display:block;font-size:11px;color:#94a398;margin-top:4px}
+.sorder-timeline li p{font-size:11px;color:#698373;line-height:1.5;margin:6px 0}
+.sorder-empty{padding:36px 15px;text-align:center;border:1px dashed #c9decb;border-radius:20px;background:#fbfdfa;color:#668375}
+.sorder-empty>span{font-size:42px}.sorder-empty h3{color:#244e37;margin:8px 0}.sorder-empty p{line-height:1.6;font-size:13px}
+.sorder-footnote{margin:27px 0;padding:16px 18px;font-size:12px;color:#71897d;line-height:1.7;border:1px solid #e2eae2;border-radius:14px;background:#fff}
+.sorder-admin-warning{border:1px solid #eed9ac;background:#fffaf0;border-radius:16px;padding:17px 20px;color:#785c29;line-height:1.75;font-size:12px}
+.sorder-admin-warning strong{font-size:14px}.sorder-admin-warning p{margin:8px 0 0}
+.sorder-admin-rate{font-size:12px;color:#5b816b;margin:14px 0;font-weight:700}
+.sorder-rate-alert{color:#a54d3a}
+.sorder-admin-card>p{font-size:12px;color:#658072;line-height:1.6;overflow-wrap:anywhere}
+.sorder-admin-form{display:flex;flex-direction:column;gap:9px;margin-top:17px;border-top:1px solid #e5eee7;padding-top:15px}
+.sorder-admin-form label{font-size:12px;color:#426c55;font-weight:800}
+.sorder-admin-form input,.sorder-admin-form textarea{width:100%;min-width:0;border:1px solid #cddfd1;border-radius:11px;padding:11px 12px;background:#fff;color:#214b33;outline:none;font-size:13px}
+.sorder-admin-form input:focus,.sorder-admin-form textarea:focus{border-color:#287e59;box-shadow:0 0 0 3px #1a745b20}
+.sorder-admin-form textarea{min-height:72px;resize:vertical}
+.sorder-admin-form .btn{white-space:normal;line-height:1.5}
+.sorder-admin-state{padding:12px;border-radius:12px;background:#f2f7f2;margin-top:13px;font-size:12px;line-height:1.6;color:#4e7059}
+.sorder-settle-form{background:linear-gradient(145deg,#f0f9f0,#f8fbf6);padding:13px;border-radius:14px;border:1px solid #cfe5d3}
+.sorder-settle-form .shop-settle-btn{background:#116744;border-color:#116744}
+.sorder-reject-form .btn{align-self:flex-start}
+.sorder-report-modal .sorder-report-icon{font-size:45px;text-align:center}
+.sorder-report-modal>p{font-size:13px;color:#627b6b;line-height:1.75}
+.shop-product-bottom .shop-report-btn{width:100%}
+.shop-report-btn{border:1px solid #c7e1ce;border-radius:10px;color:#1c754f;background:#edf8ee;padding:9px 12px;font-size:11px;font-weight:800;white-space:normal}
+.shop-report-btn:hover{background:#dff0df}
+.shop-order-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:15px;border-radius:16px;padding:15px 18px;background:#fff;border:1px solid #d7e8d7}
+.shop-order-entry>div{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
+.shop-order-entry strong{color:#174d36;font-size:14px}.shop-order-entry span{color:#779085;font-size:12px}
+.shop-text-button{border:1px solid #e8ca843f;background:#ffffff14;border-radius:12px;color:#e9f5df;font-size:12px;font-weight:800;padding:9px 13px}
+.shop-text-button:hover{background:#ffffff2a}
+@media(max-width:900px){.sorder-list,.sorder-admin-list{grid-template-columns:1fr}}
+@media(max-width:560px){.sorder-summary{gap:7px}.sorder-summary-card{padding:12px 9px;border-radius:15px}.sorder-summary-card>span{font-size:10px}.sorder-summary-card strong{font-size:23px}.sorder-summary-card small{font-size:9px}.sorder-card,.sorder-admin-card{padding:15px}.sorder-section-heading h2{font-size:21px}.sorder-intro{padding:17px}.sorder-intro .btn{width:100%}.sorder-admin-warning{padding:14px}.sorder-step small{font-size:9px}.sorder-status{font-size:10px}}
