@@ -484,5 +484,12 @@ window.TramExtraTranslations = {
   "Đơn hàng không thể ghi thưởng, vui lòng kiểm tra dữ liệu và tải lại.": "Tsis ntxiv tau Lúa rau daim xaj no. Thov kuaj cov ntaub ntawv thiab qhib dua.",
   "Chưa có đơn hàng nào.": "Tseem tsis muaj daim xaj khoom.",
   "Không tìm thấy ID đơn hàng.": "Nrhiav tsis pom tus ID xaj khoom.",
-  "Không tải được dữ liệu:": "Thauj tsis tau cov ntaub ntawv:"
+  "Không tải được dữ liệu:": "Thauj tsis tau cov ntaub ntawv:",
+  "Quản trị viên: vào Cloudflare → Workers & Pages → tram-lua → Settings → Variables and Secrets. Kiểm tra GOOGLE_CLIENT_ID (Variable) và GOOGLE_CLIENT_SECRET (Secret) trong Production. Nếu thiếu GOOGLE_CLIENT_ID, hãy thêm lại Client ID lấy từ Google Cloud. Không chia sẻ Client Secret.": "Admin: mus rau Cloudflare → Workers & Pages → tram-lua → Settings → Variables and Secrets. Kuaj GOOGLE_CLIENT_ID (Variable) thiab GOOGLE_CLIENT_SECRET (Secret) hauv Production. Yog tsis muaj GOOGLE_CLIENT_ID, sau Client ID hauv Google Cloud dua. Tsis txhob qhia Client Secret rau lwm tus.",
+  "Chỉ hiện địa chỉ IP thật. Nếu trình duyệt khách kiểm tra được IPv4 công khai qua dịch vụ bên ngoài, hệ thống ghi nhận riêng làm thông tin tham khảo. IPv4 do trình duyệt báo có thể bị giả mạo, không được dùng một mình để khóa người dùng hoặc từ chối thưởng. Khi không có IPv4, hiển thị IPv6 do Cloudflare ghi nhận, tuyệt đối không tự chuyển thành IPv4 ảo.": "Tsuas qhia tus IP tiag xwb. Yog browser nrhiav tau IPv4 los ntawm lwm qhov kev pabcuam, lub tshuab khaws cia nyias rau kev kuaj ntxiv. IPv4 browser qhia yeej dag tau, tsis txhob siv nws xwb los kaw as khauj lossis tsis kam muab nqi zog. Yog tsis muaj IPv4, qhia IPv6 uas Cloudflare teev tseg; tsis txhob ua ib tug IPv4 cuav.",
+  "Mã nhận diện có thể bị thay đổi; chỉ dùng để đánh giá rủi ro, không tự khóa tài khoản.": "Tus lej cim yeej hloov tau; tsuas siv los xyuas kev pheej hmoo, tsis cia li kaw tus as khauj.",
+  "⚠ Tạm khóa – Đang xác minh": "⚠ Kaw ib ntus – Tab tom kuaj",
+  "Gửi khi đủ thời gian": "Xa thaum sijhawm txaus",
+  "Xác nhận hoàn thành": "Lees tias ua tiav",
+  "Lúa": "Lúa"
 };
