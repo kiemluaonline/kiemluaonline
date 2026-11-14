@@ -1,0 +1,51 @@
+/* Sổ thông tin nhận tiền cá nhân • giao diện mobile-first */
+.saved-payout-page{max-width:1150px;margin:0 auto;color:#214d38}
+.saved-payout-hero{display:flex;align-items:center;gap:17px;padding:23px 25px;
+ background:linear-gradient(115deg,#115640,#237b5a);color:#fff;border-radius:22px;margin:19px 0 22px}
+.saved-payout-hero>span{font-size:48px}
+.saved-payout-hero h2{font-size:22px;color:white;line-height:1.3;margin:0 0 5px}
+.saved-payout-hero p{font-size:12px;line-height:1.65;color:#e2f1e7;margin:0}
+.saved-payout-layout{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:17px;align-items:start}
+.saved-payout-list,.saved-payout-form{border-radius:18px;padding:22px;min-width:0}
+.saved-payout-header,.saved-payout-item-top{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.saved-payout-header h3,.saved-payout-form h3{font-size:18px;color:#20593e;margin:0 0 14px}
+.saved-payout-header>span{color:#73927c;font-size:12px}
+.saved-payout-item{border:1px solid #dbe9de;background:#fbfdfb;border-radius:15px;padding:15px;margin-top:12px}
+.saved-payout-item-top strong{font-size:15px;color:#174f37}
+.saved-payout-default{font-weight:800;color:#1c7650;background:#e4f6e9;border-radius:99px;padding:5px 10px;font-size:10px}
+.saved-payout-meta{font-size:12px;color:#5d7a66;overflow-wrap:anywhere;margin:7px 0;line-height:1.6}
+.saved-payout-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}
+.saved-payout-actions .btn{min-height:37px;padding:7px 12px;font-size:12px}
+.saved-payout-empty{font-size:13px;line-height:1.7;color:#6c8675}
+.saved-payout-form{display:flex;flex-direction:column;gap:9px}
+.saved-payout-form label:not(.saved-payout-check){font-size:12px;font-weight:800;color:#38634a;margin-top:3px}
+.saved-payout-form input:not([type="checkbox"]),.saved-payout-form select{
+ border:1px solid #d3e3d7;background:#fff;color:#1c4e35;min-width:0;max-width:100%;
+ width:100%;box-sizing:border-box;border-radius:12px;min-height:46px;padding:11px 12px;font-size:14px}
+.saved-payout-form input:focus-visible,.saved-payout-form select:focus-visible{
+ outline:2px solid #57a478;outline-offset:2px}
+.saved-payout-form #saved-bank-fields{display:grid;gap:9px}
+.saved-payout-form #saved-bank-other{display:grid;gap:7px}
+.saved-payout-hint{font-size:11px;line-height:1.65;color:#74917b;margin:4px 0 8px}
+.saved-payout-check{display:flex;gap:10px;align-items:center;font-size:12px;font-weight:800;color:#32694b;margin:9px 0}
+.saved-payout-check input{width:18px;height:18px;accent-color:#16744e;flex-shrink:0}
+.saved-payout-save{width:100%;min-height:48px;border-radius:12px}
+.saved-payout-readonly{padding:10px 12px;border-radius:11px;background:#edf5ef;color:#49755a;font-size:12px;line-height:1.5}
+.saved-payout-foot{margin:19px 0;color:#6b8676;font-size:12px;line-height:1.7}
+.saved-payout-foot p{margin-top:11px}
+.withdraw-saved-picker{border:1px solid #d5e6d9;background:#f4fbf6;border-radius:14px;
+ padding:13px 14px;margin:12px 0;display:grid;gap:8px}
+.withdraw-saved-picker label{font-size:12px;font-weight:850;color:#285b3f}
+.withdraw-saved-picker select{width:100%;min-width:0;max-width:100%;min-height:46px;box-sizing:border-box;
+ border:1px solid #c9e0d0;border-radius:11px;padding:9px 12px;background:#fff;color:#254e37}
+.withdraw-saved-picker .btn{max-width:260px}
+.withdraw-saved-description{color:#31694a;font-size:12px;line-height:1.6}
+@media(max-width:800px){.saved-payout-layout{grid-template-columns:1fr}}
+@media(max-width:560px){
+ .saved-payout-hero{padding:18px 16px;gap:10px;border-radius:17px}
+ .saved-payout-hero>span{font-size:34px}
+ .saved-payout-hero h2{font-size:18px}
+ .saved-payout-list,.saved-payout-form{padding:16px;border-radius:15px}
+ .saved-payout-actions .btn{flex:1}
+ .withdraw-saved-picker{padding:11px}
+}
