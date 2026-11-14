@@ -4,7 +4,12 @@ const money=v=>Number(v||0).toLocaleString('vi-VN');
 const ask=msg=>window.confirm(window.TramI18n?.translateLabel?.(msg)??msg);
 export async function cardRedemptionsPage(ctx){
  const {api,esc,heading,dt}=ctx;
- const data=await api('/api/card-redemptions');
+ let data;
+ try{data=await api('/api/card-redemptions');}
+ catch(err){
+   return `<div class="cards-page">${heading('🎁 Đổi Lúa lấy thẻ cào','Tính năng này đang được chuẩn bị.')}
+    <div class="cards-warning" role="status">⚠️ Đổi thẻ cào chưa được kích hoạt trên máy chủ. Admin cần cài bảng dữ liệu và bật dịch vụ; ví Lúa hiện tại của bạn vẫn giữ nguyên.</div></div>`;
+ }
  const rate=Number(data.rate||0),items=data.redemptions||[];
  const options=(data.denominations||[]).map(v=>{
    const lua=v*rate;
@@ -49,7 +54,13 @@ export async function cardRedemptionsPage(ctx){
 }
 export async function adminCardRedemptionsPage(ctx){
  const {api,esc,heading,dt}=ctx;
- const data=await api('/api/admin/card-redemptions'),items=data.redemptions||[];
+ let data;
+ try{data=await api('/api/admin/card-redemptions');}
+ catch(err){
+   return `<div class="cards-page">${heading('🎁 Quản lý đổi thẻ cào','Cài đặt và xét duyệt yêu cầu đổi thẻ.')}
+    <div class="cards-warning" role="status">⚠️ Chưa kích hoạt cơ sở dữ liệu đổi thẻ cào. Sao lưu D1 rồi chạy migrations/0005_cards.sql trong Cloudflare D1 Console trước khi mở chức năng này.</div></div>`;
+ }
+ const items=data.redemptions||[];
  const ready=data.secret_ready&&data.rate>0;
  return `<div class="cards-page cards-admin">
   ${heading('🎁 Quản lý đổi thẻ cào','Admin bật/tắt nhận yêu cầu, xét duyệt và phát mã thẻ thật cho đúng thành viên.')}
