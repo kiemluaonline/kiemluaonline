@@ -27,6 +27,8 @@ const i18n=sandbox.window.TramI18n;
 assert.equal(i18n.getLanguage(),'hmn');
 assert.equal(i18n.translateLabel('Mua sắm nhận Lúa'),'Mus yuav khoom tau Lúa');
 assert.equal(i18n.translateLabel('Xem & mua ngay'),'Saib thiab yuav tam sim no');
+assert.equal(i18n.translateLabel('🛍️ Xem & mua ngay – Tích Lúa 🌾'),'🛍️ Saib thiab yuav tam sim no – Sau Lúa 🌾');
+assert.equal(i18n.translateLabel('🌾 Đơn hợp lệ, đã giải quyết mới nhận Lúa'),'🌾 Tsuas tau Lúa thaum daim xaj raug cai thiab ua tiav lawm');
 assert.equal(i18n.translateLabel('Quản lý mua sắm'),'Tswj kev yuav khoom');
 assert.equal(i18n.translateLabel('Đã giải quyết & cộng Lúa'),'Ua tiav thiab ntxiv Lúa');
 assert.equal(i18n.translateLabel('Nếu từ chối, chọn lý do có sẵn'),'Yog tsis pom zoo, xaiv ib qho laj thawj');
