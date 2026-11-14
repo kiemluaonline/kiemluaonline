@@ -1,6 +1,7 @@
 import { shopAPI } from './shop.js';
 import { shopOrdersAPI } from './shop-orders.js';
 import { cardRedemptionsAPI } from './card-redemptions.js';
+import { payoutAccountsAPI } from './payout-accounts.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -843,6 +844,11 @@ async function handler(req, env) {
   const u = new URL(req.url), p = u.pathname, m = req.method;
   if (!env.DB) fail(500, 'Chưa kết nối cơ sở dữ liệu D1.');
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(m)) requireSameOrigin(req);
+  // Sổ tài khoản nhận tiền của chính thành viên; không áp dụng cho người dùng khác.
+  if (p === '/api/payout-accounts' || p.startsWith('/api/payout-accounts/')) {
+    const result=await payoutAccountsAPI(req,env,{auth,readBody,fail,json,id,str});
+    if(result)return result;
+  }
   // Đổi thẻ cào: độc lập ngân hàng/ZaloPay, mặc định tắt cho đến khi Admin bật.
   if (p === '/api/card-redemptions' || p.startsWith('/api/admin/card-redemptions')) {
     const cards=await cardRedemptionsAPI(req,env,{auth,readBody,fail,json,id,str});
@@ -1341,18 +1347,30 @@ async function handler(req, env) {
     // Không được âm thầm thu phí mới từ trang Safari cũ hoặc biểu mẫu chưa cập nhật.
     if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
       fail(409,'Phí rút tiền đã thay đổi. Vui lòng tải lại trang và xác nhận tổng Lúa trước khi gửi.');
-    // Dùng các cột ngân hàng sẵn có để lưu 2 kênh nhận tiền, không cần migration D1.
-    // Dữ liệu cũ không có payment_method vẫn được hiểu là chuyển khoản ngân hàng.
-    const method = str(b.payment_method || 'bank', 20);
-    if (!['bank','zalopay'].includes(method)) fail(400, 'Phương thức nhận tiền không hợp lệ.');
-    const bank = method === 'zalopay' ? 'ZaloPay' :
-      str(b.bank_name === 'other' ? b.bank_other : b.bank_name, 90);
-    const account = method === 'zalopay' ? str(b.zalopay_phone, 40) : str(b.bank_account, 40);
-    const owner = method === 'zalopay' ? str(b.zalopay_owner, 100) : str(b.bank_owner, 100);
-    if (method === 'bank' && (bank.length < 2 || bank.toLowerCase() === 'zalopay' || !/^[0-9]{5,30}$/.test(account) || owner.length < 3))
-      fail(400, 'Thông tin tài khoản ngân hàng chưa hợp lệ.');
-    if (method === 'zalopay' && (!/^0[0-9]{9}$/.test(account) || owner.length < 3))
-      fail(400, 'Vui lòng nhập số điện thoại ZaloPay Việt Nam gồm 10 số và tên người nhận.');
+    // Chọn tài khoản đã lưu: CHỈ đọc thông tin từ server của chính thành viên.
+    // Không tin số tài khoản, tên hoặc kênh nhận do trình duyệt gửi khi chọn tài khoản đã lưu.
+    let saved=null;
+    if(b.saved_account_id){
+      const savedId=str(b.saved_account_id,40);
+      if(!/^[0-9a-f-]{36}$/i.test(savedId))fail(400,'Tài khoản nhận tiền đã lưu không hợp lệ.');
+      saved=await env.DB.prepare(`SELECT payment_method,bank_name,account_number,account_owner
+        FROM payout_accounts WHERE id=? AND user_id=?`).bind(savedId,me.id).first();
+      if(!saved)fail(404,'Tài khoản nhận tiền đã lưu không còn tồn tại. Vui lòng chọn lại.');
+    }
+    // Khi chọn tài khoản đã lưu thì tạo snapshot để lần sửa/xóa sau không thay đổi lệnh rút đang chờ.
+    const method=saved?saved.payment_method:str(b.payment_method || 'bank',20);
+    if(!['bank','zalopay'].includes(method))fail(400,'Phương thức nhận tiền không hợp lệ.');
+    const bank=saved?saved.bank_name:method==='zalopay'?'ZaloPay':
+      str(b.bank_name==='other'?b.bank_other:b.bank_name,90);
+    const account=saved?saved.account_number:method==='zalopay'?
+      str(b.zalopay_phone,40):str(b.bank_account,40).replace(/\s/g,'');
+    const owner=saved?saved.account_owner:method==='zalopay'?
+      str(b.zalopay_owner,100):str(b.bank_owner,100);
+    const validBankAccount=bank.toLowerCase()==='bvbank'?/^[a-z0-9]{5,30}$/i.test(account):/^[0-9]{5,30}$/.test(account);
+    if(method==='bank'&&(bank.length<2||bank.toLowerCase()==='zalopay'||!validBankAccount||owner.length<3))
+      fail(400,'Thông tin tài khoản ngân hàng chưa hợp lệ.');
+    if(method==='zalopay'&&(!/^0[0-9]{9}$/.test(account)||owner.length<3))
+      fail(400,'Vui lòng nhập số điện thoại ZaloPay Việt Nam gồm 10 số và tên người nhận.');
     const wid = id();
     const results = await env.DB.batch([
       env.DB.prepare(`INSERT INTO withdrawals(id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner)
