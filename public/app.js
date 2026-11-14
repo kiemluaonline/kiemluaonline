@@ -654,9 +654,17 @@ async function withdrawals(){
  const data=await api('/api/history'), meta=state.meta;
  const t=`${heading('Yêu cầu rút tiền','Theo dõi: Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra và chi trả bằng ngân hàng hoặc ZaloPay.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
- const form=`<form class="card" data-form="withdraw"><h3>Tạo yêu cầu rút</h3>
+ const form=`<form class="card" data-form="withdraw" data-fee="${Number(meta.withdrawal_fee_lua)||0}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3>
  ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
  <div class="note">Tối thiểu ${fmt(meta.min_withdraw_lua)} Lúa • ${meta.lua_per_vnd?fmt(meta.lua_per_vnd)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'} • Số dư: ${fmt(state.me.balance)} Lúa</div>
+ <div class="withdraw-fee-preview" role="status">
+   <strong>Chi tiết phí rút tiền</strong>
+   <div><span>Lúa dùng để rút:</span><b id="withdraw-base">—</b></div>
+   <div><span>Phí xử lý:</span><b>${fmt(meta.withdrawal_fee_lua)} Lúa</b></div>
+   <div class="withdraw-fee-total"><span>Tổng Lúa sẽ giữ:</span><b id="withdraw-total">—</b></div>
+   <div><span>Tiền nhận dự kiến:</span><b id="withdraw-payout">—</b></div>
+   <p class="note">Phí được cộng thêm vào số Lúa rút. Nếu bị từ chối hoặc thông tin nhận tiền sai, hoàn đủ cả tiền rút và phí.</p>
+ </div>
  <div id="withdraw-payment-method">${select('payment_method','Phương thức nhận tiền',[['bank','Chuyển khoản ngân hàng'],['zalopay','Ví ZaloPay']],'bank')}</div>
  <div id="withdraw-bank-fields">
  <div class="field"><label for="bank_name">Ngân hàng nhận</label><select id="bank_name" name="bank_name" required ${!meta.withdrawals_enabled?'disabled':''}>${BANK_LIST.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
@@ -671,7 +679,7 @@ async function withdrawals(){
  </div>
  <button class="btn" type="submit" ${!meta.withdrawals_enabled?'disabled':''}>Gửi yêu cầu</button>
  <p class="note">Lúa sẽ được giữ ngay khi gửi để không bị rút trùng. Nếu Admin từ chối hoặc đánh dấu số tài khoản không đúng, hệ thống tự hoàn Lúa.</p></form>`;
- const rows=data.withdrawals.map(w=>`<tr><td>${dt(w.created_at)}</td><td class="num">${fmt(w.amount)} Lúa</td><td>${fmt(w.vnd_amount)} ₫</td><td>${esc(w.payment_method==='zalopay'?'ZaloPay':w.bank_name)}<div class="small muted">${esc(w.bank_account)}</div></td><td>${chip(w.status)}</td><td>${esc(w.admin_note||'—')}</td></tr>`);
+ const rows=data.withdrawals.map(w=>`<tr><td>${dt(w.created_at)}</td><td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div></td><td>${fmt(w.vnd_amount)} ₫</td><td>${esc(w.payment_method==='zalopay'?'ZaloPay':w.bank_name)}<div class="small muted">${esc(w.bank_account)}</div></td><td>${chip(w.status)}</td><td>${esc(w.admin_note||'—')}</td></tr>`);
  return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Quản trị viên duyệt yêu cầu trước, sau đó thực hiện chuyển khoản ngân hàng hoặc ZaloPay ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><section class="section"><h3>Lịch sử yêu cầu rút</h3>${table(['Thời gian','Số Lúa','Giá trị VNĐ','Nhận qua','Trạng thái','Ghi chú'],rows)}</section>`;
 }
 async function history(){
@@ -756,7 +764,7 @@ async function adminWithdrawals(){
  <div class="callout">Website chỉ ghi nhận yêu cầu và tình trạng. Bạn phải tự chuyển tiền qua ngân hàng hoặc ZaloPay ngoài hệ thống và đối chiếu trước khi bấm “Đã thanh toán”.</div>
  <section class="card section">${table(['Thành viên','Số tiền','Kênh nhận','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr>
  <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div>${risks.get(w.user_id)?.level==='serious'?`<div class="small red">⚠ Cần đối chiếu trước khi thanh toán • ${fmt(risks.get(w.user_id).score)}/100</div>`:''}</td>
- <td class="num">${fmt(w.amount)} Lúa<div class="green">${fmt(w.vnd_amount)} ₫</div></td>
+ <td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div><div class="green">${fmt(w.vnd_amount)} ₫</div></td>
  <td><strong>${esc(w.payment_method==='zalopay'?'Ví ZaloPay':w.bank_name)}</strong><br><code>${esc(w.bank_account)}</code><div class="small">${esc(w.bank_owner)}</div></td>
  <td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div>${w.account_status==='suspended'&&['pending','approved'].includes(w.status)?'<div class="small red">🔒 Tạm dừng chi trả để xác minh tài khoản</div>':''}</td>
  <td>${['pending','approved'].includes(w.status)?`<div class="btn-row">${w.status==='pending'?`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="approved" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã duyệt</button>`:`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã thanh toán</button>`}<button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="invalid_account">Thông tin sai</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
@@ -894,6 +902,10 @@ async function adminSettings(){
  ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}</div>
  <div class="form-row">${field('min_withdraw_lua','Tối thiểu rút (Lúa)',s.min_withdraw_lua,'type="number" min="0" max="10000000" required')}
  ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}</div>
+ <h3>💸 Phí xử lý rút tiền và đổi thẻ cào</h3>
+ <p class="note">Phí cố định mỗi yêu cầu, cộng thêm vào số Lúa khách rút hoặc đổi thẻ. Nhập 0 để miễn phí. Khách được xem phí trước khi gửi; nếu Admin từ chối, hoàn cả phí. Thay đổi phí không ảnh hưởng các yêu cầu đã gửi.</p>
+ <div class="form-row">${field('withdrawal_fee_lua','Phí mỗi lần rút tiền (Lúa) – ngân hàng / ZaloPay',s.withdrawal_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
+ ${field('card_fee_lua','Phí mỗi lần đổi thẻ cào (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}</div>
  <h3>🛡️ Quota chống lạm dụng</h3>
  <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
  <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
@@ -991,7 +1003,38 @@ function updateWithdrawalFields(form) {
   }
   for(const input of zalo.querySelectorAll('input,select')){input.disabled=isBank||!enabled;input.required=!isBank&&enabled;}
 }
+function updateWithdrawalPreview(form){
+ if(!form)return;
+ const fee=Number(form.dataset.fee||0),rate=Number(form.dataset.rate||0);
+ const input=form.querySelector('[name="amount"]');
+ const raw=String(input?.value||'').trim(),amount=Number(raw),valid=raw!==''&&Number.isSafeInteger(amount)&&amount>0;
+ const values=[
+  ['withdraw-base',valid?fmt(amount)+' Lúa':'—'],
+  ['withdraw-total',valid?fmt(amount+fee)+' Lúa':'—'],
+  ['withdraw-payout',valid&&rate>0&&amount%rate===0?fmt(amount/rate)+' ₫':'—']
+ ];
+ for(const [id,text] of values){const el=form.querySelector('#'+id);if(el)el.textContent=text;}
+}
+function updateCardPreview(form){
+ if(!form)return;
+ const value=Number(form.querySelector('[name="denomination_vnd"]')?.value||0);
+ const rate=Number(form.dataset.rate||0),fee=Number(form.dataset.fee||0);
+ const base=value*rate,total=base+fee;
+ for(const [id,text] of [
+  ['card-base',fmt(base)+' Lúa'],
+  ['card-fee',fmt(fee)+' Lúa'],
+  ['card-total',fmt(total)+' Lúa']
+ ]){
+  const el=form.querySelector('#'+id);
+  if(el)el.textContent=text;
+ }
+}
+app.addEventListener('input',e=>{
+ if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
+});
 app.addEventListener('change',e=>{
+ if(e.target.matches('form[data-form="card-redeem"] [name="denomination_vnd"]'))updateCardPreview(e.target.closest('form'));
+ if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
  if(e.target.matches('form[data-form="withdraw"] [name="payment_method"],form[data-form="withdraw"] [name="bank_name"]')){
   updateWithdrawalFields(e.target.closest('form'));
  }
