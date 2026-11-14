@@ -9,7 +9,7 @@ const read=(file)=>readFileSync(new URL('../public/'+file,import.meta.url),'utf8
 const hooks={};
 const doc={
  readyState:'loading',
- body:{nodeType:1,matches:()=>false,querySelectorAll:()=>[]},
+ body:{nodeType:1,matches:()=>false,querySelectorAll:()=>[],hasAttribute:()=>false},
  documentElement:{lang:'vi'},
  addEventListener:(name,callback)=>{hooks[name]=callback;},
  createTreeWalker:()=>({nextNode:()=>null}),
