@@ -39,16 +39,20 @@ export async function cardRedemptionsAPI(req,env,H){
    ||/^\/api\/admin\/card-redemptions\/[0-9a-f-]{36}$/i.test(p)))return null;
  const isAdmin=p.startsWith('/api/admin/');
  const me=await auth(req,env,isAdmin?'admin':undefined);
- const [switchValue,rateValue]=await Promise.all([
-   setting(db,'card_redemption_enabled'),setting(db,'lua_per_vnd')
+ const [switchValue,rateValue,feeValue]=await Promise.all([
+   setting(db,'card_redemption_enabled'),setting(db,'lua_per_vnd'),setting(db,'card_fee_lua')
  ]);
- const rate=intValue(rateValue),secretReady=validSecret(env.CARD_VOUCHER_SECRET);
+ const rate=intValue(rateValue),fee=intValue(feeValue),secretReady=validSecret(env.CARD_VOUCHER_SECRET);
+ const safeFee=Number.isSafeInteger(fee)&&fee>=0&&fee<=10000000;
  const enabled=switchValue==='1'&&secretReady&&Number.isSafeInteger(rate)&&rate>0;
  if(!isAdmin&&m==='GET'){
    const [rows,balance]=await Promise.all([
-     db.prepare(`SELECT id,carrier,denomination_vnd,amount_lua,rate_snapshot,status,
-       card_payload_encrypted,created_at,reviewed_at,delivered_at
-       FROM card_redemptions WHERE user_id=? ORDER BY created_at DESC LIMIT 100`).bind(me.id).all(),
+     db.prepare(`SELECT r.id,r.carrier,r.denomination_vnd,r.amount_lua,r.rate_snapshot,r.status,
+       r.card_payload_encrypted,r.created_at,r.reviewed_at,r.delivered_at,
+       COALESCE((SELECT -e.amount-r.amount_lua FROM wallet_entries e
+         WHERE e.user_id=r.user_id AND e.reference_type='card_redemption_hold'
+         AND e.reference_id=r.id LIMIT 1),0) AS fee_lua
+       FROM card_redemptions r WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 100`).bind(me.id).all(),
      db.prepare('SELECT COALESCE(SUM(amount),0) AS balance FROM wallet_entries WHERE user_id=?').bind(me.id).first()
    ]);
    const items=[];
@@ -63,7 +67,7 @@ export async function cardRedemptionsAPI(req,env,H){
      }
      items.push(safe);
    }
-   return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,
+   return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?fee:0,
      denominations:CARD_DENOMINATIONS,carriers:CARD_CARRIERS,
      balance:Number(balance?.balance||0),redemptions:items});
  }
@@ -74,36 +78,40 @@ export async function cardRedemptionsAPI(req,env,H){
    if(!CARD_CARRIERS.includes(carrier)||!CARD_DENOMINATIONS.includes(denomination))
      fail(400,'Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.');
    const cost=denomination*rate;
-   if(!Number.isSafeInteger(cost)||cost<=0||cost>1000000000)
+   if(!safeFee||!Number.isSafeInteger(cost)||cost<=0||!Number.isSafeInteger(cost+fee)||cost+fee>1000000000)
      fail(409,'Tỷ giá chưa phù hợp để đổi mệnh giá thẻ này.');
+   const total=cost+fee;
    const rid=id();
    const results=await db.batch([
      db.prepare(`INSERT INTO card_redemptions(id,user_id,carrier,denomination_vnd,amount_lua,rate_snapshot)
        SELECT ?,?,?,?,?,? WHERE
        (SELECT COALESCE(SUM(amount),0) FROM wallet_entries WHERE user_id=?)>=?`)
-       .bind(rid,me.id,carrier,denomination,cost,rate,me.id,cost),
+       .bind(rid,me.id,carrier,denomination,cost,rate,me.id,total),
      db.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
-       SELECT ?,?,-?,'Giữ Lúa để đổi thẻ cào','card_redemption_hold',?
+       SELECT ?,?,-?,'Giữ Lúa đổi thẻ (bao gồm phí)','card_redemption_hold',?
        WHERE EXISTS(SELECT 1 FROM card_redemptions WHERE id=? AND user_id=?)
        ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
-       .bind(id(),me.id,cost,rid,rid,me.id)
+       .bind(id(),me.id,total,rid,rid,me.id)
    ]);
    if(!results[0].meta?.changes||!results[1].meta?.changes)
-     fail(400,'Số dư Lúa không đủ để đổi thẻ hoặc yêu cầu chưa được lưu.');
-   return json({ok:true,id:rid,amount_lua:cost,
-     message:'Đã gửi yêu cầu đổi thẻ. Lúa được giữ tạm, đang chờ Admin duyệt.'},201);
+     fail(400,'Số dư Lúa không đủ cho thẻ cào và phí xử lý hoặc yêu cầu chưa được lưu.');
+   return json({ok:true,id:rid,amount_lua:cost,fee_lua:fee,total_lua:total,
+     message:'Đã gửi yêu cầu đổi thẻ. Tổng Lúa gồm giá thẻ và phí đã được giữ tạm, chờ Admin duyệt.'},201);
  }
  if(!isAdmin)fail(405,'Phương thức không hỗ trợ.');
  if(p==='/api/admin/card-redemptions'&&m==='GET'){
    const rows=await db.prepare(`SELECT r.id,r.user_id,r.carrier,r.denomination_vnd,
       r.amount_lua,r.status,r.admin_note,r.created_at,r.reviewed_at,r.delivered_at,
+      COALESCE((SELECT -e.amount-r.amount_lua FROM wallet_entries e
+        WHERE e.user_id=r.user_id AND e.reference_type='card_redemption_hold'
+        AND e.reference_id=r.id LIMIT 1),0) AS fee_lua,
       u.name,u.email,u.status AS account_status,
       CASE WHEN length(r.card_payload_encrypted)>0 THEN 1 ELSE 0 END AS has_code
       FROM card_redemptions r JOIN users u ON u.id=r.user_id
       ORDER BY CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
       r.created_at DESC LIMIT 200`).all();
    return json({enabled:switchValue==='1',secret_ready:secretReady,
-     rate:Number.isSafeInteger(rate)&&rate>0?rate:0,redemptions:rows.results,
+     rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?fee:0,redemptions:rows.results,
      denominations:CARD_DENOMINATIONS,carriers:CARD_CARRIERS});
  }
  if(p==='/api/admin/card-redemptions/settings'&&m==='POST'){
@@ -140,10 +148,10 @@ export async function cardRedemptionsAPI(req,env,H){
          reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
          WHERE id=? AND status IN ('pending','approved')`).bind(note,rid),
        db.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
-         SELECT ?,?,?,'Hoàn Lúa do từ chối đổi thẻ','card_redemption_refund',?
+         SELECT ?,?,(SELECT -held.amount FROM wallet_entries held WHERE held.user_id=? AND held.reference_type='card_redemption_hold' AND held.reference_id=? LIMIT 1),'Hoàn toàn bộ Lúa đổi thẻ và phí','card_redemption_refund',?
          WHERE EXISTS(SELECT 1 FROM card_redemptions WHERE id=? AND status='rejected')
          ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
-         .bind(id(),row.user_id,row.amount_lua,rid,rid)
+         .bind(id(),row.user_id,row.user_id,rid,rid,rid)
      ]);
      if(!results[0].meta?.changes||!results[1].meta?.changes)fail(409,'Yêu cầu đã thay đổi, vui lòng tải lại.');
      return json({ok:true,message:'Đã từ chối đổi thẻ và hoàn Lúa đúng một lần.'});
