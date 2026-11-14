@@ -122,7 +122,7 @@
 .shop-quick-hint{font-size:12px;color:#a06520;background:#fff8e7;border:1px solid #f1e2c4;border-radius:10px;padding:10px 12px;line-height:1.55}
 @media(max-width:570px){.shop-quick-form{padding:12px}.shop-quick-form .shop-quick-submit{font-size:12px}}
 
-/* Nút Xem sản phẩm: vùng chạm lớn, nổi bật và dễ sử dụng trên iPhone. */
+/* Nút Xem & mua ngay – Tích Lúa: vùng chạm lớn, nổi bật trên iPhone. */
 .shop-product-bottom>.shop-cta-shop{
  display:flex;align-items:center;justify-content:center;gap:9px;
  width:100%;min-height:52px;box-sizing:border-box;
@@ -146,4 +146,18 @@
 }
 @media(prefers-reduced-motion:reduce){
  .shop-product-bottom>.shop-cta-shop{transition:none}
+}
+
+/* Nút mua sắm có nhãn dài: chữ tự xuống dòng, mũi tên không che nội dung. */
+.shop-product-bottom>.shop-cta-shop .shop-cta-label{
+ display:block;flex:1;min-width:0;overflow-wrap:break-word;
+}
+.shop-product-bottom>.shop-cta-shop .shop-cta-arrow{
+ display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;
+ font-size:18px;line-height:1;
+}
+.shop-product-bottom>.shop-product-caption{width:100%;line-height:1.55;}
+@media(max-width:570px){
+ .shop-product-bottom>.shop-cta-shop{gap:7px;font-size:13px;padding:13px 9px;line-height:1.42;}
+ .shop-product-bottom>.shop-cta-shop .shop-cta-arrow{font-size:16px;flex-basis:14px;}
 }
