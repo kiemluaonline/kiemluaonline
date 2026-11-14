@@ -1,12 +1,26 @@
 export function shopOrderMeta(status) {
- const names={pending:'Chờ xác minh',provisional:'Tạm duyệt – Chờ giải quyết',resolved:'Đã giải quyết',rejected:'Từ chối'};
- return {text:names[status]||'Không xác định',symbol:({pending:'⌛',provisional:'🔎',resolved:'🌾',rejected:'✕'})[status]||'•',color:status||'pending'};
+ const entries={
+  pending:{text:'Chờ xác minh',symbol:'⌛',color:'pending',summary:'Đã tiếp nhận ID đơn hàng của bạn. Hệ thống đang chờ Admin kiểm tra và xác nhận thông tin.',rewardLabel:'Lúa chưa xác định'},
+  provisional:{text:'Tạm duyệt – Chờ giải quyết',symbol:'◷',color:'provisional',summary:'ID đơn hàng đã được xác minh hợp lệ. Đơn đang được theo dõi và chờ hoàn tất.',rewardLabel:'Lúa dự kiến nhận'},
+  resolved:{text:'Đã giải quyết',symbol:'✓',color:'resolved',summary:'Chúc mừng! Đơn hàng đã hoàn tất hợp lệ và phần thưởng đã được ghi vào ví Lúa.',rewardLabel:'Lúa đã nhận'},
+  rejected:{text:'Từ chối',symbol:'✕',color:'rejected',summary:'Rất tiếc, đơn hàng không đáp ứng điều kiện nhận thưởng hoặc đã bị hủy, hoàn trả.',rewardLabel:'Không được cộng Lúa'}
+ };
+ return entries[status]||entries.pending;
 }
 
 export function shopOrderSteps(status) {
  const steps=[['pending','Chờ xác minh'],['provisional','Tạm duyệt – Chờ giải quyết'],['resolved','Đã giải quyết']];
- const current=status==='pending'?0:status==='provisional'?1:status==='resolved'?2:-1;
- return `<div class="sorder-steps" aria-label="Tiến trình đơn hàng">${steps.map(([s,label],i)=>`<div class="sorder-step ${current>=i?'is-done':''} ${current===i?'is-current':''}"><span>${current>i||status==='resolved'?'✓':i+1}</span><small>${label}</small></div>`).join('')}</div>`;
+ const index={pending:0,provisional:1,resolved:2}[status]??0;
+ return `<div class="sorder-progress"><div class="sorder-progress-heading"><strong>Tiến trình đơn hàng</strong><span>Bước ${index+1}/3</span></div>
+ <div class="sorder-steps" role="list" aria-label="Tiến trình 3 bước">
+ ${steps.map(([step,label],i)=>`<div class="sorder-step ${i<=index?'is-done':''} ${i===index?'is-current':''}" role="listitem" ${i===index?'aria-current="step"':''}>
+ <span class="sorder-step-node">${i<index||index===2?'✓':i+1}</span><small>${label}</small></div>`).join('')}</div>
+ </div>`;
+}
+
+export function shopMaskOrderReference(reference) {
+ const ref=String(reference??'');
+ return ref.length>=14?`${ref.slice(0,6)}••••${ref.slice(-4)}`:ref;
 }
 
 export async function shopOrdersPage(ctx){
@@ -16,34 +30,49 @@ export async function shopOrdersPage(ctx){
  const orders=info.orders||[],history=info.events||[];
  const accrued=orders.filter(x=>x.status==='resolved').reduce((s,x)=>s+Number(x.reward_lua||0),0);
  const pending=orders.filter(x=>['pending','provisional'].includes(x.status)).length;
- return `<div class="sorder-page">${heading('Đơn hàng & Lúa','Theo dõi đơn hàng, Lúa dự kiến và số Lúa thực nhận khi đơn đã được giải quyết.')}
-   <section class="sorder-summary">
-    <div class="sorder-summary-card"><span>🛍️ Đơn đã báo</span><strong>${fmt(orders.length)}</strong><small>Đang lưu trong tài khoản</small></div>
+ return `<div class="sorder-page sorder-customer">${heading('Đơn hàng & Lúa','Theo dõi tình trạng đơn hàng, Lúa dự kiến và phần thưởng đã nhận sau khi giải quyết.')}
+   <section class="sorder-summary" aria-label="Tổng quan đơn hàng">
+    <div class="sorder-summary-card"><span>🛍️ Đơn đã báo</span><strong>${fmt(orders.length)}</strong><small>Đơn đang lưu trong tài khoản</small></div>
     <div class="sorder-summary-card"><span>⌛ Đang xử lý</span><strong>${fmt(pending)}</strong><small>Chờ xác minh / giải quyết</small></div>
-    <div class="sorder-summary-card sorder-summary-lua"><span>🌾 Lúa từ mua sắm</span><strong>${fmt(accrued)}</strong><small>Chỉ tính đơn đã giải quyết</small></div>
+    <div class="sorder-summary-card sorder-summary-lua"><span>🌾 Lúa đã nhận</span><strong>${fmt(accrued)}</strong><small>Không tính Lúa dự kiến</small></div>
    </section>
-   <section class="sorder-intro"><div><strong>Bạn đã mua sản phẩm trên TikTok Shop?</strong><p>Hãy quay về gian hàng, chọn đúng sản phẩm rồi bấm <b>“Báo đã đặt hàng”</b> và nhập mã đơn trong TikTok. Trạm Có Lúa sẽ ghi nhận <b>Chờ xác minh</b>. Admin cần đối chiếu đơn trước khi xác nhận thưởng.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
-   ${alerts.unread?`<div class="sorder-notice" role="status">🔔 Bạn có ${fmt(alerts.unread)} đơn hàng vừa được cập nhật trạng thái. Xem chi tiết bên dưới.</div>`:''}
+   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Vào sản phẩm trong gian hàng, chọn “Đã mua? Báo đơn”, sau đó gửi ID đơn hàng. Bạn có thể theo dõi trạng thái và nhận Lúa khi đơn được giải quyết.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
+   ${alerts.unread?`<div class="sorder-notice" role="status" aria-live="polite">🔔 Có <strong>${fmt(alerts.unread)} đơn hàng vừa được cập nhật</strong>. Xem trạng thái mới và phần thưởng bên dưới.</div>`:''}
    <div class="sorder-section-heading"><h2>Lịch sử đơn hàng</h2><span>${fmt(orders.length)} đơn</span></div>
-   ${orders.length?`<div class="sorder-list">${orders.map(o=>{const meta=shopOrderMeta(o.status);const events=history.filter(e=>e.order_id===o.id).reverse();
-     return `<article class="sorder-card"><div class="sorder-card-top"><div><span class="sorder-eyebrow">MÃ ĐƠN TIKTOK</span><strong>${esc(o.order_reference)}</strong></div><span class="sorder-status sorder-status-${meta.color}">${meta.symbol} ${meta.text}</span></div>
-       <div class="sorder-product"><span>🛒</span><div><strong>${esc(o.product_title)}</strong><small>Báo đơn: ${esc(dt(o.created_at))}</small></div></div>
-       ${o.status==='rejected'?`<div class="sorder-rejection">Đơn hàng không đủ điều kiện nhận Lúa.</div>`:shopOrderSteps(o.status)}
+   ${orders.length?`<div class="sorder-list">${orders.map(o=>{
+    const meta=shopOrderMeta(o.status);
+    const events=history.filter(e=>e.order_id===o.id).reverse();
+    return `<article class="sorder-card sorder-card-${meta.color}">
+       <div class="sorder-card-top"><div><span class="sorder-eyebrow">ĐƠN HÀNG TIKTOK</span><strong>${esc(o.product_title)}</strong></div><span class="sorder-status sorder-status-${meta.color}">${meta.symbol} ${meta.text}</span></div>
+       <div class="sorder-order-meta">
+        <div><span>ID đơn:</span><strong>${esc(shopMaskOrderReference(o.order_reference))}</strong></div>
+        <div><span>Báo đơn:</span><span>${esc(dt(o.created_at))}</span></div>
+        <div><span>Cập nhật:</span><span>${esc(dt(o.updated_at||o.created_at))}</span></div>
+       </div>
+       <details class="sorder-reference"><summary>Xem ID đơn hàng đầy đủ</summary><code>${esc(o.order_reference)}</code></details>
+       <div class="sorder-status-explain sorder-status-explain-${meta.color}"><span class="sorder-status-explain-icon" aria-hidden="true">${meta.symbol}</span><div><strong>${meta.text}</strong><p>${meta.summary}</p></div></div>
+       ${o.status==='rejected'
+          ?`<div class="sorder-rejection sorder-rejection-final"><strong>✕ Không được cộng Lúa</strong><span>Đơn hàng không đủ điều kiện nhận thưởng.</span></div>`
+          :shopOrderSteps(o.status)}
        ${o.status==='resolved'
-         ?`<div class="sorder-award"><span>🌾 Lúa đã nhận</span><strong>+${fmt(o.reward_lua)} Lúa</strong></div>`
+         ?`<div class="sorder-award sorder-award-final"><span>🌾 Lúa đã nhận</span><strong>+${fmt(o.reward_lua)} Lúa</strong><small>Đã cộng vào ví Lúa</small></div>`
          :o.status==='provisional'&&Number(o.estimated_reward_lua)>0
            ?`<div class="sorder-estimate" aria-label="Lúa dự kiến chưa chính thức">
               <div class="sorder-estimate-head"><span>🌾 Lúa dự kiến nhận</span><span class="sorder-estimate-sparkle">✦</span></div>
               <div class="sorder-estimate-amount">~ ${fmt(o.estimated_reward_lua)} <small>Lúa</small></div>
-              <div class="sorder-estimate-wallet">♧ Chưa cộng vào ví Lúa</div>
+              <div class="sorder-estimate-wallet">◷ Chưa cộng vào ví Lúa</div>
               <p><strong>Lưu ý:</strong> Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật khi đơn hàng đã giải quyết. Đơn không đủ điều kiện sẽ không được nhận thưởng.</p>
              </div>`
-           :`<div class="sorder-wait">Chưa ghi Lúa vào ví. ${o.status==='provisional'?'Chưa có số Lúa dự kiến; đơn hàng đang chờ giải quyết.':o.status==='rejected'?'Đơn không đủ điều kiện nhận thưởng.':'Admin cần xác minh đơn hàng.'}</div>`}
-       <details class="sorder-timeline"><summary>Xem lịch sử xử lý <span>⌄</span></summary><ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${e.status==='pending'?'Đã tiếp nhận ID đơn hàng.':e.status==='provisional'?'Đã tạm duyệt và đang chờ giải quyết.':e.status==='resolved'?'Đơn đã giải quyết, Lúa chính thức đã ghi vào ví.':e.status==='rejected'?'Đơn không đủ điều kiện nhận thưởng.':'Trạng thái đã cập nhật.'}</p></li>`).join('')}</ol></details>
-       </article>`;
-   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Khi mua sản phẩm trong gian hàng, hãy bấm “Báo đã đặt hàng” để lưu đơn tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
-   <div class="sorder-footnote">Lịch sử đơn hàng này được quản lý trên Trạm Có Lúa, không phải trạng thái TikTok cập nhật trực tiếp. Bạn không cần gửi ảnh lên website. Lúa chính thức chỉ được ghi nhận khi đơn hàng đã được xác minh và giải quyết hợp lệ.</div>
-  </div>`;
+           :o.status==='pending'
+             ?`<div class="sorder-wait sorder-wait-pending">🌾 <strong>Lúa: Chưa xác định</strong><span>Chờ Admin xác minh ID đơn hàng.</span></div>`
+             :o.status==='provisional'?`<div class="sorder-wait">🌾 Chưa có Lúa dự kiến. Lúa chưa được cộng vào ví.</div>`:''}
+       <details class="sorder-timeline"><summary>Xem lịch sử xử lý <span aria-hidden="true">⌄</span></summary>
+       <ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${e.status==='pending'?'Đã tiếp nhận ID đơn hàng.':e.status==='provisional'?'ID đơn đã được xác minh, đang chờ hoàn tất.':e.status==='resolved'?'Đơn đã giải quyết và phần thưởng đã vào ví.':e.status==='rejected'?'Đơn hàng không đủ điều kiện nhận thưởng.':'Trạng thái đã cập nhật.'}</p></li>`).join('')}</ol>
+       </details>
+     </article>`;
+   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Khi mua sản phẩm trong gian hàng, hãy bấm “Đã mua? Báo đơn” để lưu ID và theo dõi thưởng Lúa tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
+   <div class="sorder-footnote">Đây là trạng thái cập nhật trên Trạm Có Lúa, không phải dữ liệu đơn hàng đồng bộ trực tiếp từ TikTok. Lúa dự kiến không phải phần thưởng đã nhận. Lúa chính thức chỉ được cộng khi đơn hợp lệ và được giải quyết.</div>
+ </div>`;
 }
 
 export async function adminShopOrdersPage(ctx){
