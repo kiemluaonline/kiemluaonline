@@ -1,5 +1,6 @@
 // Mẫu kết quả kiểm tra và lý do từ chối do Admin chọn, không nhận nội dung tùy ý.
-export const ORDER_CHECK_NOTE = 'Đã kiểm tra ID đơn hàng, thông tin sản phẩm trùng khớp. Đơn đang chờ hoàn tất.';
+export const ORDER_CHECK_NOTE = 'Đã đối chiếu ID đơn hàng, sản phẩm và nguồn mua qua trang trưng bày của Admin. Đơn đang chờ hoàn tất.';
+export const UNASSIGNED_SHOP_PRODUCT_ID = 'shop-order-unassigned';
 export const ORDER_REJECTION_REASONS = Object.freeze({
   '0':'Không tìm thấy thông tin đơn hàng tương ứng với ID đã cung cấp.',
   '1':'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.',
@@ -47,19 +48,33 @@ export async function shopOrdersAPI(req,env,H){
   }
   if(p==='/api/shop/orders'&&m==='POST'){
     const me=await auth(req,env);
-    const b=await readBody(req),productId=str(b.product_id,50);
+    const b=await readBody(req),requestedProductId=str(b.product_id,50);
+    const productId=requestedProductId||UNASSIGNED_SHOP_PRODUCT_ID;
     const orderRef=normalizeRef(b.order_reference),note=str(b.note,220);
     if(!/^[A-Z0-9_]{8,64}$/.test(orderRef))fail(400,'Nhập mã đơn hàng TikTok từ 8–64 ký tự (chữ hoặc số).');
-    const product=await db.prepare("SELECT id FROM shop_products WHERE id=? AND is_active=1").bind(productId).first();
-    if(!product)fail(404,'Sản phẩm không còn hiển thị. Hãy chọn sản phẩm khác.');
+    // Giữ tương thích với đơn báo từ sản phẩm cũ, nhưng không bắt thành viên chọn món.
+    if(requestedProductId){
+      const product=await db.prepare("SELECT id FROM shop_products WHERE id=? AND is_active=1").bind(requestedProductId).first();
+      if(!product)fail(404,'Sản phẩm không còn hiển thị.');
+    }
     const oid=id();
+    // Bảng shop_orders trước đây bắt buộc FK product_id. Dùng một bản ghi ẩn,
+    // chưa đối chiếu thay vì tùy tiện gán đơn vào sản phẩm đang bán khác.
+    // Chỉ thêm một hàng ẩn khi có báo đơn không chọn sản phẩm; không đổi schema và không cấp Lúa.
+    const statements=[];
+    if(!requestedProductId)statements.push(db.prepare(
+      "INSERT INTO shop_products(id,title,description,link,category,is_active) VALUES(?,?,?,?,?,0) ON CONFLICT(id) DO NOTHING"
+    ).bind(UNASSIGNED_SHOP_PRODUCT_ID,'Chưa xác định sản phẩm – Admin đối chiếu ID',
+      'Chỉ để giữ mã đơn; Admin kiểm tra TikTok và nguồn mua trước khi duyệt.',
+      'https://www.tiktok.com/','other'));
     // Trường UNIQUE(order_reference) chống một mã đơn được nhiều tài khoản nhận Lúa.
-    const inserted=await db.batch([
+    statements.push(
       db.prepare(`INSERT INTO shop_orders(id,user_id,product_id,order_reference,status,customer_note,seen_at)
         VALUES(?,?,?,?,'pending',?,CURRENT_TIMESTAMP)`).bind(oid,me.id,productId,orderRef,note),
       db.prepare(`INSERT INTO shop_order_events(id,order_id,actor_id,status,detail)
-        VALUES(?,?,?,'pending','Khách báo đã đặt hàng, đang chờ đối chiếu TikTok Shop')`).bind(id(),oid,me.id)
-    ]);
+        VALUES(?,?,?,'pending','Khách báo mã đơn, Admin cần đối chiếu ID, sản phẩm và nguồn mua')`).bind(id(),oid,me.id)
+    );
+    await db.batch(statements);
     return json({ok:true,id:oid,status:'pending',
       message:'Đã ghi nhận báo đơn. Trạng thái: Chờ xác minh. Chưa có Lúa được cộng.'},201);
   }
