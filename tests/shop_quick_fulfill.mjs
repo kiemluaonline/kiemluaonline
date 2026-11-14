@@ -120,6 +120,11 @@ const memberShop=await shopPage({
  esc:x=>String(x),state:{shopCategory:'all'}
 });
 assert.doesNotMatch(memberShop,/Affiliate|tiếp thị liên kết|hoa hồng|lợi nhuận|đối soát/i);
+assert.match(memberShop,/Quy định quan trọng để nhận Lúa/);
+assert.match(memberShop,/trang trưng bày TikTok Shop của Admin/);
+assert.match(memberShop,/dù là cùng sản phẩm và có gửi ID đơn hàng/);
+assert.match(memberShop,/Mua ngoài rồi gửi ID không được tính/);
+assert.match(memberShop,/href="https:\/\/vt\.tiktok\.com\/ZS123456\//,'Product link remains exactly the Admin-supplied link');
 const adminShop=await adminShopPage({
  api:async()=>({products:[],requests:[],contacts:{zalo:'',telegram:''}}),
  esc:x=>String(x),field:()=>'',select:()=>'',heading:(title,sub)=>title+sub,
