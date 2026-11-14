@@ -64,6 +64,14 @@ assert.match(frontendForWelcome,/recent_payments/);
 assert.doesNotMatch(frontendForWelcome,/data-action="paid-next"/,'Paid ticker must be fully automatic without arrows');
 assert.doesNotMatch(frontendForWelcome,/paid-rotation-count/,'Do not show the 2\/2 counter');
 assert.match(frontendForWelcome,/paid-slide-progress/,'Automatic ticker retains a subtle progress animation');
+assert.match(frontendForWelcome,/id="global-payment-wrap"/,'Payment banner must be global to member pages');
+assert.match(frontendForWelcome,/initGlobalPaidCard\(user\.id\)/);
+assert.match(frontendForWelcome,/function taskPaymentCard\(d\)/);
+const taskCardFunction=frontendForWelcome.slice(frontendForWelcome.indexOf('function taskDashboardCard('),
+ frontendForWelcome.indexOf('function taskDashboardCard(')+240);
+assert.doesNotMatch(taskCardFunction,/paid-rotation/,'Task page should not create a second payment ticker');
+assert.doesNotMatch(frontendForWelcome,/if\(view==='tasks'\)startPaidRotation\(\)/);
+assert.doesNotMatch(frontendForWelcome,/state\.view!=='tasks'/,'Payments must continue on Overview, Shop and Profile');
 assert.match(frontendForWelcome,/async function collectHeaderNotices\(\)/);
 assert.match(frontendForWelcome,/api\('\/api\/history'\)/);
 assert.match(frontendForWelcome,/state\.me\?\.user\?\.id/);
@@ -114,9 +122,9 @@ const shopHTML=await renderShopPage({
  esc:s=>String(s),state:{shopCategory:'all'}
 });
 assert.match(shopHTML,/id="shop-report-order"/,'Report orders in a separate area below catalog');
-assert.match(shopHTML,/id="shop-report-product"/);
-assert.match(shopHTML,/data-action="shop-report-selected"/);
-assert.match(shopHTML,/option value="test-product-a"/);
+assert.doesNotMatch(shopHTML,/id="shop-report-product"/,'Remove the product selection field');
+assert.match(shopHTML,/data-action="shop-report-order"/,'Keep the independent report order button');
+assert.doesNotMatch(shopHTML,/data-action="shop-report-selected"/);
 assert.ok(shopHTML.indexOf('id="shop-report-order"')>shopHTML.indexOf('class="shop-products"'),
  'Order report must be outside and after the product cards');
 const orderSource=readFileSync(new URL('../public/shop-orders-ui.js',import.meta.url),'utf8');
@@ -126,7 +134,8 @@ assert.doesNotMatch(orderSource,/root\.querySelector\('#sorder-report-id'\)\?\.f
 assert.match(orderCss,/\.sorder-report-modal \.sorder-admin-form input/);
 assert.match(orderCss,/font-size:16px!important/,'iPhone input font-size must prevent auto zoom');
 assert.match(orderCss,/max-height:calc\(100dvh - 24px\)/);
-console.log('PASS: separate shop order report, purchase button, mobile modal sizing and no auto-focus zoom.');
+assert.doesNotMatch(orderSource,/shop-report-product/,'Reporting order must not ask for a product');
+console.log('PASS: ID-only shop order report, global payment card, mobile modal sizing and no auto-focus zoom.');
 
 const brandMeta=await call('/api/meta');
 assert.equal(brandMeta.status,200);
