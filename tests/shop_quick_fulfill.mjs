@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { shopAPI } from '../src/shop.js';
-import { adminShopPage } from '../public/shop-ui.js';
+import { adminShopPage, shopCard, shopPage } from '../public/shop-ui.js';
 
 const sql=new DatabaseSync(':memory:');
 sql.exec(readFileSync(new URL('../migrations/0001_init.sql',import.meta.url),'utf8'));
@@ -107,4 +107,20 @@ for(let i=0;i<21;i++){
 assert.equal(sql.prepare("SELECT COUNT(*) n FROM shop_requests WHERE user_id='u1' AND status='pending'").get().n,22);
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0);
 console.log('PASS: shop requests have no daily or pending-count quota; wallet remains untouched.');
+// Public shopping cards must not reveal affiliate-program wording even by default.
+const product={id:'p123',title:'Dầu gội',description:'',link:'https://vt.tiktok.com/ZS123456/',category:'beauty'};
+const memberCard=shopCard(product,x=>String(x));
+assert.doesNotMatch(memberCard,/Affiliate|tiếp thị liên kết|hoa hồng|lợi nhuận|đối soát/i);
+const memberShop=await shopPage({
+ api:async path=>({products:[product],requests:[],contacts:{zalo:'',telegram:''}}),
+ esc:x=>String(x),state:{shopCategory:'all'}
+});
+assert.doesNotMatch(memberShop,/Affiliate|tiếp thị liên kết|hoa hồng|lợi nhuận|đối soát/i);
+const adminShop=await adminShopPage({
+ api:async()=>({products:[],requests:[],contacts:{zalo:'',telegram:''}}),
+ esc:x=>String(x),field:()=>'',select:()=>'',heading:(title,sub)=>title+sub,
+ state:{shopEdit:null}
+});
+assert.doesNotMatch(adminShop,/TikTok Shop Affiliate|Link TikTok Shop Affiliate/);
+console.log('PASS: buyer-facing product cards and shopping page do not disclose affiliate arrangements.');
 console.log('PASS: direct product creation, one-time fulfillment, per-member notification, protected links and unchanged wallet.');
