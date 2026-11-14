@@ -11,6 +11,11 @@ const encoder = new TextEncoder();
 // Phân biệt lý do STK sai mà không phải đổi CHECK constraint của D1 đang hoạt động.
 const INVALID_BANK_ACCOUNT_PREFIX = '[TL_INVALID_BANK_ACCOUNT] ';
 const WITHDRAWAL_APPROVED_PREFIX = '[TL_WITHDRAWAL_APPROVED] ';
+// Biểu phí mới tính theo VNĐ khách nhận, không sửa cài đặt/phí các lệnh cũ.
+const WITHDRAW_MIN_VND = 5000;
+const WITHDRAW_FREE_FROM_VND = 25000;
+const WITHDRAW_FEE_VND = 2000;
+const withdrawalFeeFor = (amountLua, luaPerVnd) => (amountLua/luaPerVnd < WITHDRAW_FREE_FROM_VND ? WITHDRAW_FEE_VND*luaPerVnd : 0);
 const invalidBankAccountNote = 'Số tài khoản không đúng hoặc thông tin nhận tiền không hợp lệ. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin chính xác.';
 function presentWithdrawal(w) {
   if (!w) return w;
@@ -868,8 +873,11 @@ async function handler(req, env) {
       google_auth_enabled: googleReady(env), gmail_google_required: googleReady(env),
       checkin_reward: int(settings.checkin_reward), referral_reward: int(settings.referral_reward),
       withdrawals_enabled: settings.withdrawals_enabled === '1' && int(settings.lua_per_vnd) > 0,
-      min_withdraw_lua: int(settings.min_withdraw_lua), lua_per_vnd: int(settings.lua_per_vnd),
-      withdrawal_fee_lua: int(settings.withdrawal_fee_lua) });
+      min_withdraw_lua: Math.max(int(settings.min_withdraw_lua), WITHDRAW_MIN_VND*int(settings.lua_per_vnd)),
+      lua_per_vnd: int(settings.lua_per_vnd),
+      withdrawal_fee_lua: 0, // Chỉ để tương thích client cũ; phí thực tế tính theo số tiền rút.
+      withdrawal_min_vnd: WITHDRAW_MIN_VND, withdrawal_free_from_vnd: WITHDRAW_FREE_FROM_VND,
+      withdrawal_fee_vnd: WITHDRAW_FEE_VND });
   }
   if (m === 'POST' && p === '/api/setup') {
     const b = await readBody(req), email = normEmail(b.email), password = b.password;
@@ -1338,13 +1346,17 @@ async function handler(req, env) {
   if (m === 'POST' && p === '/api/withdrawals') {
     const me = await auth(req, env), b = await readBody(req), settings = await getSettings(env);
     const rate = int(settings.lua_per_vnd), amount = Number(b.amount);
-    const fee = int(settings.withdrawal_fee_lua);
     if (settings.withdrawals_enabled !== '1' || rate <= 0) fail(403, 'Admin chưa bật chức năng rút tiền hoặc chưa đặt tỷ giá.');
-    if (!positive(amount, 1000000000) || amount < int(settings.min_withdraw_lua)) fail(400, `Yêu cầu tối thiểu ${settings.min_withdraw_lua} Lúa.`);
+    if (!positive(amount, 1000000000)) fail(400, 'Số Lúa muốn rút không hợp lệ.');
     if (amount % rate !== 0) fail(400, `Số Lúa cần chia hết cho ${rate} để quy đổi ra VNĐ.`);
-    if (!Number.isSafeInteger(fee) || fee < 0 || fee > 10000000 || !Number.isSafeInteger(amount+fee) || amount+fee>1000000000)
-      fail(409,'Phí rút tiền chưa hợp lệ, vui lòng liên hệ Admin.');
-    // Không được âm thầm thu phí mới từ trang Safari cũ hoặc biểu mẫu chưa cập nhật.
+    const vndAmount = amount/rate;
+    const minimumLua = Math.max(int(settings.min_withdraw_lua), WITHDRAW_MIN_VND*rate);
+    if (vndAmount < WITHDRAW_MIN_VND || amount < minimumLua)
+      fail(400, `Rút tối thiểu ${WITHDRAW_MIN_VND.toLocaleString('vi-VN')}đ (và đáp ứng mức Lúa tối thiểu nếu Admin đặt cao hơn).`);
+    const fee = withdrawalFeeFor(amount,rate);
+    if (!Number.isSafeInteger(fee) || !Number.isSafeInteger(amount+fee) || amount+fee>1000000000)
+      fail(409,'Khoản rút và phí vượt giới hạn cho phép.');
+    // Máy chủ tính phí theo VNĐ; phiên bản Safari cũ hoặc khách sửa HTML không được bỏ qua phí.
     if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
       fail(409,'Phí rút tiền đã thay đổi. Vui lòng tải lại trang và xác nhận tổng Lúa trước khi gửi.');
     // Chọn tài khoản đã lưu: CHỈ đọc thông tin từ server của chính thành viên.
