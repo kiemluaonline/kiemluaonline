@@ -161,3 +161,23 @@
  .shop-product-bottom>.shop-cta-shop{gap:7px;font-size:13px;padding:13px 9px;line-height:1.42;}
  .shop-product-bottom>.shop-cta-shop .shop-cta-arrow{font-size:16px;flex-basis:14px;}
 }
+
+/* Điều kiện xét Lúa khi mua từ trang trưng bày / liên kết của Admin. */
+.shop-origin-policy{
+ display:flex;align-items:flex-start;gap:13px;
+ margin:16px 0 23px;padding:19px 20px;
+ border:1px solid #e6d6a9;border-radius:19px;
+ background:linear-gradient(115deg,#fffaed,#f8f7ed);
+ box-shadow:0 6px 20px rgba(93,77,23,.045);
+}
+.shop-origin-policy-icon{font-size:23px;line-height:1.25;flex-shrink:0}
+.shop-origin-policy>div{flex:1;min-width:0}
+.shop-origin-policy strong{display:block;font-size:15px;line-height:1.5;color:#6d521e;margin-bottom:7px}
+.shop-origin-policy p{font-size:12px;line-height:1.7;color:#786a4b;margin:5px 0 0}
+.shop-origin-policy p:last-child{font-weight:650;color:#775424}
+@media(max-width:570px){
+ .shop-origin-policy{margin:14px 0 21px;padding:15px;gap:10px;border-radius:15px}
+ .shop-origin-policy strong{font-size:13px}
+ .shop-origin-policy p{font-size:11px;line-height:1.65}
+ .shop-origin-policy-icon{font-size:19px}
+}
