@@ -145,4 +145,42 @@ assert.equal(sqlite.prepare("SELECT status FROM card_redemptions WHERE id=?").ge
 assert.equal((await call('/api/admin/card-redemptions/'+repeatCard.data.id,'POST',
  {action:'rejected',note:'Không có mã thẻ khác để phát.'},'admin')).status,200);
 assert.equal(balance(),40000,'No Lua lost when Admin cannot issue duplicate card');
+// Phí thẻ cào là số Lúa cộng thêm, khóa theo từng đơn và được hoàn cả phí nếu từ chối.
+sqlite.prepare("INSERT INTO settings(key,value) VALUES('card_fee_lua','7000') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+const beforeFee=balance();
+const infoWithFee=await call('/api/card-redemptions');
+assert.equal(infoWithFee.data.fee_lua,7000);
+assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000})).status,400,
+ 'Need to afford card AND fee rather than just denomination');
+assert.equal(balance(),beforeFee);
+const charged=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000});
+assert.equal(charged.status,201,JSON.stringify(charged));
+assert.equal(charged.data.amount_lua,10000);
+assert.equal(charged.data.fee_lua,7000);
+assert.equal(charged.data.total_lua,17000);
+assert.equal(balance(),beforeFee-17000);
+const cardOnMember=(await call('/api/card-redemptions')).data.redemptions.find(x=>x.id===charged.data.id);
+assert.equal(cardOnMember.fee_lua,7000);
+assert.equal((await call('/api/admin/card-redemptions','GET',undefined,'admin')).data.redemptions.find(x=>x.id===charged.data.id).fee_lua,7000);
+const feeMarkup=await cardRedemptionsPage({...viewCtx,api:async()=>await (await call('/api/card-redemptions')).data});
+assert.match(feeMarkup,/Chi tiết phí đổi thẻ/);
+assert.match(feeMarkup,/Tổng Lúa sẽ giữ/);
+assert.match(feeMarkup,/7.000 Lúa/);
+assert.match(feeMarkup,/17.000 Lúa/);
+sqlite.prepare("UPDATE settings SET value='2000' WHERE key='card_fee_lua'").run();
+assert.equal((await call('/api/card-redemptions')).data.redemptions.find(x=>x.id===charged.data.id).fee_lua,7000,
+ 'Changing Admin fee does not alter an existing request');
+assert.equal((await call('/api/admin/card-redemptions/'+charged.data.id,'POST',
+ {action:'rejected',note:'Thẻ đang tạm hết kho.'},'admin')).status,200);
+assert.equal(balance(),beforeFee,'Original price AND fee refunded');
+assert.equal((await call('/api/admin/card-redemptions/'+charged.data.id,'POST',
+ {action:'rejected',note:'Nhấn lại'},'admin')).status,409);
+assert.equal(balance(),beforeFee,'Rejection must not refund twice');
+const charged2=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000});
+assert.equal(charged2.data.fee_lua,2000,'New requests use updated fee');
+assert.equal(balance(),beforeFee-12000);
+assert.equal((await call('/api/admin/card-redemptions/'+charged2.data.id,'POST',{action:'approved'},'admin')).status,200);
+assert.equal((await call('/api/admin/card-redemptions/'+charged2.data.id,'POST',
+ {action:'delivered',serial:'NEWCARD12345678',pin:'PIN987654321000'},'admin')).status,200);
+assert.equal(balance(),beforeFee-12000,'Fulfillment does not deduct additional fee or refund it');
 console.log('PASS: card redemption defaults off, secure code encryption, member privacy, one-time debit, approval, refusal/refund and disabled gates.');
