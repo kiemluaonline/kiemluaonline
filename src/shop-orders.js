@@ -12,14 +12,16 @@ export async function shopOrdersAPI(req,env,H){
     const me=await auth(req,env);
     // Tuyệt đối không trả commission_vnd, rate_snapshot, settled_reference cho thành viên.
     const orders=await db.prepare(`SELECT o.id,o.order_reference,o.status,o.customer_note,
-      o.admin_note,o.reward_lua,o.created_at,o.updated_at,o.resolved_at,
+      o.admin_note,o.reward_lua,o.estimated_reward_lua,o.created_at,o.updated_at,o.resolved_at,
       p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link
       FROM shop_orders o JOIN shop_products p ON p.id=o.product_id
       WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 150`).bind(me.id).all();
     const events=await db.prepare(`SELECT e.order_id,e.status,e.detail,e.created_at FROM shop_order_events e
       JOIN shop_orders o ON o.id=e.order_id
       WHERE o.user_id=? ORDER BY e.created_at DESC LIMIT 500`).bind(me.id).all();
-    return json({orders:orders.results.map(o=>({...o,reward_lua:o.status==='resolved'?o.reward_lua:0})),
+    return json({orders:orders.results.map(o=>({...o,
+      reward_lua:o.status==='resolved'?o.reward_lua:0,
+      estimated_reward_lua:o.status==='provisional'?o.estimated_reward_lua:0})),
       events:events.results});
   }
   if(p==='/api/shop/orders/alerts'&&m==='GET'){
@@ -54,7 +56,7 @@ export async function shopOrdersAPI(req,env,H){
   const admin=await auth(req,env,'admin');
   if(p==='/api/admin/shop/orders'&&m==='GET'){
     const rows=await db.prepare(`SELECT o.id,o.user_id,o.product_id,o.order_reference,o.status,
-      o.customer_note,o.admin_note,o.verification_note,o.commission_vnd,o.reward_lua,o.rate_snapshot,
+      o.customer_note,o.admin_note,o.verification_note,o.estimated_reward_lua,o.commission_vnd,o.reward_lua,o.rate_snapshot,
       o.settled_reference,o.created_at,o.updated_at,o.reviewed_at,o.resolved_at,
       u.name,u.email,p.title AS product_title
       FROM shop_orders o JOIN users u ON u.id=o.user_id
@@ -76,10 +78,14 @@ export async function shopOrdersAPI(req,env,H){
       if(order.status!=='pending')fail(409,'Chỉ đơn Chờ xác minh mới được tạm duyệt.');
       const privateNote=str(b.admin_note,300);
       if(privateNote.length<10)fail(400,'Ghi chú đối chiếu đơn đã giao và đã thanh toán (ít nhất 10 ký tự).');
+      // Giá trị dự kiến do Admin tự xác nhận: KHÔNG cộng ví, không phải cam kết thưởng.
+      if(!goodInteger(b.estimated_reward_lua,1,10000000))
+        fail(400,'Hãy nhập Lúa dự kiến hợp lệ (số nguyên từ 1 đến 10 triệu Lúa).');
+      const estimatedReward=Number(b.estimated_reward_lua);
       const results=await db.batch([
         db.prepare(`UPDATE shop_orders SET status='provisional',admin_note=?,verification_note=?,
-          reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,seen_at=NULL
-          WHERE id=? AND status='pending'`).bind('Đơn đã được đối chiếu, chờ giải quyết hoa hồng.',privateNote,oid),
+          estimated_reward_lua=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,seen_at=NULL
+          WHERE id=? AND status='pending'`).bind('Đơn đã được đối chiếu, chờ giải quyết hoa hồng.',privateNote,estimatedReward,oid),
         db.prepare(`INSERT INTO shop_order_events(id,order_id,actor_id,status,detail)
           SELECT ?,id,?,'provisional','Đã xác minh nhận hàng/thanh toán; chờ TikTok giải quyết hoa hồng'
           FROM shop_orders WHERE id=? AND status='provisional'
@@ -87,7 +93,8 @@ export async function shopOrdersAPI(req,env,H){
           .bind(id(),admin.id,oid,oid)
       ]);
       if(!results[0].meta?.changes)fail(409,'Đơn hàng đã được người khác xử lý. Hãy tải lại.');
-      return json({ok:true,message:'Tạm duyệt – Chờ giải quyết. Chưa cộng Lúa.'});
+      return json({ok:true,estimated_reward_lua:estimatedReward,
+        message:'Tạm duyệt – Chờ giải quyết. Đã hiển thị Lúa dự kiến cho khách, chưa cộng ví.'});
     }
     if(status==='rejected'){
       const reason=str(b.reason,300);
