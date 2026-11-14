@@ -97,4 +97,14 @@ assert.equal(sql.prepare('SELECT COUNT(*) n FROM shop_products').get().n,1,'Do n
 assert.equal((await call('/api/shop/requests/read','POST',{},'u1')).status,200);
 assert.equal((await call('/api/shop/alerts')).data.unread,0);
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Product announcements must not credit Lúa');
+// Không áp giới hạn lượt/ngày hay số yêu cầu đang chờ đối với mua sắm.
+sql.prepare("INSERT INTO settings(key,value) VALUES('shop_contact_zalo','https://zalo.me/0988734511')").run();
+for(let i=0;i<21;i++){
+ const result=await call('/api/shop/requests','POST',{channel:'zalo',note:'Yêu cầu sản phẩm thứ '+(i+1)});
+ assert.equal(result.status,201,'Yêu cầu thứ '+(i+1)+' phải thành công, không hạn mức ngày/chờ');
+ assert.match(result.data.code,/^SP-/);
+}
+assert.equal(sql.prepare("SELECT COUNT(*) n FROM shop_requests WHERE user_id='u1' AND status='pending'").get().n,22);
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0);
+console.log('PASS: shop requests have no daily or pending-count quota; wallet remains untouched.');
 console.log('PASS: direct product creation, one-time fulfillment, per-member notification, protected links and unchanged wallet.');
