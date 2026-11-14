@@ -16,8 +16,8 @@ export function shopCard(product,esc){
    </div>
    <div class="shop-product-content"><span class="shop-product-category">${esc(category[1])}</span>
    <h3>${esc(product.title)}</h3><p>${esc(product.description||'Khám phá sản phẩm phù hợp trên TikTok Shop.')}</p>
-   <div class="shop-product-bottom"><span class="shop-product-caption">🌾 Lúa xét khi đơn hàng hoàn tất</span>
-    <a class="shop-cta-shop" href="${esc(product.link)}" target="_blank" rel="noopener noreferrer sponsored">Xem & mua ngay <span aria-hidden="true">↗</span></a><button type="button" class="shop-report-btn" data-action="shop-report-order" data-id="${esc(product.id)}" data-title="${esc(product.title)}">📦 Đã mua? Báo đơn</button>
+   <div class="shop-product-bottom"><span class="shop-product-caption">🌾 Đơn hợp lệ, đã giải quyết mới nhận Lúa</span>
+    <a class="shop-cta-shop" href="${esc(product.link)}" target="_blank" rel="noopener noreferrer sponsored"><span class="shop-cta-label">🛍️ Xem & mua ngay – Tích Lúa 🌾</span><span class="shop-cta-arrow" aria-hidden="true">↗</span></a><button type="button" class="shop-report-btn" data-action="shop-report-order" data-id="${esc(product.id)}" data-title="${esc(product.title)}">📦 Đã mua? Báo đơn</button>
    </div></div></article>`;
 }
 
