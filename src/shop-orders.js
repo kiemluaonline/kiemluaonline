@@ -96,7 +96,7 @@ export async function shopOrdersAPI(req,env,H){
     if(status==='provisional'){
       if(order.status!=='pending')fail(409,'Chỉ đơn Chờ xác minh mới được tạm duyệt.');
       const privateNote=str(b.admin_note,300);
-      if(privateNote.length<10)fail(400,'Nhập kết quả kiểm tra ID đơn hàng trong TikTok Affiliate (ít nhất 10 ký tự).');
+      if(privateNote.length<10)fail(400,'Nhập kết quả kiểm tra ID đơn hàng (ít nhất 10 ký tự).');
       // Giá trị dự kiến do Admin tự xác nhận: KHÔNG cộng ví, không phải cam kết thưởng.
       if(!goodInteger(b.estimated_reward_lua,1,10000000))
         fail(400,'Hãy nhập Lúa dự kiến hợp lệ (số nguyên từ 1 đến 10 triệu Lúa).');
@@ -104,9 +104,9 @@ export async function shopOrdersAPI(req,env,H){
       const results=await db.batch([
         db.prepare(`UPDATE shop_orders SET status='provisional',admin_note=?,verification_note=?,
           estimated_reward_lua=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,seen_at=NULL
-          WHERE id=? AND status='pending'`).bind('Đã đối chiếu ID đơn hàng trong TikTok Affiliate. Đang chờ đơn hoàn tất và hoa hồng được giải quyết.',privateNote,estimatedReward,oid),
+          WHERE id=? AND status='pending'`).bind('Đã kiểm tra ID đơn hàng, thông tin sản phẩm trùng khớp. Đơn đang chờ hoàn tất.',privateNote,estimatedReward,oid),
         db.prepare(`INSERT INTO shop_order_events(id,order_id,actor_id,status,detail)
-          SELECT ?,id,?,'provisional','Đã đối chiếu ID đơn hàng trong TikTok Affiliate; đang chờ đơn hoàn tất và giải quyết hoa hồng'
+          SELECT ?,id,?,'provisional','Đơn hàng đã được tạm duyệt, đang chờ hoàn tất'
           FROM shop_orders WHERE id=? AND status='provisional'
           AND NOT EXISTS(SELECT 1 FROM shop_order_events WHERE order_id=? AND status='provisional')`)
           .bind(id(),admin.id,oid,oid)
