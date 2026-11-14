@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS shop_orders (
   reward_lua INTEGER NOT NULL DEFAULT 0 CHECK(reward_lua>=0),
   rate_snapshot INTEGER NOT NULL DEFAULT 0 CHECK(rate_snapshot>=0),
   settled_reference TEXT NOT NULL DEFAULT '',
+  seen_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   reviewed_at TEXT,
