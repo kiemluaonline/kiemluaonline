@@ -1,5 +1,6 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-shop-origin-v13';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-shop-origin-v13';
+import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261114-cards-v1';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
 const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message),defaultValue);
@@ -22,12 +23,12 @@ const BANK_LIST = [
 ];
 const NAV = [
   ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['shop','🛍️','Mua sắm nhận Lúa'],['shop-orders','📦','Đơn hàng & Lúa'],['referrals','♧','Tuyển Ref'],
-  ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
+  ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['cards','🎁','Đổi thẻ cào'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
 ];
 const ADMIN_NAV = [
   ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],['admin-shop','🛍️','Quản lý mua sắm'],['admin-shop-orders','📦','Duyệt đơn TikTok'],
   ['admin-users','☻','Thành viên'],['admin-reviews','✓','Duyệt bằng chứng'],
-  ['admin-withdrawals','⇢','Yêu cầu rút tiền'],['admin-security','♙','Chống gian lận'],
+  ['admin-withdrawals','⇢','Yêu cầu rút tiền'],['admin-cards','🎁','Quản lý thẻ cào'],['admin-security','♙','Chống gian lận'],
   ['admin-settings','⚙','Cài đặt'],['profile','☻','Hồ sơ của tôi']
 ];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -337,9 +338,9 @@ async function navigate(view){
 async function page(view){
  switch(view){
  case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'shop-orders':return shopOrdersPage({api,esc,heading,fmt,dt});case 'referrals':return referrals();
- case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'history':return history();case 'profile':return profile();
+ case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'cards':return cardRedemptionsPage({api,esc,heading,dt});case 'history':return history();case 'profile':return profile();
  case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt});case 'admin-users':return adminUsers();
- case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();
+ case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();case 'admin-cards':return adminCardRedemptionsPage({api,esc,heading,dt});
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
  default:return empty('Trang chưa được cấu hình');
  }
@@ -1020,6 +1021,9 @@ app.addEventListener('click',async e=>{
  if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
+  if(act.startsWith('card-')){
+   if(await handleCardAction(act,el,{api,toast,navigate}))return;
+  }
   if(act.startsWith('shop-')){
    if(await handleShopAction(act,el,{api,toast,navigate,state,esc}))return;
    if(await handleShopOrderAction(act,el,{api,toast,navigate,state,esc}))return;
@@ -1146,6 +1150,9 @@ app.addEventListener('submit',async e=>{
  e.preventDefault();const kind=form.dataset.form;const b=formData(form),button=form.querySelector('button[type="submit"]');
  if(button)button.disabled=true;
  try{
+  if(kind.startsWith('card-')){
+   if(await handleCardSubmit(kind,b,{api,toast,navigate}))return;
+  }
   if(kind.startsWith('shop-')){
    if(await handleShopSubmit(kind,b,{api,toast,navigate,state}))return;
    if(await handleShopOrderSubmit(kind,b,{api,toast,navigate,state}))return;
