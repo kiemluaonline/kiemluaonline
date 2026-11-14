@@ -665,8 +665,11 @@ async function withdrawals(){
  const savedSelection=preferred?.id||'';
  const t=`${heading('Yêu cầu rút tiền','Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra trước khi chuyển khoản ngân hàng.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
- const form=`<form class="card" data-form="withdraw" data-fee-vnd="${Number(meta.withdrawal_fee_vnd)||2000}" data-free-from-vnd="${Number(meta.withdrawal_free_from_vnd)||25000}" data-min-vnd="${Number(meta.withdrawal_min_vnd)||5000}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="0">
- ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
+ const form=`<form class="card" data-form="withdraw" data-balance="${Number(state.me.balance)||0}" data-fee-vnd="${Number(meta.withdrawal_fee_vnd)||2000}" data-free-from-vnd="${Number(meta.withdrawal_free_from_vnd)||25000}" data-min-vnd="${Number(meta.withdrawal_min_vnd)||5000}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="0">
+ <div class="withdraw-amount-wrap">
+   ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
+   <button type="button" class="btn alt withdraw-max-btn" data-action="withdraw-max" ${!meta.withdrawals_enabled?'disabled':''}>Tối đa số dư</button>
+ </div>
  <div class="note">Rút tối thiểu 5.000đ • ${meta.lua_per_vnd?fmt(meta.lua_per_vnd)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'} • Số dư: ${fmt(state.me.balance)} Lúa</div>
  <div class="withdraw-fee-preview" role="status">
    <strong>Phí rút tiền theo mệnh giá</strong>
@@ -702,7 +705,7 @@ async function withdrawals(){
   <div class="withdraw-history-meta">Phí: ${fmt(w.fee_lua)} Lúa · Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div>
   <p>${esc(w.admin_note|| (w.status==='paid'?'Tiền đã được Admin xác nhận chuyển.':w.status==='approved'?'Yêu cầu đã duyệt, đang chờ chuyển tiền.':w.status==='pending'?'Yêu cầu đang chờ Admin duyệt.':'—'))}</p>
  </article>`).join('');
- const manager=await payoutAccountsPage({api,esc,heading,bankList:BANK_LIST,embedded:true});
+ const manager=await payoutAccountsPage({api,esc,heading,bankList:BANK_LIST,embedded:true,initialData:accountsData});
  return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>🕘 Lịch sử yêu cầu rút</h3>${withdrawalCards?'<div class="withdraw-history-list">'+withdrawalCards+'</div>':empty('Chưa có yêu cầu rút','Yêu cầu rút mới sẽ hiển thị tại đây kèm mã lệnh.')}</section>`;
 }
 async function history(){
@@ -1057,6 +1060,14 @@ function updatePayoutAccountFields(form){
    number.placeholder=bvbank?'Ví dụ: 99ZP...':'Nhập số tài khoản';
  }
 }
+// Chỉ chọn mức rút lớn nhất mà ví đủ cả số tiền lẫn phí.
+function maximumWithdrawLua(balance,rate,minVnd=5000,freeFromVnd=25000,feeVnd=2000){
+ if(!Number.isSafeInteger(balance)||balance<=0||!Number.isSafeInteger(rate)||rate<=0)return 0;
+ const freeMax=Math.floor(Math.min(balance,1000000000)/rate);
+ if(freeMax>=freeFromVnd)return freeMax*rate;
+ const paidMax=Math.min(freeFromVnd-1,Math.floor(balance/rate)-feeVnd,Math.floor(1000000000/rate)-feeVnd);
+ return paidMax>=minVnd?paidMax*rate:0;
+}
 function updateWithdrawalPreview(form){
  if(!form)return;
  const rate=Number(form.dataset.rate||0),fixedFeeVnd=Number(form.dataset.feeVnd||2000);
@@ -1139,6 +1150,17 @@ app.addEventListener('click',async e=>{
   if(act.startsWith('shop-')){
    if(await handleShopAction(act,el,{api,toast,navigate,state,esc}))return;
    if(await handleShopOrderAction(act,el,{api,toast,navigate,state,esc}))return;
+  }
+  if(act==='withdraw-max'){
+   const form=el.closest('form[data-form="withdraw"]');
+   if(!form)return;
+   const max=maximumWithdrawLua(Number(form.dataset.balance),Number(form.dataset.rate),
+     Number(form.dataset.minVnd||5000),Number(form.dataset.freeFromVnd||25000),
+     Number(form.dataset.feeVnd||2000));
+   if(!max){toast('Số dư chưa đủ rút tối thiểu 5.000đ và phí tương ứng.',true);return;}
+   const amountInput=form.querySelector('[name="amount"]');
+   if(amountInput){amountInput.value=String(max);updateWithdrawalPreview(form);}
+   return;
   }
   if(act==='open-auth'){
    state.authMode=el.dataset.authMode==='register'?'register':'login';
