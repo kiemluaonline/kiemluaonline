@@ -57,11 +57,39 @@ assert.match(frontendForWelcome,/if\(act==='back-home'\)/);
 assert.match(frontendForWelcome,/data-action="back-home"/);
 assert.match(frontendForWelcome,/const withdrawalCode = id/);
 assert.match(frontendForWelcome,/Mã lệnh:/);
+
+assert.match(frontendForWelcome,/data-action="withdraw-max"/);
+assert.match(frontendForWelcome,/maximumWithdrawLua/);
+const maxStart=frontendForWelcome.indexOf('function maximumWithdrawLua(');
+const maxEnd=frontendForWelcome.indexOf('function updateWithdrawalPreview(',maxStart);
+assert.ok(maxStart>0 && maxEnd>maxStart,'Maximum withdrawal helper must exist before fee preview');
+const maxLua=(await import('node:vm')).runInNewContext(frontendForWelcome.slice(maxStart,maxEnd)+'\n maximumWithdrawLua',{});
+assert.equal(maxLua(6999,1),0,'Cannot request below 5,000 VND plus 2,000 VND fee');
+assert.equal(maxLua(7000,1),5000,'Keep 2,000 VND-equivalent Lúa for fee');
+assert.equal(maxLua(10000,1),8000,'Do not fill full balance when fee applies');
+assert.equal(maxLua(24999,1),22999,'Fee must be reserved at 24,999 VND equivalent balance');
+assert.equal(maxLua(25000,1),25000,'At exactly 25,000 VND no fee');
+assert.equal(maxLua(70000,10),50000,'Fee respects 10 Lúa = 1 VND conversion');
+assert.equal(maxLua(249990,10),229990,'Only whole VNĐ in paid tier');
+assert.equal(maxLua(250000,10),250000,'The 25k VND threshold is free');
+assert.equal(maxLua(1_000_000_500,1),1_000_000_000,'Respect server amount limit');
+console.log('PASS: max-balance button preserves tiered fees, VNĐ rounding and backend amount limits.');
+
 const withdrawalCodeSource=frontendForWelcome.split('\n').find(x=>x.includes('const withdrawalCode = id'));
 assert.ok(withdrawalCodeSource,'Payout code formatter should be present on frontend');
 const payoutReference=(await import('node:vm')).runInNewContext(withdrawalCodeSource+'\nwithdrawalCode', {});
 assert.equal(payoutReference('12345678-abcd-4ef0-bb99-123456789abc'),'#12345678ABCD');
 assert.equal(payoutReference('12345678-abcd-4ef0-bb99-123456789abc'),'#12345678ABCD','References stay stable without a D1 migration');
+const {payoutAccountsPage:testSavedAccountsPage}=await import('../public/payout-accounts-ui.js');
+let extraSavedCalls=0;
+const missingSaved=await testSavedAccountsPage({
+ api:async()=>{extraSavedCalls++;throw new Error('Unexpected duplicate call');},
+ esc:String,heading:()=>'',bankList:[],embedded:true,initialData:{accounts:[],unavailable:true}
+});
+assert.equal(extraSavedCalls,0,'Failed saved-account GET must not be repeated when rendering withdrawal page');
+assert.match(missingSaved,/Cloudflare D1/);
+assert.doesNotMatch(missingSaved,/Admin cần chạy bảng dữ liệu mới trước/);
+assert.doesNotMatch(missingSaved,/TRẠM CÓ LÚA/);
 const brandMeta=await call('/api/meta');
 assert.equal(brandMeta.status,200);
 assert.equal(brandMeta.data.site_name,'Trạm Có Lúa');
