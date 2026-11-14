@@ -78,13 +78,16 @@ assert.equal((await call('/api/shop/orders','GET',undefined,'user2')).data.order
 const adminView=(await call('/api/admin/shop/orders','GET',undefined,'admin1')).data;
 assert.equal(adminView.orders.length,1);
 assert.equal(adminView.orders[0].order_reference,ref);
+assert.ok(!('commission_vnd' in adminView.orders[0]),'Admin no longer needs to enter or view commission inside order management');
+assert.ok(!('rate_snapshot' in adminView.orders[0]),'No internal commission rate snapshot returned');
+assert.ok(!('lua_per_vnd' in adminView),'Order management no longer depends on a Lua/VND conversion setting');
 assert.equal(adminView.verification_note,ORDER_CHECK_NOTE);
 assert.deepEqual(adminView.rejection_reasons,ORDER_REJECTION_REASONS);
 assert.equal(ORDER_REJECTION_REASONS['0'],'Không tìm thấy thông tin đơn hàng tương ứng với ID đã cung cấp.');
 assert.equal(ORDER_REJECTION_REASONS['1'],'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.');
 assert.equal(ORDER_REJECTION_REASONS['2'],'Đơn hàng đã được hoàn trả hoặc hoàn tiền nên không đủ điều kiện nhận Lúa.');
 assert.equal(ORDER_REJECTION_REASONS['3'],'Sau khi kiểm tra, đơn hàng chưa đáp ứng điều kiện nhận thưởng của chương trình.');
-const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
+const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(premature.status,409);
 const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',estimated_reward_lua:0},'admin1');
 assert.equal(invalidEstimate.status,400,'Bắt buộc nhập ước tính hợp lệ trước khi tạm duyệt');
@@ -139,19 +142,26 @@ const editEstimateAdminPage=await adminShopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(editEstimateAdminPage,/data-form="shop-order-estimate"/);
 assert.match(editEstimateAdminPage,/Lúa dự kiến đang hiển thị cho khách/);
+assert.match(editEstimateAdminPage,/name="reward_lua"/);
+assert.doesNotMatch(editEstimateAdminPage,/name="commission_vnd"|Hoa hồng THỰC NHẬN|Tỷ giá nội bộ hiện tại/,'Settlement form contains only Lua reward, not personal commission or conversion rate');
+assert.doesNotMatch(editEstimateAdminPage,/shop-settle-btn" disabled/,'Paying member Lua does not depend on Lua-VND setting');
 const duplicateCheck=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Lặp lại'},'admin1');
 assert.equal(duplicateCheck.status,409);
-const overpay=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:500,reward_lua:2000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
-assert.equal(overpay.status,400);
+const invalidReward=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',reward_lua:10000001,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
+assert.equal(invalidReward.status,400,'Reward cap still protects against accidentally excessive Lua');
 assert.equal(db.prepare("SELECT status FROM shop_orders WHERE id=?").get(oid).status,'provisional');
-const missingFinalConfirmation=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
+const missingFinalConfirmation=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',reward_lua:3000,settled_reference:ref},'admin1');
 assert.equal(missingFinalConfirmation.status,400,'Final delivery/payment/settlement acknowledgement required');
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Missing final proof acknowledgement must never pay');
-const settled=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
+// No percent split: Admin chooses 3,000 Lua directly, even with no commission amount given.
+db.prepare("UPDATE settings SET value='0' WHERE key='lua_per_vnd'").run();
+const settled=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(settled.status,200);
 assert.equal(settled.data.reward_lua,3000);
+assert.equal(db.prepare('SELECT commission_vnd FROM shop_orders WHERE id=?').get(oid).commission_vnd,0,'No new TikTok commission data is stored');
+assert.equal(db.prepare('SELECT rate_snapshot FROM shop_orders WHERE id=?').get(oid).rate_snapshot,0,'No new commission conversion snapshot is stored');
 assert.equal(db.prepare("SELECT SUM(amount) n FROM wallet_entries WHERE user_id='user1' AND reference_type='shop_order'").get().n,3000);
-const repeated=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
+const repeated=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(repeated.status,409);
 const forbiddenUpdateAfterResolved=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:4000},'admin1');
 assert.equal(forbiddenUpdateAfterResolved.status,409,'Cannot revise estimate after real Lua was settled');
@@ -176,6 +186,7 @@ const adminPage=await adminShopOrdersPage({
  api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1}),
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(adminPage,/Tạm duyệt/);
+assert.doesNotMatch(adminPage,/name="commission_vnd"|Hoa hồng THỰC NHẬN/,'No commission entry appears in Admin order review');
 const read=await call('/api/shop/orders/read','POST',{},'user1');
 assert.equal(read.status,200);
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,0);
