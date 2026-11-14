@@ -96,3 +96,70 @@
 /* Xác nhận cuối chỉ hiển thị trong Admin; checkbox gọn, không dùng chiều rộng của input văn bản. */
 .sorder-admin-form .sorder-final-check{display:flex;align-items:flex-start;gap:10px;padding:12px 13px;border:1px solid #cde4d1;border-radius:12px;background:#f3faf2;color:#376647;font-size:12px;font-weight:700;line-height:1.6;cursor:pointer}
 .sorder-admin-form .sorder-final-check input[type=checkbox]{appearance:auto;width:18px;min-width:18px;max-width:18px;height:18px;margin:2px 0 0;padding:0;flex:0 0 18px;accent-color:#166946;box-shadow:none}
+
+/* Bản giao diện lịch sử mua sắm v4 – bốn trạng thái, tiến trình ba bước. */
+.sorder-customer .sorder-list{gap:18px}
+.sorder-customer .sorder-card{position:relative;padding:22px;border:1px solid #d9e8dc;border-radius:24px;box-shadow:0 12px 28px rgba(19,70,44,.07);overflow:hidden}
+.sorder-customer .sorder-card::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:#d6b366}
+.sorder-customer .sorder-card-provisional::before{background:#e4a94a}
+.sorder-customer .sorder-card-resolved::before{background:#36a36d}
+.sorder-customer .sorder-card-rejected::before{background:#df7970}
+.sorder-customer .sorder-card-top{align-items:flex-start}
+.sorder-customer .sorder-card-top strong{font-size:17px;line-height:1.4}
+.sorder-customer .sorder-status{padding:9px 12px;font-size:11px;flex-shrink:0}
+.sorder-customer .sorder-status-provisional{background:#fff1dc;color:#995913}
+.sorder-customer .sorder-order-meta{margin:18px 0 7px;padding:13px 14px;display:grid;gap:9px;background:#f7faf6;border-radius:15px}
+.sorder-order-meta>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 13px;font-size:11px;color:#6c8777;line-height:1.45}
+.sorder-order-meta strong{color:#294f3b;font-size:12px;overflow-wrap:anywhere}
+.sorder-order-meta>div span:last-child{color:#476955}
+.sorder-reference{margin:2px 0 16px;font-size:11px;color:#477659}
+.sorder-reference summary{cursor:pointer;font-weight:700;display:inline-block;text-decoration:underline;text-underline-offset:3px}
+.sorder-reference code{display:block;max-width:100%;overflow-wrap:anywhere;margin-top:8px;background:#f5f9f5;border-radius:8px;padding:9px;color:#2b5140}
+.sorder-status-explain{display:flex;gap:13px;align-items:flex-start;padding:15px;border-radius:15px;border:1px solid #e7e7df;background:#fffaf1}
+.sorder-status-explain-icon{display:grid;place-items:center;width:35px;height:35px;flex:0 0 35px;border-radius:11px;background:#fff2d4;color:#946519;font-size:19px;font-weight:800}
+.sorder-status-explain strong{font-size:13px;color:#805d26;line-height:1.4}
+.sorder-status-explain p{font-size:12px;line-height:1.75;color:#7e745e;margin:5px 0 0}
+.sorder-status-explain-provisional{border-color:#f2dcb8;background:#fffbf3}
+.sorder-status-explain-resolved{background:#eff9f0;border-color:#d0ead8}
+.sorder-status-explain-resolved .sorder-status-explain-icon{background:#d9f0df;color:#1f804e}
+.sorder-status-explain-resolved strong{color:#1c7446}
+.sorder-status-explain-resolved p{color:#547c62}
+.sorder-status-explain-rejected{background:#fff5f3;border-color:#f1d3ce}
+.sorder-status-explain-rejected .sorder-status-explain-icon{background:#fbe2df;color:#b8443c}
+.sorder-status-explain-rejected strong{color:#a33d34}
+.sorder-status-explain-rejected p{color:#99665f}
+.sorder-customer .sorder-progress{margin:19px 0 12px;padding:17px 12px 12px;border:1px solid #e5eee7;border-radius:16px}
+.sorder-progress-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:0 0 18px}
+.sorder-progress-heading strong{font-size:12px;color:#2e5c43}
+.sorder-progress-heading span{font-size:11px;color:#6e8978;background:#edf6ee;border-radius:20px;padding:5px 9px;font-weight:700}
+.sorder-customer .sorder-steps{gap:8px;padding:0}
+.sorder-customer .sorder-step{gap:9px}
+.sorder-customer .sorder-step .sorder-step-node{width:32px;height:32px;border:2px solid #dfebe1;background:#f5f8f5;color:#94a99b;font-weight:850}
+.sorder-customer .sorder-step.is-done .sorder-step-node{border-color:#99c8a5;color:#27764e;background:#e8f5e9}
+.sorder-customer .sorder-step.is-current .sorder-step-node{box-shadow:0 0 0 4px #e2f1df;border-color:#5eaa78;background:#17704c;color:white}
+.sorder-customer .sorder-step:not(:last-child):after{top:15px;left:calc(50% + 22px);width:calc(100% - 36px)}
+.sorder-customer .sorder-step small{font-size:10px;line-height:1.5;max-width:135px}
+.sorder-customer .sorder-step.is-current small{color:#1d6544;font-weight:850}
+.sorder-customer .sorder-wait-pending{display:flex;gap:5px;flex-direction:column;background:#fff9ed;border:1px solid #f0dfb8;color:#805e2b}
+.sorder-wait-pending strong{font-size:13px}
+.sorder-wait-pending span{font-size:11px;color:#8e7d5e}
+.sorder-rejection-final{margin:16px 0 5px;display:flex;flex-direction:column;gap:6px;background:#fff4f2}
+.sorder-rejection-final strong{font-size:15px}
+.sorder-rejection-final span{font-size:12px}
+.sorder-award-final{margin-top:14px;background:linear-gradient(115deg,#e6f7e8,#f5fbf0);border-color:#b7ddbd;padding:16px 17px;display:grid;grid-template-columns:1fr auto}
+.sorder-award-final strong{font-size:21px}
+.sorder-award-final small{grid-column:1/-1;color:#46805e;font-size:11px}
+.sorder-customer .sorder-timeline{margin-top:20px}
+.sorder-customer .sorder-timeline ol{padding-left:23px}
+.sorder-customer .sorder-timeline li{padding-left:10px}
+.sorder-customer .sorder-timeline li:before{left:-28px}
+@media(max-width:600px){
+ .sorder-customer .sorder-card{padding:16px;border-radius:19px}
+ .sorder-customer .sorder-status{font-size:10px}
+ .sorder-customer .sorder-card-top strong{font-size:15px}
+ .sorder-customer .sorder-progress{padding:14px 9px 12px}
+ .sorder-customer .sorder-step small{font-size:9px;letter-spacing:-.1px}
+ .sorder-customer .sorder-order-meta{padding:12px}
+ .sorder-customer .sorder-award-final strong{font-size:19px}
+}
+@media(prefers-reduced-motion:reduce){.sorder-customer *{scroll-behavior:auto}}
