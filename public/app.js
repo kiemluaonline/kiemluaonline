@@ -683,7 +683,6 @@ async function withdrawals(){
   <div id="saved-payout-preview" class="withdraw-saved-description">${preferred?'Đã chọn: '+esc(preferred.bank_name)+' · '+esc(preferred.account_number)+' · '+esc(preferred.account_owner):'Chưa có tài khoản đã lưu. Bạn có thể thêm một lần để những lần sau chỉ cần chọn.'}</div>
  </div>`:''}
  <input type="hidden" name="payment_method" value="bank">
- <p class="note">Nhận qua ngân hàng, gồm BVBank khi có số tài khoản BVBank liên kết ZaloPay.</p>
  <div id="withdraw-bank-fields">
  <div class="field"><label for="bank_name">Ngân hàng nhận</label><select id="bank_name" name="bank_name" required ${!meta.withdrawals_enabled?'disabled':''}>${BANK_LIST.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
  <div id="withdraw-bank-other" hidden>${field('bank_other','Nhập tên ngân hàng khác','',`disabled`)}</div>
