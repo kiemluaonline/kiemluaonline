@@ -68,7 +68,7 @@ const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolve
 assert.equal(premature.status,409);
 const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Khách đã nhận và thanh toán, đối chiếu đơn hợp lệ'},'admin1');
 assert.equal(provisional.status,200);
-assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).includes('đối chiếu'),true);
+assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note.includes('đối chiếu'),true);
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Pending commission must NOT pay');
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,1);
 orders=(await call('/api/shop/orders')).data.orders;
