@@ -345,36 +345,54 @@ assert.equal(dashboard.data.latest_payment.vnd_amount,2);
 assert.equal(dashboard.data.latest_payment.masked_account,'12******90');
 assert.equal(dashboard.data.latest_payment.bank_account,undefined);
 assert.ok(dashboard.data.link_lua>=100);
-// Kênh ZaloPay: chọn phương thức, nhập số điện thoại nhận tiền, duyệt rồi từ chối.
-// Chỉ giữ Lúa một lần và hoàn đúng một lần.
+// Chỉ rút qua ngân hàng (BVBank cũng hỗ trợ số tài khoản có chữ).
+// Form cũ và API giả mạo phương thức ZaloPay phải bị từ chối, không trừ ví.
 const invalidZaloPhone=await call('/api/withdrawals','POST',{
  amount:10,payment_method:'zalopay',zalopay_phone:'123',zalopay_owner:'NGUYEN VAN A'
 },cookie);
 assert.equal(invalidZaloPhone.status,400);
-const zalo=await call('/api/withdrawals','POST',{
+const blockedWallet=await call('/api/withdrawals','POST',{
  amount:10,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'
 },cookie);
-assert.equal(zalo.status,200,JSON.stringify(zalo));
-const adminZalo=(await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals.find(w=>w.id===zalo.data.id);
-assert.equal(adminZalo.payment_method,'zalopay');
-assert.equal(adminZalo.bank_name,'ZaloPay');
-assert.equal(adminZalo.bank_account,'0912345678');
-assert.equal((await call('/api/admin/withdrawals/'+zalo.data.id,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal(blockedWallet.status,400);
+assert.equal((await call('/api/payout-accounts','POST',{
+ payment_method:'zalopay',account_number:'0912345678',account_owner:'NGUYEN VAN A'
+},cookie)).status,400);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,115);
+
+// D1 có thể còn giao dịch Ví ZaloPay đã tạo ở phiên bản cũ.
+// Chèn bản ghi *chỉ trong cơ sở dữ liệu test* để kiểm tra Admin và lịch sử cũ.
+const legacyUser=userMe.data.user.id;
+function addLegacyWalletWithdrawal(wid,holdId){
+ sqlite.prepare(`INSERT INTO withdrawals
+  (id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner)
+  VALUES (?,?,?,?,?,?,?,?)`).run(wid,legacyUser,10,1,10,'ZaloPay','0912345678','NGUYEN VAN A');
+ sqlite.prepare(`INSERT INTO wallet_entries
+  (id,user_id,amount,reason,reference_type,reference_id)
+  VALUES (?,?,?,?,?,?)`).run(holdId,legacyUser,-10,'Giữ Lúa rút cũ','withdraw_hold',wid);
+}
+const oldWalletID='00000000-0000-4000-8000-0000000000aa';
+addLegacyWalletWithdrawal(oldWalletID,'00000000-0000-4000-8000-0000000000ba');
+const oldWalletAdmin=(await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals.find(w=>w.id===oldWalletID);
+assert.equal(oldWalletAdmin.payment_method,'zalopay');
+assert.equal(oldWalletAdmin.bank_name,'ZaloPay');
+assert.equal(oldWalletAdmin.bank_account,'0912345678');
+assert.equal((await call('/api/admin/withdrawals/'+oldWalletID,'POST',{status:'approved'},admCookie)).status,200);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
-assert.equal((await call('/api/admin/withdrawals/'+zalo.data.id,'POST',{status:'invalid_account'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+oldWalletID,'POST',{status:'invalid_account'},admCookie)).status,200);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,115);
-assert.equal((await call('/api/admin/withdrawals/'+zalo.data.id,'POST',{status:'invalid_account'},admCookie)).status,409);
+assert.equal((await call('/api/admin/withdrawals/'+oldWalletID,'POST',{status:'invalid_account'},admCookie)).status,409);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,115);
-// Yêu cầu chuyển khoản ZaloPay thực sự chỉ được đánh dấu đã thanh toán sau duyệt.
-const zaloPaid=await call('/api/withdrawals','POST',{
- amount:10,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'
-},cookie);
-assert.equal(zaloPaid.status,200);
-assert.equal((await call('/api/admin/withdrawals/'+zaloPaid.data.id,'POST',{status:'approved'},admCookie)).status,200);
-assert.equal((await call('/api/admin/withdrawals/'+zaloPaid.data.id,'POST',{status:'paid',admin_note:'GD Zalopay 123'},admCookie)).status,200);
-const zaloPaidRow=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===zaloPaid.data.id);
-assert.equal(zaloPaidRow.status,'paid');
-assert.equal(zaloPaidRow.payment_method,'zalopay');
+
+const oldPaidID='00000000-0000-4000-8000-0000000000ab';
+addLegacyWalletWithdrawal(oldPaidID,'00000000-0000-4000-8000-0000000000bb');
+assert.equal((await call('/api/admin/withdrawals/'+oldPaidID,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+oldPaidID,'POST',{status:'paid',admin_note:'GD ZaloPay cu da doi chieu'},admCookie)).status,200);
+const legacyPaid=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===oldPaidID);
+assert.equal(legacyPaid.status,'paid');
+assert.equal(legacyPaid.payment_method,'zalopay');
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
+console.log('PASS: new ZaloPay withdrawals and wallet saving blocked; old ZaloPay D1 history/admin approve, pay and refund preserved.'); 
 // Phí xử lý cố định: khách thấy trước khi gửi, máy chủ trừ thêm vào Lúa giữ;
 // nếu từ chối hoặc STK sai thì hoàn CẢ phần phí, không ảnh hưởng giao dịch cũ.
 assert.equal((await call('/api/admin/settings','PUT',
@@ -415,7 +433,7 @@ assert.equal((await call('/api/withdrawals','POST',
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
 assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'5'},admCookie)).status,200);
 const feeInvalid=await call('/api/withdrawals','POST',
- {amount:20,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A',expected_fee_lua:5},cookie);
+ {amount:20,payment_method:'bank',bank_name:'BVBank',bank_account:'99ZP123456',bank_owner:'NGUYEN VAN A',expected_fee_lua:5},cookie);
 assert.equal(feeInvalid.status,200,JSON.stringify(feeInvalid));
 assert.equal(feeInvalid.data.total_lua,25);
 assert.equal((await call('/api/admin/withdrawals/'+feeInvalid.data.id,'POST',{status:'approved'},admCookie)).status,200);
