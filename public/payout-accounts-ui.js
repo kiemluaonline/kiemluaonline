@@ -85,7 +85,7 @@ export async function handlePayoutAccountAction(action,el,ctx){
  }
  if(action==='payout-account-delete'){
   if(!ask('Bạn chắc chắn muốn xóa tài khoản nhận tiền này? Các yêu cầu rút đã gửi vẫn được giữ nguyên.'))return true;
-  const r=await api('/api/payout-accounts/'+encodeURIComponent(id),'DELETE');
+  const r=await api('/api/payout-accounts/'+encodeURIComponent(id),'DELETE',{});
   if(editAccountId===id)editAccountId=null;
   toast(r.message);await navigate('payout-accounts');return true;
  }
