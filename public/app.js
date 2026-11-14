@@ -1,8 +1,9 @@
+import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js';
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'' };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null };
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
   ['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
@@ -16,11 +17,11 @@ const BANK_LIST = [
   ['other','Ngân hàng khác (nhập tên)']
 ];
 const NAV = [
-  ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['referrals','♧','Tuyển Ref'],
+  ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['shop','🛍️','Mua sắm nhận Lúa'],['referrals','♧','Tuyển Ref'],
   ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
 ];
 const ADMIN_NAV = [
-  ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],
+  ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],['admin-shop','🛍️','Quản lý mua sắm'],
   ['admin-users','☻','Thành viên'],['admin-reviews','✓','Duyệt bằng chứng'],
   ['admin-withdrawals','⇢','Yêu cầu rút tiền'],['admin-security','♙','Chống gian lận'],
   ['admin-settings','⚙','Cài đặt'],['profile','☻','Hồ sơ của tôi']
@@ -314,12 +315,20 @@ async function navigate(view){
   }
   root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
  }
+ if(state.me?.user.role==='member'){
+  api('/api/shop/alerts').then(r=>{
+   document.querySelectorAll('[data-go="shop"]').forEach(btn=>{
+    btn.querySelector('.shop-nav-badge')?.remove();
+    if(r.unread){const span=document.createElement('span');span.className='shop-nav-badge';span.textContent=String(r.unread);btn.appendChild(span);}
+   });
+  }).catch(()=>{});
+ }
 }
 async function page(view){
  switch(view){
- case 'overview':return overview();case 'tasks':return tasks();case 'referrals':return referrals();
+ case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'referrals':return referrals();
  case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'history':return history();case 'profile':return profile();
- case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-users':return adminUsers();
+ case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-users':return adminUsers();
  case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
  default:return empty('Trang chưa được cấu hình');
@@ -998,6 +1007,9 @@ app.addEventListener('click',async e=>{
  if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
+  if(act.startsWith('shop-')){
+   if(await handleShopAction(act,el,{api,toast,navigate,state,esc}))return;
+  }
   if(act==='open-auth'){
    state.authMode=el.dataset.authMode==='register'?'register':'login';
    renderAuth();window.scrollTo(0,0);return;
@@ -1120,6 +1132,9 @@ app.addEventListener('submit',async e=>{
  e.preventDefault();const kind=form.dataset.form;const b=formData(form),button=form.querySelector('button[type="submit"]');
  if(button)button.disabled=true;
  try{
+  if(kind.startsWith('shop-')){
+   if(await handleShopSubmit(kind,b,{api,toast,navigate,state}))return;
+  }
   if(kind==='fraud-search'){
    state.fraudSearch=String(b.keyword||'').trim().slice(0,120);
    await navigate('admin-security');return;
