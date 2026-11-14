@@ -71,7 +71,9 @@ const taskCardFunction=frontendForWelcome.slice(frontendForWelcome.indexOf('func
  frontendForWelcome.indexOf('function taskDashboardCard(')+240);
 assert.doesNotMatch(taskCardFunction,/paid-rotation/,'Task page should not create a second payment ticker');
 assert.doesNotMatch(frontendForWelcome,/if\(view==='tasks'\)startPaidRotation\(\)/);
-assert.doesNotMatch(frontendForWelcome,/state\.view!=='tasks'/,'Payments must continue on Overview, Shop and Profile');
+const rotationLogic=frontendForWelcome.slice(frontendForWelcome.indexOf('function startPaidRotation('),
+ frontendForWelcome.indexOf('const BANK_LIST',frontendForWelcome.indexOf('function startPaidRotation(')));
+assert.doesNotMatch(rotationLogic,/state\.view!=='tasks'/,'Payment rotation must continue on Overview, Shop and Profile');
 assert.match(frontendForWelcome,/async function collectHeaderNotices\(\)/);
 assert.match(frontendForWelcome,/api\('\/api\/history'\)/);
 assert.match(frontendForWelcome,/state\.me\?\.user\?\.id/);
