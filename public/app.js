@@ -335,9 +335,11 @@ async function page(view){
  }
 }
 async function overview(){
- const m=state.me, tasks=await api('/api/tasks');
+ const m=state.me;
+ const [tasks,shoppingAlerts]=await Promise.all([api('/api/tasks'),api('/api/shop/alerts').catch(()=>({unread:0}))]);
  const available=tasks.tasks.filter(t=>!t.my_status).length;
  return `${heading('Xin chào, '+m.user.name+' 👋','Mỗi Lúa đều có nguồn gốc rõ ràng, được lưu vào lịch sử.')}
+ ${shoppingAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">🎉</span><div><strong>Bạn có ${shoppingAlerts.unread} sản phẩm theo yêu cầu đã được tìm thấy!</strong><p>Nhấn để xem liên kết mua hàng trong gian hàng Trạm Có Lúa.</p></div><button type="button" class="btn sm" data-go="shop">Xem sản phẩm →</button></div>`:''}
  <section class="card hero"><div><div class="small">VÍ TÍCH LŨY</div><h2>${fmt(m.balance)} Lúa hiện có</h2><p>Tham gia nhiệm vụ và theo dõi số dư của bạn. Phần thưởng chỉ phát sinh từ nhiệm vụ hợp lệ.</p><button class="btn gold" data-go="tasks">Xem nhiệm vụ →</button></div><div class="hero-icon brand-hero-logo"><img src="/logo.svg" width="104" height="104" alt="Biểu tượng Trạm Có Lúa"></div></section>
  <section class="grid four section"><div class="card"><div class="metric-label">Số dư hiện tại</div><div class="metric">${fmt(m.balance)}</div><div class="metric-caption">Lúa có thể sử dụng</div></div>
  <div class="card"><div class="metric-label">Tổng Lúa đã ghi nhận</div><div class="metric">${fmt(m.earned)}</div><div class="metric-caption">Bao gồm thưởng đã duyệt</div></div>
