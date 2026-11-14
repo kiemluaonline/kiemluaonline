@@ -3,7 +3,7 @@ export const ORDER_CHECK_NOTE = 'Đã kiểm tra ID đơn hàng, thông tin sả
 export const ORDER_REJECTION_REASONS = Object.freeze({
   '0':'Không tìm thấy thông tin đơn hàng tương ứng với ID đã cung cấp.',
   '1':'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.',
-  '2':'Đơn hàng đã bị hủy nên không đủ điều kiện nhận Lúa.',
+  '2':'Đơn hàng đã được hoàn trả hoặc hoàn tiền nên không đủ điều kiện nhận Lúa.',
   '3':'Sau khi kiểm tra, đơn hàng chưa đáp ứng điều kiện nhận thưởng của chương trình.'
 });
 
@@ -113,7 +113,7 @@ export async function shopOrdersAPI(req,env,H){
       const results=await db.batch([
         db.prepare(`UPDATE shop_orders SET status='provisional',admin_note=?,verification_note=?,
           estimated_reward_lua=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,seen_at=NULL
-          WHERE id=? AND status='pending'`).bind('Đã kiểm tra ID đơn hàng, thông tin sản phẩm trùng khớp. Đơn đang chờ hoàn tất.',privateNote,estimatedReward,oid),
+          WHERE id=? AND status='pending'`).bind(ORDER_CHECK_NOTE,privateNote,estimatedReward,oid),
         db.prepare(`INSERT INTO shop_order_events(id,order_id,actor_id,status,detail)
           SELECT ?,id,?,'provisional','Đơn hàng đã được tạm duyệt, đang chờ hoàn tất'
           FROM shop_orders WHERE id=? AND status='provisional'
