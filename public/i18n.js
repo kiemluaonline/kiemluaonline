@@ -396,19 +396,19 @@
   if(match)return 'Cov haujlwm tsim lawm ('+match[1]+')';
   // Các câu chứa số lượng / mã thật không có sẵn trong từ điển cố định.
   const counts=[
-   [/^([\\d.,]+) sản phẩm$/,'yam khoom'],
-   [/^([\\d.,]+) sản phẩm đang hiển thị$/,'yam khoom tab tom qhia'],
-   [/^([\\d.,]+) yêu cầu$/,'daim ntawv thov'],
-   [/^([\\d.,]+) yêu cầu đang chờ$/,'daim ntawv thov tseem tos'],
-   [/^([\\d.,]+) đang chờ$/,'tseem tos'],
-   [/^([\\d.,]+) đơn$/,'daim xaj khoom'],
-   [/^([\\d.,]+) đơn đã ghi nhận$/,'daim xaj tau teev tseg'],
-   [/^([\\d.,]+) đơn hàng vừa được cập nhật$/,'daim xaj nyuam qhuav hloov']
+   [/^([\d.,]+) sản phẩm$/,'yam khoom'],
+   [/^([\d.,]+) sản phẩm đang hiển thị$/,'yam khoom tab tom qhia'],
+   [/^([\d.,]+) yêu cầu$/,'daim ntawv thov'],
+   [/^([\d.,]+) yêu cầu đang chờ$/,'daim ntawv thov tseem tos'],
+   [/^([\d.,]+) đang chờ$/,'tseem tos'],
+   [/^([\d.,]+) đơn$/,'daim xaj khoom'],
+   [/^([\d.,]+) đơn đã ghi nhận$/,'daim xaj tau teev tseg'],
+   [/^([\d.,]+) đơn hàng vừa được cập nhật$/,'daim xaj nyuam qhuav hloov']
   ];
   for(const [pattern,suffix] of counts){
    match=pattern.exec(v);if(match)return match[1]+' '+suffix;
   }
-  match=/^Bước ([123])\\/3$/.exec(v);
+  match=/^Bước ([123])\/3$/.exec(v);
   if(match)return 'Kauj ruam '+match[1]+'/3';
   match=/^([0-3]) – (.+)$/.exec(v);
   if(match){
@@ -417,13 +417,13 @@
   }
   match=/^Đã tạo yêu cầu (SP-[A-Z0-9-]+)$/.exec(v);
   if(match)return 'Tsim daim ntawv thov '+match[1]+' lawm';
-  match=/^Đã tạo yêu cầu (SP-[A-Z0-9-]+)\\.$/.exec(v);
+  match=/^Đã tạo yêu cầu (SP-[A-Z0-9-]+)\.$/.exec(v);
   if(match)return 'Tsim daim ntawv thov '+match[1]+' lawm.';
-  match=/^Đã tìm thấy (\\d+) yêu cầu mới\\. Xem đường link mua trong mục Theo dõi yêu cầu bên dưới\\.$/.exec(v);
+  match=/^Đã tìm thấy (\d+) yêu cầu mới\. Xem đường link mua trong mục Theo dõi yêu cầu bên dưới\.$/.exec(v);
   if(match)return 'Muaj '+match[1]+' daim ntawv thov tshiab twb nrhiav tau lawm. Saib cov link yuav khoom hauv qab.';
-  match=/^\\+([\\d.,]+) Lúa$/.exec(v);
+  match=/^\+([\d.,]+) Lúa$/.exec(v);
   if(match)return '+'+match[1]+' Lúa';
-  match=/^~ ([\\d.,]+) Lúa$/.exec(v);
+  match=/^~ ([\d.,]+) Lúa$/.exec(v);
   if(match)return '~ '+match[1]+' Lúa';
   match=/^Đã tạo yêu cầu (.+)$/.exec(v);
   if(match&&match[1].startsWith('SP-'))return 'Tsim daim ntawv thov '+match[1]+' lawm';
