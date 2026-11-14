@@ -63,6 +63,16 @@ assert.ok(!('commission_vnd' in orders[0]),'Do not expose Admin commission');
 assert.ok(!('settled_reference' in orders[0]),'Do not expose secret TikTok reconciliation ID');
 assert.equal(orders[0].reward_lua,0);
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0);
+const pendingPage=await shopOrdersPage({
+ api:async p=>p==='/api/shop/orders'?{orders,events:(await call('/api/shop/orders')).data.events}:{unread:0},
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x
+});
+assert.match(pendingPage,/Đã tiếp nhận ID đơn hàng/);
+assert.match(pendingPage,/Bước 1\/3/);
+assert.match(pendingPage,/Lúa: Chưa xác định/);
+assert.match(pendingPage,/Cập nhật:/);
+assert.match(pendingPage,/Xem ID đơn hàng đầy đủ/);
+assert.doesNotMatch(pendingPage,/Hoa hồng|Affiliate|HOA_HONG_BI_MAT_123/i);
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,0);
 assert.equal((await call('/api/shop/orders','GET',undefined,'user2')).data.orders.length,0);
 const adminView=(await call('/api/admin/shop/orders','GET',undefined,'admin1')).data;
@@ -92,6 +102,9 @@ assert.match(estimatePage,/Lúa dự kiến nhận/);
 assert.match(estimatePage,/~ 2000/);
 assert.match(estimatePage,/có thể tăng hoặc giảm/);
 assert.match(estimatePage,/Chưa cộng vào ví Lúa/);
+assert.match(estimatePage,/Bước 2\/3/);
+assert.match(estimatePage,/ID đơn hàng đã được xác minh hợp lệ/);
+assert.match(estimatePage,/sorder-card-provisional/);
 assert.doesNotMatch(estimatePage,/HOA_HONG_BI_MAT_123|hoa hồng|Affiliate/i,'Buyer UI must not disclose affiliate commission or internal records');
 const pendingAdminForm=await adminShopOrdersPage({
  api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1}),
@@ -121,7 +134,7 @@ assert.equal(duplicateCheck.status,409);
 const overpay=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:500,reward_lua:2000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
 assert.equal(overpay.status,400);
 assert.equal(db.prepare("SELECT status FROM shop_orders WHERE id=?").get(oid).status,'provisional');
-const missingFinalConfirmation=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
+const missingFinalConfirmation=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
 assert.equal(missingFinalConfirmation.status,400,'Final delivery/payment/settlement acknowledgement required');
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Missing final proof acknowledgement must never pay');
 const settled=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref,delivery_paid_confirmed:true},'admin1');
@@ -144,6 +157,9 @@ const page=await shopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(page,/Đã giải quyết/);
 assert.match(page,/\+3000 Lúa/);
+assert.match(page,/Bước 3\/3/);
+assert.match(page,/Đã cộng vào ví Lúa/);
+assert.match(page,/Chúc mừng!/);
 assert.doesNotMatch(page,/hoa hồng|Affiliate|HOA_HONG_BI_MAT_123/i,'Buyer order history must not reveal Admin compensation');
 assert.doesNotMatch(page,/Lúa dự kiến nhận/,'Đơn đã giải quyết chỉ hiển thị Lúa thực tế');
 const adminPage=await adminShopOrdersPage({
@@ -167,6 +183,9 @@ const rejectedBuyerPage=await shopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x
 });
 assert.match(rejectedBuyerPage,/Đơn hàng không đủ điều kiện nhận Lúa/);
+assert.match(rejectedBuyerPage,/Không được cộng Lúa/);
+assert.match(rejectedBuyerPage,/sorder-card-rejected/);
+assert.doesNotMatch(rejectedBuyerPage,/Tiến trình đơn hàng|Bước 1\/3|Bước 2\/3|Bước 3\/3/,'Rejected is a separate outcome, not a fourth timeline step');
 assert.doesNotMatch(rejectedBuyerPage,/HOA_HONG_BI_MAT_123|hoa hồng|Affiliate/i);
 assert.equal((await call('/api/shop/orders/alerts','GET',undefined,'user2')).data.unread,1);
 const noAdmin=await call('/api/admin/shop/orders','GET',undefined,'user1');
