@@ -52,7 +52,7 @@ export async function shopOrdersPage(ctx){
        <details class="sorder-reference"><summary>Xem ID đơn hàng đầy đủ</summary><code>${esc(o.order_reference)}</code></details>
        <div class="sorder-status-explain sorder-status-explain-${meta.color}"><span class="sorder-status-explain-icon" aria-hidden="true">${meta.symbol}</span><div><strong>${meta.text}</strong><p>${meta.summary}</p></div></div>
        ${o.status==='rejected'
-          ?`<div class="sorder-rejection sorder-rejection-final"><strong>✕ Không được cộng Lúa</strong><span>Đơn hàng không đủ điều kiện nhận thưởng.</span></div>`
+          ?`<div class="sorder-rejection sorder-rejection-final"><strong>✕ Không được cộng Lúa</strong><span>Đơn hàng không đủ điều kiện nhận Lúa.</span></div>`
           :shopOrderSteps(o.status)}
        ${o.status==='resolved'
          ?`<div class="sorder-award sorder-award-final"><span>🌾 Lúa đã nhận</span><strong>+${fmt(o.reward_lua)} Lúa</strong><small>Đã cộng vào ví Lúa</small></div>`
