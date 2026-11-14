@@ -606,3 +606,13 @@ html[lang="hmn"] .language-legal-notice{display:block}
 
 /* Nút dọn bằng chứng phù hợp cả iPhone màn hình hẹp. */
 .proof-delete-all{max-width:100%;white-space:normal;line-height:1.45;text-align:center}
+
+/* Lịch sử rút tiền: thẻ gọn, hiện mã lệnh và trạng thái trên iPhone. */
+.withdraw-history-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,325px),1fr));gap:12px;margin-top:14px}
+.withdraw-history-item{min-width:0;background:#f8faf9;border:1px solid #e1ebe4;border-radius:16px;padding:16px;color:#254f39}
+.withdraw-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.withdraw-history-head strong{font-size:14px;color:#1761ad;letter-spacing:.01em;overflow-wrap:anywhere}
+.withdraw-history-value{font-size:20px;font-weight:800;margin:10px 0 5px;color:#163e2d}
+.withdraw-history-value span{color:#3e6b53;font-size:14px;font-weight:600}
+.withdraw-history-meta{font-size:12px;color:#64796d;margin:6px 0;line-height:1.6;overflow-wrap:anywhere}
+.withdraw-history-item p{font-size:13px;line-height:1.6;margin:11px 0 0;color:#557365}
