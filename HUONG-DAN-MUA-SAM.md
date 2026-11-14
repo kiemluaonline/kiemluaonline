@@ -20,6 +20,33 @@ Các thay đổi đã được lưu trong GitHub, **không đồng nghĩa Cloudf
 6. Thêm sản phẩm có link TikTok Shop Affiliate hợp lệ → Bật hiển thị.
 7. Dùng tài khoản thành viên khác để thử: **Yêu cầu sản phẩm** → chọn Zalo/Telegram → sao chép mã SP gửi cùng ảnh/link → Admin ghép mã, chọn sản phẩm, nhấn **Đã có sản phẩm** → kiểm tra thông báo trên tài khoản thành viên.
 
+## Bổ sung: Báo đơn TikTok, lịch sử và thưởng Lúa (migration 0003)
+
+**Chưa tự động lấy đơn từ TikTok.** Khách phải nhấn **Báo đã đặt hàng** trên thẻ sản phẩm để nhập mã đơn TikTok Shop. Chỉ báo mã đơn không phải xác thực. Admin phải tìm và đối chiếu đơn trong **Đơn hàng tiếp thị liên kết** trên TikTok.
+
+Trạng thái hiển thị đúng:
+1. **Chờ xác minh**: khách mới gửi mã đơn. Không cộng Lúa.
+2. **Tạm duyệt – Chờ giải quyết**: Admin đã đối chiếu đơn, đã nhận và thanh toán. Vẫn chưa cộng Lúa.
+3. **Đã giải quyết**: Admin đã đối chiếu hoa hồng THỰC NHẬN được TikTok quyết toán, nhập hoa hồng và số Lúa thưởng hợp lệ; ghi ví Lúa đúng một lần.
+4. **Từ chối**: đơn hủy, hoàn trả hoặc không đủ điều kiện; không cộng Lúa.
+
+Thành viên có menu **Đơn hàng & Lúa**, theo dõi tiến độ, thông báo đổi trạng thái và tổng Lúa nhận từ mua sắm.
+Admin có menu **Duyệt đơn TikTok**. Chỉ Admin nhìn thấy hoa hồng thực nhận, tỷ giá Lúa/VNĐ, mã đối soát và ghi chú riêng.
+
+### Bật chức năng mới trên Cloudflare D1
+
+Trước khi truy cập hai menu đơn hàng mới, **sao lưu D1** đang hoạt động.
+Vào Dashboard Cloudflare → D1 → chọn đúng `tram-lua-db` → Console.
+Sao chép toàn bộ SQL của [migrations/0003_shop_orders.sql](https://github.com/kiemluaonline/kiemluaonline/blob/main/migrations/0003_shop_orders.sql), dán vào D1 Console rồi Execute một lần.
+Migration dùng `CREATE TABLE IF NOT EXISTS`, chỉ bổ sung các bảng `shop_orders`, `shop_order_events` và index; không xóa các bảng hay lịch sử cũ.
+Sau đó kiểm tra bản Worker GitHub mới nhất đã deploy lên Cloudflare. Không mặc định một lần commit đồng nghĩa đã triển khai.
+Lưu ý: Các bảng thuộc migration 0002 vẫn cần tồn tại (đã kích hoạt ở bước mua sắm trước).
+
+Trong **Admin → Cài đặt**, phải đặt `lua_per_vnd` hợp lệ (>0) trước khi giải quyết và cộng Lúa. Lúa thưởng quy đổi không được lớn hơn hoa hồng thực tế, và tỷ lệ chia thưởng **không công bố cho khách**.
+
+**Không dùng mã đơn do khách tự điền làm bằng chứng duy nhất.** Nếu chưa thể đối chiếu chính xác mã đơn với dữ liệu Affiliate trong TikTok, tiếp tục để Chờ xác minh hoặc Tạm duyệt; không ghi thưởng. Khách không tải ảnh lên website.
+Cần kiểm tra chính sách TikTok Shop và điều kiện chương trình trước khi phát thưởng thực tế.
+
 ## Vận hành an toàn
 - Khách gửi mã SP cùng ảnh hoặc liên kết trong ứng dụng nhắn tin. Trên web chỉ lưu mã, mô tả, kênh và trạng thái.
 - Một tài khoản gửi tối đa 5 yêu cầu/ngày; yêu cầu phải do Admin đối chiếu mã với cuộc trò chuyện trước khi đánh dấu có sản phẩm.
