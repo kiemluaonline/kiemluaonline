@@ -1,4 +1,5 @@
 import { shopAPI } from './shop.js';
+import { shopOrdersAPI } from './shop-orders.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -842,6 +843,8 @@ async function handler(req, env) {
   if (!env.DB) fail(500, 'Chưa kết nối cơ sở dữ liệu D1.');
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(m)) requireSameOrigin(req);
   if (p === '/api/shop' || p.startsWith('/api/shop/') || p === '/api/admin/shop' || p.startsWith('/api/admin/shop/')) {
+    const orderResult = await shopOrdersAPI(req, env, { auth, readBody, fail, json, id, str });
+    if (orderResult) return orderResult;
     const shopResult = await shopAPI(req, env, { auth, readBody, fail, json, id, str });
     if (shopResult) return shopResult;
   }
