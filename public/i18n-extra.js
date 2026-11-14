@@ -1,4 +1,4 @@
-/* Hmoob Dawb (RPA) – tag nrho cov lus rau cov tswv cuab, Admin thiab kev yuav khoom. */
+/* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab thiab Admin. */
 window.TramExtraTranslations = {
   "Mua sắm nhận Lúa": "Mus yuav khoom tau Lúa",
   "Đơn hàng & Lúa": "Cov khoom xaj & Lúa",
@@ -361,5 +361,9 @@ window.TramExtraTranslations = {
   "Chỉ đơn Chờ xác minh mới được tạm duyệt.": "Tsuas yog daim xaj tab tom tos kuaj thiaj pom zoo ib ntus tau.",
   "Bạn cần xác minh và tạm duyệt đơn trước.": "Koj yuav tsum kuaj thiab pom zoo ib ntus ua ntej.",
   "Đơn hàng đã được xử lý, vui lòng tải lại.": "Daim xaj twb raug ua tiav lawm. Thov qhib dua.",
-  "Đơn hàng đã được người khác xử lý. Hãy tải lại.": "Lwm tus twb ua daim xaj lawm. Thov qhib dua."
+  "Đơn hàng đã được người khác xử lý. Hãy tải lại.": "Lwm tus twb ua daim xaj lawm. Thov qhib dua.",
+  "Chưa có Lúa dự kiến": "Tseem tsis tau muaj Lúa kwv yees",
+  "Chưa có Lúa dự kiến; đang chờ": "Tseem tsis tau muaj Lúa kwv yees; tseem tos",
+  "Chưa có Lúa dự kiến; đơn hàng đang chờ giải quyết.": "Tseem tsis tau muaj Lúa kwv yees; daim xaj tseem tos ua tiav.",
+  "Chưa có Lúa dự kiến. Lúa chưa được cộng vào ví.": "Tseem tsis tau muaj Lúa kwv yees. Lúa tseem tsis tau ntxiv rau hnab."
 };
