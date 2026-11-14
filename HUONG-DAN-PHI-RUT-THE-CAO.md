@@ -1,47 +1,39 @@
-# Phí xử lý rút tiền và đổi thẻ cào — Trạm Có Lúa
+# Phí rút tiền theo số tiền nhận và mã lệnh — Trạm Có Lúa
 
-## Cấu hình của Admin
-Trên iPhone, vào **Admin → Cài đặt → 💸 Phí xử lý rút tiền và đổi thẻ cào**:
+## Biểu phí rút tiền (tự động, Admin không phải nhập thủ công)
+- **Rút dưới 5.000đ**: không được gửi yêu cầu.
+- **Rút từ 5.000đ đến 24.999đ**: phụ thu **2.000đ** cho mỗi yêu cầu, tính thành Lúa theo tỷ giá Admin hiện đặt.
+- **Rút từ 25.000đ trở lên**: **miễn phí rút tiền**.
+- Giới hạn tối thiểu bổ sung theo Lúa do Admin từng đặt, nếu cao hơn mức quy đổi 5.000đ, vẫn có hiệu lực.
+- Không trừ phí khỏi số tiền khách nhận; máy chủ giữ riêng phần Lúa tương đương phí **cộng thêm** vào số Lúa quy đổi.
 
-- **Phí mỗi lần rút tiền (Lúa) – ngân hàng (bao gồm BVBank)**: một khoản phí cố định cộng thêm cho mỗi yêu cầu rút, áp dụng chung hai kênh.
-- **Phí mỗi lần đổi thẻ cào (Lúa)**: một khoản phí cố định khác, cộng thêm khi đổi thẻ Viettel, VinaPhone, MobiFone.
-- Mặc định **0 Lúa** cho cả hai. Admin chọn mức phí, rồi nhấn **Lưu cài đặt**. **Không tự đặt phí thay Admin**.
-- Mức phí nằm trong khoảng **0–10.000.000 Lúa/yêu cầu**. Không thu % và không tự trừ phí vào số tiền/thẻ thực nhận.
-- Thay đổi mức phí chỉ ảnh hưởng **yêu cầu tạo sau đó**. Các yêu cầu cũ vẫn giữ phí tại thời điểm gửi.
-- Đã thêm tiếng Hmoob cho các trường cấu hình và thông báo.
+### Ví dụ
+Giả sử tỷ giá Admin đang để **1 Lúa = 1 VNĐ**:
+- Rút **5.000đ**: giữ **7.000 Lúa** (5.000 rút + 2.000 phí), chuyển đúng **5.000đ** sau duyệt.
+- Rút **24.999đ**: giữ **26.999 Lúa**, chuyển đúng **24.999đ** sau duyệt.
+- Rút **25.000đ**: giữ **25.000 Lúa**, chuyển đủ **25.000đ** sau duyệt.
+- Nếu tỷ giá là **10 Lúa = 1 VNĐ**, rút **10.000đ** giữ **120.000 Lúa**: 100.000 Lúa rút + 20.000 Lúa phí.
 
-## Cách trừ Lúa
-Ví dụ phí mỗi lần rút = **1.000 Lúa**, tỷ giá 1 Lúa = 1 VNĐ:
+## Đổi thẻ cào
+- **Không đổi biểu phí thẻ cào hiện có**: Admin vẫn có thể tự nhập **Phí mỗi lần đổi thẻ cào (Lúa)** ở Admin → Cài đặt.
+- Phí thẻ cào vẫn được cộng thêm vào số Lúa tương đương mệnh giá thẻ, khách nhận đúng mệnh giá sau khi Admin duyệt và cấp mã.
 
-- Khách nhập muốn rút **20.000 Lúa**; tiền sẽ nhận nếu Admin chuyển thành công là **20.000 VNĐ**.
-- Website hiển thị trước khi khách xác nhận: **20.000 Lúa rút + 1.000 Lúa phí = 21.000 Lúa tổng giữ**.
-- Khách chỉ gửi được yêu cầu nếu ví có **ít nhất 21.000 Lúa**. Máy chủ kiểm tra và giữ **21.000 Lúa một lần**.
-- Admin duyệt rồi chuyển tiền thật ngoài website. Sau khi đánh dấu đã thanh toán, không trừ thêm Lúa nữa.
+## Mã lệnh để tra cứu
+- Mỗi yêu cầu rút mới và cũ hiển thị **Mã lệnh: #...** trong Lịch sử yêu cầu rút của khách và trong bảng Yêu cầu rút tiền của Admin.
+- Mã hiển thị là **12 ký tự đầu** của mã giao dịch UUID đã lưu (không thay đổi ID gốc, không tạo bảng hay cột mới).
+- Không tự cấp mã theo thứ tự 1, 2, 3; tránh rủi ro trùng số hoặc thay đổi lịch sử. Nếu cần đối soát kỹ thuật, mã UUID gốc vẫn còn trong dữ liệu.
+- Trạng thái và duyệt thủ công giữ nguyên: **Đang chờ → Đã duyệt → Đã thanh toán**; hoặc **Từ chối / Số tài khoản không đúng**.
 
-Ví dụ phí đổi thẻ = **1.000 Lúa**, tỷ giá 1 Lúa = 1 VNĐ:
+## An toàn dữ liệu và hoàn phí
+- Máy chủ tính biểu phí; trình duyệt không thể sửa số phí để né thu.
+- Trước khi gửi, khách thấy số Lúa rút, phí tính theo mức tiền, tổng Lúa giữ và VNĐ nhận dự kiến.
+- Yêu cầu bị từ chối hoặc đánh dấu số tài khoản không đúng được **hoàn toàn bộ Lúa đã giữ, bao gồm phí**. Chỉ hoàn một lần.
+- Yêu cầu đã thanh toán thật không tự hoàn.
+- **Không cập nhật ngược phí cũ**: phí của mỗi yêu cầu cũ được giữ qua dòng sổ ví `withdraw_hold`. Mọi tài khoản, ví, giao dịch, lịch sử nhiệm vụ và đổi thẻ cào được bảo toàn.
+- Giá trị setting cũ `withdrawal_fee_lua` được giữ trong D1 để tương thích dữ liệu cũ nhưng **không còn được dùng tính phí rút mới**, và không còn ô chỉnh phí rút cố định ở giao diện Admin.
+- **Không cần chạy migration SQL mới** cho biểu phí hoặc mã lệnh. Sau khi triển khai Worker + frontend mới, mở lại Safari để kiểm tra. GitHub Actions thành công **không đồng nghĩa** Cloudflare đã triển khai.
 
-- Khách đổi thẻ Viettel **10.000đ**.
-- Website hiển thị **10.000 Lúa giá thẻ + 1.000 Lúa phí = 11.000 Lúa tổng giữ**.
-- Sau khi Admin duyệt và nhập mã thẻ thật, khách nhận mã thẻ **10.000đ**; không có khoản trừ bổ sung.
-
-## Từ chối và hoàn Lúa
-- Nếu yêu cầu **rút tiền bị từ chối hoặc thông tin tài khoản sai**, ví được hoàn **toàn bộ Lúa đã giữ, bao gồm phí**.
-- Nếu yêu cầu **đổi thẻ cào bị từ chối** (kể cả sau khi Admin duyệt nhưng chưa phát mã), ví được hoàn **toàn bộ Lúa đã giữ, bao gồm phí**.
-- Mỗi yêu cầu chỉ có thể được xử lý/hoàn **một lần**; thao tác lặp bị chặn.
-- Khi đã thanh toán tiền thật hoặc phát mã thẻ thành công, phí trở thành khoản chi phí xử lý đã thu; không tự hoàn.
-- Phí gốc theo từng yêu cầu được tính từ dòng sổ ví giữ Lúa `withdraw_hold` hoặc `card_redemption_hold`; **không cần cột mới** trên bảng D1. Với giao dịch cũ, phí hiện là **0 Lúa**.
-
-## Minh bạch và an toàn
-- Thành viên xem **phí xử lý và tổng Lúa cần giữ trước khi gửi** và xem lại trong lịch sử.
-- Mức phí do **máy chủ** quyết định; tự sửa dữ liệu trên trình duyệt không giúp né phí.
-- Nếu Admin đổi phí trong khi khách đang mở biểu mẫu, website yêu cầu **tải lại để xác nhận mức phí mới**, không trừ phí bất ngờ.
-- Admin xem được phí từng giao dịch ở **Yêu cầu rút tiền** và **Quản lý thẻ cào**.
-- Khách không có đủ Lúa **bao gồm phí** sẽ bị từ chối yêu cầu, không trừ ví.
-- Không thay đổi quy trình duyệt tiền, xác minh thẻ hay tỷ giá hiện tại.
-
-## Kích hoạt bản mới
-- Không cần chạy SQL mới vì cài đặt phí dùng bảng `settings` và lịch sử phí dùng bảng `wallet_entries` đã có.
-- Cần cập nhật bản **Cloudflare Worker** và file website từ GitHub. Kiểm thử GitHub Actions không đồng nghĩa bản Worker đã tự được triển khai.
-- Sau khi deploy, mở lại Safari, vào Admin → Cài đặt để nhập phí; trước khi Admin tự nhập, cả hai phí là 0.
-
-**Quan trọng:** Admin phải đặt phí hợp lý và công bố rõ cho thành viên trước khi họ gửi yêu cầu, không nên tự thay đổi khoản phí của các yêu cầu đang chờ.
+## Lưu ý về chính sách
+- Mức phí là **2.000đ giá trị quy đổi**, không phải tự động 2.000 Lúa nếu tỷ giá không phải 1:1.
+- Từ **25.000đ trở lên** đã miễn phí (bao gồm đúng 25.000đ).
+- Admin cần công bố biểu phí trước khi khách gửi yêu cầu rút và kiểm tra thủ công trước khi chuyển khoản.
