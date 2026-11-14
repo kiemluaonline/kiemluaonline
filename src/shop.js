@@ -77,7 +77,7 @@ export async function shopAPI(req, env, H) {
   const admin = await auth(req,env,'admin');
   if (path === '/api/admin/shop' && method === 'GET') {
     const [products, requests, contacts] = await Promise.all([
-      db.prepare("SELECT id,title,description,link,category,is_active,created_at FROM shop_products ORDER BY created_at DESC LIMIT 200").all(),
+      db.prepare("SELECT id,title,description,link,category,is_active,created_at FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200").all(),
       db.prepare("SELECT r.id,r.code,r.channel,r.note,r.status,r.product_id,r.created_at,r.updated_at,u.name,u.email,p.title AS product_title FROM shop_requests r JOIN users u ON u.id=r.user_id LEFT JOIN shop_products p ON p.id=r.product_id ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").all(),
       shopContacts()
     ]);
