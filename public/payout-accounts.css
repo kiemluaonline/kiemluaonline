@@ -51,3 +51,12 @@
 }
 /* Ưu tiên trạng thái ẩn của biểu mẫu trên Safari iPhone. */
 .saved-payout-form [hidden],.saved-payout-page [hidden]{display:none!important}
+
+/* Quản lý tài khoản gộp vào Rút tiền, không cần menu độc lập. */
+.withdraw-account-manager{padding:16px 18px}
+.withdraw-account-manager>summary{cursor:pointer;font-weight:750;color:#245a3f}
+.withdraw-account-manager .saved-payout-page{padding-top:16px}
+.withdraw-account-manager .saved-payout-embedded .page-head,
+.withdraw-account-manager .saved-payout-embedded .saved-payout-hero,
+.withdraw-account-manager .saved-payout-embedded .saved-payout-foot{display:none}
+#withdraw-save-account-line[hidden]{display:none!important}
