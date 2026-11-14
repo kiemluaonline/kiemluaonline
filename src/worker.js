@@ -1,5 +1,6 @@
 import { shopAPI } from './shop.js';
 import { shopOrdersAPI } from './shop-orders.js';
+import { cardRedemptionsAPI } from './card-redemptions.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -842,6 +843,11 @@ async function handler(req, env) {
   const u = new URL(req.url), p = u.pathname, m = req.method;
   if (!env.DB) fail(500, 'Chưa kết nối cơ sở dữ liệu D1.');
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(m)) requireSameOrigin(req);
+  // Đổi thẻ cào: độc lập ngân hàng/ZaloPay, mặc định tắt cho đến khi Admin bật.
+  if (p === '/api/card-redemptions' || p.startsWith('/api/admin/card-redemptions')) {
+    const cards=await cardRedemptionsAPI(req,env,{auth,readBody,fail,json,id,str});
+    if(cards)return cards;
+  }
   if (p === '/api/shop' || p.startsWith('/api/shop/') || p === '/api/admin/shop' || p.startsWith('/api/admin/shop/')) {
     const orderResult = await shopOrdersAPI(req, env, { auth, readBody, fail, json, id, str });
     if (orderResult) return orderResult;
