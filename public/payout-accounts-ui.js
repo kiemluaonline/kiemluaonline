@@ -4,7 +4,7 @@ let knownAccounts=[];
 const tr=s=>window.TramI18n?.translateLabel?.(s)??s;
 const ask=s=>window.confirm(tr(s));
 const paymentLabel=a=>a.payment_method==='zalopay'?'ZaloPay':a.bank_name;
-export async function payoutAccountsPage({api,esc,heading,bankList}){
+export async function payoutAccountsPage({api,esc,heading,bankList,embedded=false}){
  let data;
  try{data=await api('/api/payout-accounts');}
  catch{
@@ -18,7 +18,7 @@ export async function payoutAccountsPage({api,esc,heading,bankList}){
  const method=a.payment_method;
  const bankExists=bankList.some(x=>x[0]===a.bank_name&&x[0]!=='other');
  const selectedBank=bankExists?a.bank_name:a.bank_name?'other':'';
- return `<div class="saved-payout-page">
+ return `<div class="saved-payout-page${embedded?' saved-payout-embedded':''}">
   ${heading('🏦 Tài khoản nhận tiền','Thêm tài khoản một lần, những lần rút tiền sau chỉ cần chọn lại.')}
   <section class="saved-payout-hero"><span aria-hidden="true">🏦</span><div><h2>Thông tin nhận tiền của bạn</h2>
     <p>Lưu ngân hàng hoặc ZaloPay an toàn trong tài khoản. Bạn có thể sửa, xóa, chọn mặc định bất cứ lúc nào.</p></div></section>
