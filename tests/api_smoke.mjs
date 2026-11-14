@@ -55,6 +55,13 @@ assert.match(frontendForWelcome,/function renderHome\(\)/);
 assert.match(frontendForWelcome,/if\(act==='open-auth'\)/);
 assert.match(frontendForWelcome,/if\(act==='back-home'\)/);
 assert.match(frontendForWelcome,/data-action="back-home"/);
+assert.match(frontendForWelcome,/const withdrawalCode = id/);
+assert.match(frontendForWelcome,/Mã lệnh:/);
+const withdrawalCodeSource=frontendForWelcome.split('\n').find(x=>x.includes('const withdrawalCode = id'));
+assert.ok(withdrawalCodeSource,'Payout code formatter should be present on frontend');
+const payoutReference=(await import('node:vm')).runInNewContext(withdrawalCodeSource+'\nwithdrawalCode', {});
+assert.equal(payoutReference('12345678-abcd-4ef0-bb99-123456789abc'),'#12345678ABCD');
+assert.equal(payoutReference('12345678-abcd-4ef0-bb99-123456789abc'),'#12345678ABCD','References stay stable without a D1 migration');
 const brandMeta=await call('/api/meta');
 assert.equal(brandMeta.status,200);
 assert.equal(brandMeta.data.site_name,'Trạm Có Lúa');
@@ -413,6 +420,10 @@ assert.equal(feeMeta.data.withdrawal_fee_lua,0,'Legacy fixed withdrawal fee is n
 assert.equal(feeMeta.data.withdrawal_fee_vnd,2000);
 assert.equal(feeMeta.data.withdrawal_free_from_vnd,25000);
 assert.equal(feeMeta.data.withdrawal_min_vnd,5000);
+assert.equal(feeMeta.data.min_withdraw_lua,50000,'5,000 VND converts to Lua at configured rate');
+assert.equal((await call('/api/admin/settings','PUT',{min_withdraw_lua:'90000'},admCookie)).status,200);
+assert.equal((await call('/api/meta')).data.min_withdraw_lua,50000,'Obsolete Admin minimum cannot silently override 5,000 VND policy');
+assert.equal((await call('/api/admin/settings','PUT',{min_withdraw_lua:'10'},admCookie)).status,200);
 assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.settings.card_fee_lua,'7');
 const feeBefore=(await call('/api/me','GET',undefined,cookie)).data.balance;
 
