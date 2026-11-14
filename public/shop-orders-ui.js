@@ -41,7 +41,7 @@ export async function shopOrdersPage(ctx){
     <div class="sorder-summary-card"><span>⌛ Đang xử lý</span><strong>${fmt(pending)}</strong><small>Chờ xác minh / giải quyết</small></div>
     <div class="sorder-summary-card sorder-summary-lua"><span>🌾 Lúa đã nhận</span><strong>${fmt(accrued)}</strong><small>Không tính Lúa dự kiến</small></div>
    </section>
-   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Vào sản phẩm trong gian hàng, chọn “Đã mua? Báo đơn”, sau đó gửi ID đơn hàng. Bạn có thể theo dõi trạng thái và nhận Lúa khi đơn được giải quyết.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
+   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Mở gian hàng, chọn sản phẩm đã mua trong mục “Báo đơn hàng” riêng, rồi gửi ID đơn hàng. Bạn có thể theo dõi trạng thái và nhận Lúa khi đơn được giải quyết.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
    <aside class="sorder-origin-policy" role="note"><strong>⚠️ Chỉ xét Lúa cho đơn mua đúng trang trưng bày của Admin</strong><p>Đơn phải được đặt qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm tại Trạm Có Lúa. Mua ở nơi khác sẽ không được tính thưởng Lúa, kể cả khi gửi ID đơn hàng.</p></aside>
    ${alerts.unread?`<div class="sorder-notice" role="status" aria-live="polite">🔔 Có <strong>${fmt(alerts.unread)} đơn hàng vừa được cập nhật</strong>. Xem trạng thái mới và phần thưởng bên dưới.</div>`:''}
    <div class="sorder-section-heading"><h2>Lịch sử đơn hàng</h2><span>${fmt(orders.length)} đơn</span></div>
@@ -76,7 +76,7 @@ export async function shopOrdersPage(ctx){
        <ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${e.status==='pending'?'Đã tiếp nhận ID đơn hàng.':e.status==='provisional'?'ID đơn đã được xác minh, đang chờ hoàn tất.':e.status==='resolved'?'Đơn đã giải quyết và phần thưởng đã vào ví.':e.status==='rejected'?'Đơn hàng không đủ điều kiện nhận thưởng.':'Trạng thái đã cập nhật.'}</p></li>`).join('')}</ol>
        </details>
      </article>`;
-   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Khi mua sản phẩm trong gian hàng, hãy bấm “Đã mua? Báo đơn” để lưu ID và theo dõi thưởng Lúa tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
+   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Sau khi mua trong gian hàng, vào mục “Báo đơn hàng” riêng để lưu ID và theo dõi thưởng Lúa tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
    <div class="sorder-footnote">Đây là trạng thái cập nhật trên Trạm Có Lúa, không phải dữ liệu đơn hàng đồng bộ trực tiếp từ TikTok. Lúa dự kiến không phải phần thưởng đã nhận. Lúa chính thức chỉ được cộng khi đơn hợp lệ và được giải quyết.</div>
  </div>`;
 }
@@ -133,8 +133,14 @@ export async function adminShopOrdersPage(ctx){
 
 export async function handleShopOrderAction(action,el,ctx){
  const {esc}=ctx;
- if(action!=='shop-report-order')return false;
- const id=el.dataset.id||'',name=el.dataset.title||'Sản phẩm TikTok Shop';
+ if(action!=='shop-report-order'&&action!=='shop-report-selected')return false;
+ let id=el.dataset.id||'',name=el.dataset.title||'Sản phẩm TikTok Shop';
+ if(action==='shop-report-selected'){
+  const pick=document.getElementById('shop-report-product'),option=pick?.selectedOptions?.[0];
+  id=pick?.value||'';
+  if(!id){ctx.toast('Hãy chọn sản phẩm đã mua trước khi báo mã đơn.',true);pick?.focus();return true;}
+  name=option?.textContent?.trim()||name;
+ }
  const root=document.getElementById('modal-root');
  root.innerHTML=`<div class="modal-cover"><section class="modal sorder-report-modal" role="dialog" aria-modal="true" aria-label="Báo đã đặt hàng">
    <button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
@@ -149,7 +155,8 @@ export async function handleShopOrderAction(action,el,ctx){
    </form>
    <p class="note">Không tải ảnh lên website. Đơn đang báo sẽ xuất hiện trong mục Đơn hàng & Lúa.</p>
    </section></div>`;
- root.querySelector('#sorder-report-id')?.focus();
+ // Không tự focus ô input 13px trên iPhone Safari: hành vi này làm cả modal bị auto-zoom.
+ // Đợi khách chủ động chạm vào input; CSS đặt 16px để Safari không zoom khi nhập.
  return true;
 }
 
