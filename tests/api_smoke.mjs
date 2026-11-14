@@ -374,6 +374,50 @@ assert.equal((await call('/api/admin/withdrawals/'+zaloPaid.data.id,'POST',{stat
 const zaloPaidRow=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===zaloPaid.data.id);
 assert.equal(zaloPaidRow.status,'paid');
 assert.equal(zaloPaidRow.payment_method,'zalopay');
+// Phí xử lý cố định: khách thấy trước khi gửi, máy chủ trừ thêm vào Lúa giữ;
+// nếu từ chối hoặc STK sai thì hoàn CẢ phần phí, không ảnh hưởng giao dịch cũ.
+assert.equal((await call('/api/admin/settings','PUT',
+ {withdrawal_fee_lua:'3',card_fee_lua:'7'},admCookie)).status,200);
+const feeMeta=await call('/api/meta');
+assert.equal(feeMeta.data.withdrawal_fee_lua,3);
+assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.settings.card_fee_lua,'7');
+const feeBefore=(await call('/api/me','GET',undefined,cookie)).data.balance;
+const withFee=await call('/api/withdrawals','POST',
+ {amount:20,payment_method:'bank',bank_name:'Vietcombank',
+  bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie);
+assert.equal(withFee.status,200,JSON.stringify(withFee));
+assert.equal(withFee.data.amount_lua,20);
+assert.equal(withFee.data.fee_lua,3);
+assert.equal(withFee.data.total_lua,23);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore-23);
+const feeHistory=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===withFee.data.id);
+assert.equal(feeHistory.fee_lua,3);
+assert.equal(feeHistory.vnd_amount,2,'Fee is charged in extra Lua, not deducted from VNĐ payout');
+assert.equal((await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals.find(x=>x.id===withFee.data.id).fee_lua,3);
+assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'9'},admCookie)).status,200);
+assert.equal((await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===withFee.data.id).fee_lua,3,
+ 'Already submitted requests retain original fee snapshot');
+assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',
+ {status:'rejected',admin_note:'Đã kiểm tra, từ chối giao dịch.'},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
+assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',
+ {status:'rejected',admin_note:'Trùng lặp'},admCookie)).status,409);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
+assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'100000'},admCookie)).status,200);
+assert.equal((await call('/api/withdrawals','POST',
+ {amount:20,payment_method:'bank',bank_name:'Vietcombank',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie)).status,400,
+ 'Withdraw amount alone is insufficient when fee is larger than remaining balance');
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
+assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'5'},admCookie)).status,200);
+const feeInvalid=await call('/api/withdrawals','POST',
+ {amount:20,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'},cookie);
+assert.equal(feeInvalid.status,200,JSON.stringify(feeInvalid));
+assert.equal(feeInvalid.data.total_lua,25);
+assert.equal((await call('/api/admin/withdrawals/'+feeInvalid.data.id,'POST',{status:'approved'},admCookie)).status,200);
+assert.equal((await call('/api/admin/withdrawals/'+feeInvalid.data.id,'POST',{status:'invalid_account'},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
+assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'0',card_fee_lua:'0'},admCookie)).status,200);
+console.log('PASS: withdrawal and card fee Admin settings, extra Lua hold, visible frozen fee, double-refund protection and invalid-account fee refunds.');
 const riskSummary=await call('/api/admin/risk-events','GET',undefined,admCookie);
 assert.equal(riskSummary.status,200);
 assert.ok(Array.isArray(riskSummary.data.repeated_devices));
