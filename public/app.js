@@ -1,4 +1,4 @@
-import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-viewbuy-v11';
+import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-buy-earn-v12';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-hmoob-cachefix-v10';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
