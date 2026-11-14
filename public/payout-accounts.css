@@ -49,3 +49,5 @@
  .saved-payout-actions .btn{flex:1}
  .withdraw-saved-picker{padding:11px}
 }
+/* Ưu tiên trạng thái ẩn của biểu mẫu trên Safari iPhone. */
+.saved-payout-form [hidden],.saved-payout-page [hidden]{display:none!important}
