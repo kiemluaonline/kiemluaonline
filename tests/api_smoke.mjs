@@ -1109,7 +1109,7 @@ console.log('PASS: per-member fraud statistics, shared IPv4 or IPv6 devices, mul
 
 
 
- // Mỗi thành viên lưu được ngân hàng/ZaloPay của mình, không rò rỉ dữ liệu người khác.
+ // Lưu ngân hàng mới; ví ZaloPay đã lưu từ bản cũ chỉ được giữ làm lịch sử, không mở yêu cầu mới.
 assert.equal((await call('/api/payout-accounts')).status,401);
 const emptyPayout=await call('/api/payout-accounts','GET',undefined,newLogin.cookie);
 assert.equal(emptyPayout.status,200);
@@ -1130,14 +1130,21 @@ const ownBank2=await call('/api/payout-accounts','POST',{
 },newLogin.cookie);
 assert.equal(ownBank2.status,201);
 const bank2id=ownBank2.data.id;
-const zaloSaved=await call('/api/payout-accounts','POST',{
+const blockedZaloSave=await call('/api/payout-accounts','POST',{
  payment_method:'zalopay',account_number:'0912345678',
  account_owner:'TEST WALLET OWNER',nickname:'Ví ZaloPay'
 },newLogin.cookie);
-assert.equal(zaloSaved.status,201);
+assert.equal(blockedZaloSave.status,400,'Cannot save a new direct wallet account');
+// Simulate an existing ZaloPay saved recipient from an older D1 schema record.
+const oldSavedId='00000000-0000-4000-8000-0000000000cc';
+const ownerOfOld=(await call('/api/me','GET',undefined,newLogin.cookie)).data.user.id;
+sqlite.prepare(`INSERT INTO payout_accounts
+ (id,user_id,payment_method,bank_name,account_number,account_owner,nickname,is_default)
+ VALUES (?,?,?,?,?,?,?,0)`).run(oldSavedId,ownerOfOld,'zalopay','ZaloPay','0912345678','TEST WALLET OWNER','Ví cũ');
 const savedAccounts=(await call('/api/payout-accounts','GET',undefined,newLogin.cookie)).data.accounts;
 assert.equal(savedAccounts.length,3);
-assert.equal(savedAccounts.filter(x=>x.is_default).length,2,'Separate bank and ZaloPay defaults');
+assert.equal(savedAccounts.filter(x=>x.is_default).length,1,'Only bank is available as default for new withdrawals');
+assert.equal((await call('/api/payout-accounts/'+oldSavedId+'/default','POST',{},newLogin.cookie)).status,400);
 assert.equal(savedAccounts.find(x=>x.id===bankId).is_default,1);
 assert.equal((await call('/api/payout-accounts','GET',undefined,refCookie)).data.accounts.length,0,'Other user cannot list saved recipients');
 assert.equal((await call('/api/payout-accounts/'+bankId,'PATCH',{
@@ -1150,9 +1157,12 @@ assert.equal((await call('/api/admin/settings','PUT',{
 },admCookie)).status,200);
 const savedBalance=(await call('/api/me','GET',undefined,newLogin.cookie)).data.balance;
 assert.equal((await call('/api/withdrawals','POST',{
- amount:10,saved_account_id:zaloSaved.data.id,payment_method:'bank',
+ amount:10,saved_account_id:oldSavedId,payment_method:'bank',
  bank_name:'INVALID',bank_account:'not-valid',bank_owner:'OTHER'
 },refCookie)).status,404,'Cannot withdraw using another member saved account');
+assert.equal((await call('/api/withdrawals','POST',{
+ amount:10,saved_account_id:oldSavedId,payment_method:'bank'
+},newLogin.cookie)).status,400,'Old saved wallet cannot be used for new requests');
 const savedRequest=await call('/api/withdrawals','POST',{
  amount:10,saved_account_id:bankId,payment_method:'zalopay',
  bank_name:'ATTACKER BANK',bank_account:'00000',bank_owner:'ATTACKER'
@@ -1185,6 +1195,8 @@ assert.equal((await call('/api/me','GET',undefined,newLogin.cookie)).data.balanc
 assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',{},newLogin.cookie)).status,200);
 assert.equal((await call('/api/history','GET',undefined,newLogin.cookie)).data.withdrawals.find(x=>x.id===savedRequest.data.id).bank_account,
  '99ZP987654321','Deleting saved account keeps withdrawal history intact');
+assert.equal((await call('/api/payout-accounts','GET',undefined,newLogin.cookie)).data.accounts.length,1,'Old wallet record remains until member deletes it');
+assert.equal((await call('/api/payout-accounts/'+oldSavedId,'DELETE',{},newLogin.cookie)).status,200,'Member may delete obsolete wallet recipient');
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/saved_account_id/);
 assert.match(readFileSync(new URL('../public/payout-accounts-ui.js',import.meta.url),'utf8'),/Đặt mặc định/);
-console.log('PASS: saved bank and ZaloPay accounts, BVBank alphanumeric ID, owner isolation, recipient snapshots, default selection and safe deletions.');
+console.log('PASS: bank-only saved recipients and BVBank IDs, blocked new ZaloPay, legacy wallet retention, owner isolation, snapshots and safe deletions.');
