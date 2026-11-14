@@ -69,11 +69,28 @@ export async function shopOrdersAPI(req,env,H){
   const match=p.match(/^\/api\/admin\/shop\/orders\/([0-9a-f-]{36})$/i);
   if(match&&m==='POST'){
     const b=await readBody(req),status=str(b.status,20),oid=match[1];
-    if(!['provisional','resolved','rejected'].includes(status))fail(400,'Trạng thái đơn hàng không hợp lệ.');
+    if(!['provisional','estimate','resolved','rejected'].includes(status))fail(400,'Trạng thái đơn hàng không hợp lệ.');
     const order=await db.prepare("SELECT id,user_id,status,order_reference FROM shop_orders WHERE id=?").bind(oid).first();
     if(!order)fail(404,'Không tìm thấy đơn hàng.');
     if(order.status==='resolved'||order.status==='rejected')
       fail(409,'Đơn hàng này đã xử lý xong, không thể cộng Lúa hoặc xử lý lại.');
+    if(status==='estimate'){
+      if(order.status!=='provisional')fail(409,'Chỉ được cập nhật Lúa dự kiến khi đơn đang Tạm duyệt – Chờ giải quyết.');
+      if(!goodInteger(b.estimated_reward_lua,1,10000000))
+        fail(400,'Lúa dự kiến phải là số nguyên từ 1 đến 10 triệu.');
+      const estimatedReward=Number(b.estimated_reward_lua);
+      const results=await db.batch([
+        db.prepare(`UPDATE shop_orders SET estimated_reward_lua=?,
+          updated_at=CURRENT_TIMESTAMP,seen_at=NULL
+          WHERE id=? AND status='provisional'`).bind(estimatedReward,oid),
+        db.prepare(`INSERT INTO shop_order_events(id,order_id,actor_id,status,detail)
+          SELECT ?,id,?,'provisional','Lúa dự kiến đã cập nhật: ' || estimated_reward_lua || ' Lúa; chưa cộng ví'
+          FROM shop_orders WHERE id=? AND status='provisional'`).bind(id(),admin.id,oid)
+      ]);
+      if(!results[0].meta?.changes)fail(409,'Đơn hàng đã được xử lý hoặc thay đổi trạng thái.');
+      return json({ok:true,estimated_reward_lua:estimatedReward,
+        message:'Đã cập nhật Lúa dự kiến. Khách sẽ thấy số mới khi xem đơn; ví Lúa chưa thay đổi.'});
+    }
     if(status==='provisional'){
       if(order.status!=='pending')fail(409,'Chỉ đơn Chờ xác minh mới được tạm duyệt.');
       const privateNote=str(b.admin_note,300);
