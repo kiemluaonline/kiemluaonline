@@ -1125,7 +1125,7 @@ assert.equal((await call('/api/payout-accounts','GET',undefined,refCookie)).data
 assert.equal((await call('/api/payout-accounts/'+bankId,'PATCH',{
  bank_name:'BVBank',account_number:'99ZP12345',account_owner:'FOREIGN',nickname:'X'
 },refCookie)).status,404,'Other user cannot edit');
-assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',undefined,refCookie)).status,404,'Other user cannot delete');
+assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',{},refCookie)).status,404,'Other user cannot delete');
 assert.equal((await call('/api/payout-accounts/'+bankId+'/default','POST',{},refCookie)).status,404,'Other user cannot change defaults');
 assert.equal((await call('/api/admin/settings','PUT',{
  withdrawals_enabled:'1',lua_per_vnd:'10',min_withdraw_lua:'10',withdrawal_fee_lua:'0'
