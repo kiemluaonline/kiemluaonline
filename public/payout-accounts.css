@@ -60,3 +60,10 @@
 .withdraw-account-manager .saved-payout-embedded .saved-payout-hero,
 .withdraw-account-manager .saved-payout-embedded .saved-payout-foot{display:none}
 #withdraw-save-account-line[hidden]{display:none!important}
+
+/* Nút Tối đa số dư nằm sát ô rút Lúa và không làm tăng số mục menu. */
+.withdraw-amount-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:end;margin-bottom:6px}
+.withdraw-amount-wrap>.field{min-width:0;margin:0}
+.withdraw-amount-wrap>.field input{width:100%;min-width:0;box-sizing:border-box}
+.withdraw-max-btn{white-space:nowrap;min-height:44px;padding:9px 12px;font-size:13px}
+@media(max-width:410px){.withdraw-max-btn{font-size:12px;padding:8px 9px}}
