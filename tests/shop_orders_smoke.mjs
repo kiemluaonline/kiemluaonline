@@ -6,7 +6,7 @@ import { shopOrdersAPI } from '../src/shop-orders.js';
 import { shopOrdersPage,adminShopOrdersPage } from '../public/shop-orders-ui.js';
 
 const db=new DatabaseSync(':memory:');
-for(const n of ['0001_init.sql','0002_shop.sql','0003_shop_orders.sql'])
+for(const n of ['0001_init.sql','0002_shop.sql','0003_shop_orders.sql','0004_shop_estimated_lua.sql'])
  db.exec(readFileSync(new URL('../migrations/'+n,import.meta.url),'utf8'));
 const insertUser=db.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,referral_code,role) VALUES(?,?,?,?,?,?,?)");
 insertUser.run('user1','member1@example.com','Khách 1','pw','salt','RTEST1','member');
@@ -55,6 +55,7 @@ const oid=report.data.id;
 let orders=(await call('/api/shop/orders')).data.orders;
 assert.equal(orders.length,1);
 assert.equal(orders[0].status,'pending');
+assert.equal(orders[0].estimated_reward_lua,0,'Chưa xác minh thì không hiển thị Lúa dự kiến');
 assert.ok(!('commission_vnd' in orders[0]),'Do not expose Admin commission');
 assert.ok(!('settled_reference' in orders[0]),'Do not expose secret TikTok reconciliation ID');
 assert.equal(orders[0].reward_lua,0);
@@ -66,14 +67,31 @@ assert.equal(adminView.orders.length,1);
 assert.equal(adminView.orders[0].order_reference,ref);
 const premature=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
 assert.equal(premature.status,409);
-const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Khách đã nhận và thanh toán, đối chiếu đơn hợp lệ'},'admin1');
+const invalidEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Khách đã nhận và thanh toán, đối chiếu đơn hợp lệ',estimated_reward_lua:0},'admin1');
+assert.equal(invalidEstimate.status,400,'Bắt buộc nhập ước tính hợp lệ trước khi tạm duyệt');
+const provisional=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Khách đã nhận và thanh toán, đối chiếu đơn hợp lệ',estimated_reward_lua:2000},'admin1');
 assert.equal(provisional.status,200);
 assert.equal(db.prepare('SELECT verification_note FROM shop_orders WHERE id=?').get(oid).verification_note.includes('đối chiếu'),true);
 assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Pending commission must NOT pay');
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,1);
 orders=(await call('/api/shop/orders')).data.orders;
 assert.equal(orders[0].status,'provisional');
+assert.equal(orders[0].estimated_reward_lua,2000,'Member sees Admin estimate only on provisional orders');
+assert.equal(orders[0].reward_lua,0,'Estimate must never add to wallet');
+assert.ok(!('commission_vnd' in orders[0]),'Commission must remain private while provisional');
 assert.ok(!('verification_note' in orders[0]),'Admin verification note must stay hidden');
+const estimatePage=await shopOrdersPage({
+ api:async p=>p==='/api/shop/orders'?{orders,events:[]}:{unread:0},
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
+assert.match(estimatePage,/Lúa dự kiến nhận/);
+assert.match(estimatePage,/~ 2000/);
+assert.match(estimatePage,/có thể tăng hoặc giảm/);
+assert.match(estimatePage,/Chưa cộng vào ví Lúa/);
+const pendingAdminForm=await adminShopOrdersPage({
+ api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1}),
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
+assert.match(pendingAdminForm,/name="estimated_reward_lua"/);
+assert.match(pendingAdminForm,/placeholder="Ví dụ 2000"/);
 const duplicateCheck=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Lặp lại'},'admin1');
 assert.equal(duplicateCheck.status,409);
 const overpay=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:500,reward_lua:2000,settled_reference:ref},'admin1');
@@ -90,12 +108,14 @@ assert.equal(db.prepare("SELECT COUNT(*) n FROM shop_order_events WHERE order_id
 orders=(await call('/api/shop/orders')).data.orders;
 assert.equal(orders[0].status,'resolved');
 assert.equal(orders[0].reward_lua,3000);
+assert.equal(orders[0].estimated_reward_lua,0,'Lúa dự kiến không còn hiện sau khi giải quyết');
 assert.equal((await call('/api/shop/orders/alerts')).data.unread,1);
 const page=await shopOrdersPage({
  api:async p=>p==='/api/shop/orders'?{orders,events:[]}:{unread:0},
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(page,/Đã giải quyết/);
 assert.match(page,/\+3000 Lúa/);
+assert.doesNotMatch(page,/Lúa dự kiến nhận/,'Đơn đã giải quyết chỉ hiển thị Lúa thực tế');
 const adminPage=await adminShopOrdersPage({
  api:async()=>({orders:[adminView.orders[0]],lua_per_vnd:1}),
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
