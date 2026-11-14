@@ -346,6 +346,111 @@ function setMenuOpen(open,restoreFocus=false){
  if(visible)menu.querySelector('.sidebar-close')?.focus();
  else if(restoreFocus&&mobile)trigger.focus();
 }
+
+function closeHeaderNotifications(){
+ const panel=document.getElementById('header-notification-panel');
+ const button=document.getElementById('header-notice-button');
+ if(panel)panel.hidden=true;
+ if(button)button.setAttribute('aria-expanded','false');
+}
+function noticeStoreKey(){
+ return 'tramco-lua.seen-notices.v1.'+String(state.me?.user?.id||'guest');
+}
+function getSeenNotices(){
+ try{return new Set(JSON.parse(localStorage.getItem(noticeStoreKey())||'[]'));}catch{return new Set();}
+}
+function saveSeenNotices(keys){
+ try{localStorage.setItem(noticeStoreKey(),JSON.stringify([...keys].slice(-120)));}catch{}
+}
+function noticeDate(s){
+ const v=String(s||'');
+ const d=Date.parse(v.includes('T')?v:v.replace(' ','T')+'Z');
+ return Number.isFinite(d)?d:0;
+}
+async function collectHeaderNotices(){
+ const items=[],isAdmin=state.me?.user?.role==='admin';
+ if(isAdmin){
+  const [withdrawals,reviews]=await Promise.all([
+   api('/api/admin/withdrawals'),api('/api/admin/reviews').catch(()=>({reviews:[]}))
+  ]);
+  for(const w of (withdrawals.withdrawals||[]).filter(w=>['pending','approved'].includes(w.status)).slice(0,15)){
+   items.push({id:'admin-withdraw-'+w.id+':'+w.status,
+    title:w.status==='approved'?'Có khoản rút đang chờ chuyển tiền':'Có yêu cầu rút đang chờ duyệt',
+    body:fmt(w.vnd_amount)+'đ • Mã '+withdrawalCode(w.id),at:w.created_at,go:'admin-withdrawals'});
+  }
+  for(const r of (reviews.reviews||[]).filter(r=>r.status==='pending').slice(0,10)){
+   items.push({id:'admin-review-'+r.id,title:'Có bằng chứng nhiệm vụ chờ duyệt',
+    body:'Mở danh sách bằng chứng để kiểm tra.',at:r.created_at,go:'admin-reviews'});
+  }
+ }else{
+  const [history,shop,orders]=await Promise.all([
+   api('/api/history'),api('/api/shop/alerts').catch(()=>({unread:0})),
+   api('/api/shop/orders/alerts').catch(()=>({unread:0}))
+  ]);
+  for(const w of (history.withdrawals||[]).filter(w=>['paid','approved','rejected','invalid_account'].includes(w.status)).slice(0,30)){
+   const title=({paid:'Yêu cầu rút đã thanh toán',approved:'Yêu cầu rút đã được duyệt',
+    rejected:'Yêu cầu rút bị từ chối',invalid_account:'Số tài khoản nhận tiền không đúng'})[w.status];
+   items.push({id:'withdraw-'+w.id+':'+w.status,title,
+    body:fmt(w.vnd_amount)+'đ • Mã '+withdrawalCode(w.id),at:w.reviewed_at||w.created_at,go:'withdrawals'});
+  }
+  for(const c of (history.completions||[]).filter(c=>['approved','rejected'].includes(c.status)).slice(0,25)){
+   items.push({id:'task-'+c.id+':'+c.status,
+    title:c.status==='approved'?'Nhiệm vụ đã được duyệt':'Nhiệm vụ bị từ chối',
+    body:String(c.title||'Kiểm tra lịch sử nhiệm vụ'),at:c.reviewed_at||c.created_at,go:'history'});
+  }
+  if(Number(shop.unread)>0)items.push({id:'shop-requests',title:'Có sản phẩm theo yêu cầu đã được tìm thấy',
+   body:fmt(shop.unread)+' cập nhật chưa xem • Mở Mua sắm',go:'shop',at:null,serverUnread:true});
+  if(Number(orders.unread)>0)items.push({id:'shop-orders',title:'Đơn hàng mua sắm có cập nhật',
+   body:fmt(orders.unread)+' cập nhật chưa xem • Mở Đơn hàng & Lúa',go:'shop-orders',at:null,serverUnread:true});
+ }
+ if(state.meta?.announcement?.trim()&&!isAdmin){
+  items.push({id:'announcement:'+state.meta.announcement,title:'Thông báo từ Admin',
+   body:state.meta.announcement,go:'overview',at:null});
+ }
+ // Các mục chưa xem của chính tài khoản; không thông báo dữ liệu của người khác.
+ items.sort((a,b)=>noticeDate(b.at)-noticeDate(a.at));
+ return items.slice(0,30);
+}
+async function refreshHeaderNotifications(openPanel=false){
+ const panel=document.getElementById('header-notification-panel'),
+       button=document.getElementById('header-notice-button'),
+       container=document.getElementById('header-notification-content'),
+       badge=document.getElementById('header-notice-badge');
+ if(!panel||!button||!state.me)return;
+ if(openPanel&&!panel.hidden){closeHeaderNotifications();return;}
+ if(openPanel){
+  panel.hidden=false;button.setAttribute('aria-expanded','true');
+  if(container)container.textContent='Đang tải thông báo...';
+ }
+ const userId=state.me.user.id;
+ try{
+  const notices=await collectHeaderNotices();
+  if(!panel.isConnected||state.me?.user?.id!==userId)return;
+  const seen=getSeenNotices();
+  if(container){
+   container.innerHTML=notices.length
+    ?notices.map(n=>`<button type="button" class="header-notification-item" data-go="${esc(n.go)}">
+     <strong>${esc(n.title)}</strong><span>${esc(n.body)}</span>
+     ${n.at?`<small>${dt(n.at)}</small>`:''}</button>`).join('')
+    :'<p class="header-notification-empty">Hiện chưa có thông báo mới.</p>';
+  }
+  if(openPanel){
+   for(const n of notices){if(!n.serverUnread)seen.add(n.id);}
+   saveSeenNotices(seen);
+  }
+  const count=notices.filter(n=>n.serverUnread||!seen.has(n.id)).length;
+  if(badge){badge.hidden=count===0;badge.textContent=count>9?'9+':String(count);}
+ }catch{
+  if(openPanel&&container)container.textContent='Chưa tải được thông báo. Bạn có thể mở lại chuông để thử lần nữa.';
+ }
+}
+document.addEventListener('click',e=>{
+ const panel=document.getElementById('header-notification-panel');
+ if(panel&&!panel.hidden&&!e.target.closest('#header-notification-panel, #header-notice-button'))closeHeaderNotifications();
+});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape')closeHeaderNotifications();
+});
 function renderShell(){
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
  const user=state.me.user;
