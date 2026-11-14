@@ -38,17 +38,17 @@ function startPaidRotation(){
  const slides=box.querySelectorAll('.paid-slide');
  if(slides.length>1&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
   paidRotationTimer=setInterval(()=>{
-   if(!box.isConnected||state.view!=='tasks'){stopPaidRotation();return;}
+   if(!box.isConnected||state.me?.user?.role!=='member'){stopPaidRotation();return;}
    if(!document.hidden)displayPaidRotation(Number(box.dataset.active||0)+1);
   },6000);
  }
  // Nhận thêm các giao dịch mới được Admin đánh dấu "Đã thanh toán" khi vẫn mở trang.
  paidRefreshTimer=setInterval(async()=>{
-  if(!box.isConnected||state.view!=='tasks'){stopPaidRotation();return;}
+  if(!box.isConnected||state.me?.user?.role!=='member'){stopPaidRotation();return;}
   if(document.hidden)return;
   try{
    const r=await api('/api/task-dashboard');
-   if(!box.isConnected||state.view!=='tasks')return;
+   if(!box.isConnected||state.me?.user?.role!=='member')return;
    const records=r.recent_payments||[];
    const signature=records.map(x=>x.id).join('|');
    if(signature!==box.dataset.signature){
@@ -451,7 +451,25 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape')closeHeaderNotifications();
 });
+async function initGlobalPaidCard(userId){
+ const holder=document.getElementById('global-payment-wrap');
+ if(!holder)return;
+ try{
+  const stats=await api('/api/task-dashboard');
+  if(!holder.isConnected||state.me?.user?.id!==userId||state.me?.user?.role!=='member')return;
+  holder.innerHTML=taskPaymentCard(stats);
+  holder.hidden=false;
+  startPaidRotation();
+ }catch{
+  // Không làm hỏng trang khác nếu API thông báo thanh toán lỗi.
+  if(holder.isConnected&&state.me?.user?.id===userId){
+   holder.innerHTML='<div class="callout">Chưa tải được các giao dịch đã thanh toán. Bạn có thể tải lại trang để thử.</div>';
+   holder.hidden=false;
+  }
+ }
+}
 function renderShell(){
+ stopPaidRotation(); // tránh giữ timer của người đăng nhập trước
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
  const user=state.me.user;
  app.className='';app.innerHTML=`<div class="layout"><aside class="sidebar" id="site-menu" aria-label="Menu điều hướng">
@@ -470,13 +488,13 @@ function renderShell(){
    <div class="header-notification-title"><strong>🔔 Thông báo</strong><button type="button" data-action="close-notifications" aria-label="Đóng thông báo">×</button></div>
    <div class="header-notification-content" id="header-notification-content">Nhấn chuông để tải thông báo.</div>
  </section></header>
- <main class="content" id="viewContent"></main></section></div><div id="modal-root"></div>`;
+ <main class="content"><div id="global-payment-wrap" class="global-payment-wrap" hidden></div><div id="viewContent"></div></main></section></div><div id="modal-root"></div>`;
  setMenuOpen(false);
+ if(user.role==='member')initGlobalPaidCard(user.id).catch(()=>{});
  refreshHeaderNotifications(false).catch(()=>{});
 }
 async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderHome();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
 async function navigate(view){
- stopPaidRotation();
  closeHeaderNotifications();
  state.view=view;
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
@@ -494,7 +512,6 @@ async function navigate(view){
  }
  if(view==='withdrawals'){const withdrawForm=root.querySelector('form[data-form="withdraw"]');updateWithdrawalFields(withdrawForm);updateWithdrawalPreview(withdrawForm);}
  if(view==='withdrawals')updatePayoutAccountFields(root.querySelector('form[data-form="payout-account"]'));
- if(view==='tasks')startPaidRotation();
  if(state.me?.user.role==='member'){
   api('/api/shop/orders/alerts').then(r=>{
    document.querySelectorAll('[data-go="shop-orders"]').forEach(btn=>{
@@ -592,15 +609,17 @@ const adminIP = (ip,observed=null) => {
  </div>`;
 };
 
-function taskDashboardCard(d,quotas={}){
+function taskPaymentCard(d){
  const payments=d.recent_payments|| (d.latest_payment?[d.latest_payment]:[]);
  const signature=payments.map(p=>p.id||p.at).join('|');
  const payment=payments.length?paymentSlides(payments)
   :'<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p><small>Không sử dụng giao dịch minh họa.</small>';
- return `<div class="task-dashboard">
-  <section class="card task-payment ${payments.length>1?'has-paid-rotation':''}" id="paid-rotation" data-active="0" data-signature="${esc(signature)}" aria-label="Các giao dịch đã thanh toán">
+ return `<section class="card task-payment ${payments.length>1?'has-paid-rotation':''}" id="paid-rotation" data-active="0" data-signature="${esc(signature)}" aria-label="Các giao dịch đã thanh toán">
     <div class="paid-rotation-slides">${payment}</div>
-  </section>
+  </section>`;
+}
+function taskDashboardCard(d,quotas={}){
+ return `<div class="task-dashboard">
   <div class="task-stats">
     <div class="card task-stat"><span>🌾 LÚA HÔM NAY</span><strong>+${fmt(d.today_lua)} Lúa</strong></div>
     <div class="card task-stat"><span>☑ TỔNG LÚA LINK ĐÃ DUYỆT</span><strong>${fmt(d.link_lua)} Lúa</strong></div>
