@@ -34,6 +34,8 @@ const ADMIN_NAV = [
 ];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const fmt = v => Number(v || 0).toLocaleString('vi-VN');
+// Mã tham chiếu ổn định dựa trên UUID hiện có; không phải thêm cột hay đánh lại lịch sử D1.
+const withdrawalCode = id => '#'+String(id||'').replace(/-/g,'').slice(0,12).toUpperCase();
 // Chỉ che trong giao diện thành viên; mã gốc và kiểm tra chống gian lận không đổi.
 const maskDeviceCode = value => {
  const raw=String(value||'').trim();
@@ -321,7 +323,7 @@ async function navigate(view){
   }
   root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
  }
- if(view==='withdrawals')updateWithdrawalFields(root.querySelector('form[data-form="withdraw"]'));
+ if(view==='withdrawals'){const withdrawForm=root.querySelector('form[data-form="withdraw"]');updateWithdrawalFields(withdrawForm);updateWithdrawalPreview(withdrawForm);}
  if(view==='withdrawals')updatePayoutAccountFields(root.querySelector('form[data-form="payout-account"]'));
  if(state.me?.user.role==='member'){
   api('/api/shop/orders/alerts').then(r=>{
@@ -663,16 +665,17 @@ async function withdrawals(){
  const savedSelection=preferred?.id||'';
  const t=`${heading('Yêu cầu rút tiền','Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra trước khi chuyển khoản ngân hàng.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
- const form=`<form class="card" data-form="withdraw" data-fee="${Number(meta.withdrawal_fee_lua)||0}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="${Number(meta.withdrawal_fee_lua)||0}">
+ const form=`<form class="card" data-form="withdraw" data-fee-vnd="${Number(meta.withdrawal_fee_vnd)||2000}" data-free-from-vnd="${Number(meta.withdrawal_free_from_vnd)||25000}" data-min-vnd="${Number(meta.withdrawal_min_vnd)||5000}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="0">
  ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
- <div class="note">Tối thiểu ${fmt(meta.min_withdraw_lua)} Lúa • ${meta.lua_per_vnd?fmt(meta.lua_per_vnd)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'} • Số dư: ${fmt(state.me.balance)} Lúa</div>
+ <div class="note">Rút tối thiểu 5.000đ • ${meta.lua_per_vnd?fmt(meta.lua_per_vnd)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'} • Số dư: ${fmt(state.me.balance)} Lúa</div>
  <div class="withdraw-fee-preview" role="status">
-   <strong>Chi tiết phí rút tiền</strong>
+   <strong>Phí rút tiền theo mệnh giá</strong>
+   <p class="note">5.000đ – 24.999đ: phí 2.000đ • Từ 25.000đ: miễn phí.</p>
    <div><span>Lúa dùng để rút:</span><b id="withdraw-base">—</b></div>
-   <div><span>Phí xử lý:</span><b>${fmt(meta.withdrawal_fee_lua)} Lúa</b></div>
+   <div><span>Phí rút:</span><b id="withdraw-fee">—</b></div>
    <div class="withdraw-fee-total"><span>Tổng Lúa sẽ giữ:</span><b id="withdraw-total">—</b></div>
    <div><span>Tiền nhận dự kiến:</span><b id="withdraw-payout">—</b></div>
-   <p class="note">Phí được cộng thêm vào số Lúa rút. Nếu bị từ chối hoặc thông tin nhận tiền sai, hoàn đủ cả tiền rút và phí.</p>
+   <p class="note" id="withdraw-fee-help">Khách nhận đủ tiền rút; phí được giữ thêm bằng Lúa. Nếu Admin từ chối hoặc thông tin nhận tiền sai, toàn bộ Lúa và phí được hoàn.</p>
  </div>
  ${savedAccounts.length?`<div class="withdraw-saved-picker">
   <label for="withdraw-saved-account">🏦 Tài khoản ngân hàng đã lưu</label>
@@ -692,9 +695,15 @@ async function withdrawals(){
  <label id="withdraw-save-account-line" class="saved-payout-check"><input type="checkbox" name="save_account_default" value="1" ${!meta.withdrawals_enabled?'disabled':''}> ✓ Lưu thông tin nhận tiền này làm mặc định cho lần rút sau</label>
  <button class="btn" type="submit" ${!meta.withdrawals_enabled?'disabled':''}>Gửi yêu cầu</button>
  <p class="note">Lúa sẽ được giữ ngay khi gửi để không bị rút trùng. Nếu Admin từ chối hoặc đánh dấu số tài khoản không đúng, hệ thống tự hoàn Lúa.</p></form>`;
- const rows=data.withdrawals.map(w=>`<tr><td>${dt(w.created_at)}</td><td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div></td><td>${fmt(w.vnd_amount)} ₫</td><td>${esc(w.payment_method==='zalopay'?'ZaloPay':w.bank_name)}<div class="small muted">${esc(w.bank_account)}</div></td><td>${chip(w.status)}</td><td>${esc(w.admin_note||'—')}</td></tr>`);
+ const withdrawalCards=data.withdrawals.map(w=>`<article class="withdraw-history-item">
+  <div class="withdraw-history-head"><strong>Mã lệnh: ${esc(withdrawalCode(w.id))}</strong>${chip(w.status)}</div>
+  <div class="withdraw-history-value">${fmt(w.amount)} Lúa <span>→ ${fmt(w.vnd_amount)}đ</span></div>
+  <div class="withdraw-history-meta">${esc(w.payment_method==='zalopay'?'Ví ZaloPay (giao dịch cũ)':w.bank_name)} · ${dt(w.created_at)}</div>
+  <div class="withdraw-history-meta">Phí: ${fmt(w.fee_lua)} Lúa · Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div>
+  <p>${esc(w.admin_note|| (w.status==='paid'?'Tiền đã được Admin xác nhận chuyển.':w.status==='approved'?'Yêu cầu đã duyệt, đang chờ chuyển tiền.':w.status==='pending'?'Yêu cầu đang chờ Admin duyệt.':'—'))}</p>
+ </article>`).join('');
  const manager=await payoutAccountsPage({api,esc,heading,bankList:BANK_LIST,embedded:true});
- return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>Lịch sử yêu cầu rút</h3>${table(['Thời gian','Số Lúa','Giá trị VNĐ','Nhận qua','Trạng thái','Ghi chú'],rows)}</section>`;
+ return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>🕘 Lịch sử yêu cầu rút</h3>${withdrawalCards?'<div class="withdraw-history-list">'+withdrawalCards+'</div>':empty('Chưa có yêu cầu rút','Yêu cầu rút mới sẽ hiển thị tại đây kèm mã lệnh.')}</section>`;
 }
 async function history(){
  const d=await api('/api/history');
@@ -779,7 +788,7 @@ async function adminWithdrawals(){
  <section class="card section">${table(['Thành viên','Số tiền','Kênh nhận','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr>
  <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div>${risks.get(w.user_id)?.level==='serious'?`<div class="small red">⚠ Cần đối chiếu trước khi thanh toán • ${fmt(risks.get(w.user_id).score)}/100</div>`:''}</td>
  <td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div><div class="green">${fmt(w.vnd_amount)} ₫</div></td>
- <td><strong>${esc(w.payment_method==='zalopay'?'Ví ZaloPay':w.bank_name)}</strong><br><code>${esc(w.bank_account)}</code><div class="small">${esc(w.bank_owner)}</div></td>
+ <td><strong>${esc(w.payment_method==='zalopay'?'Ví ZaloPay':w.bank_name)}</strong><br><code>${esc(w.bank_account)}</code><div class="small">${esc(w.bank_owner)}</div><div class="small green">Mã lệnh: <strong>${esc(withdrawalCode(w.id))}</strong></div></td>
  <td>${chip(w.status)}<div class="small muted">${esc(w.admin_note||'')}</div>${w.account_status==='suspended'&&['pending','approved'].includes(w.status)?'<div class="small red">🔒 Tạm dừng chi trả để xác minh tài khoản</div>':''}</td>
  <td>${['pending','approved'].includes(w.status)?`<div class="btn-row">${w.status==='pending'?`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="approved" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã duyệt</button>`:`<button class="btn sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="paid" data-risk-level="${esc(risks.get(w.user_id)?.level||'low')}" ${w.account_status==='suspended'?'disabled title="Tài khoản tạm khóa"':''}>Đã thanh toán</button>`}<button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="invalid_account">Thông tin sai</button><button class="btn danger sm" data-action="withdraw-admin" data-id="${esc(w.id)}" data-status="rejected">Từ chối</button></div>`:'—'}</td></tr>`))}</section>`;
 }
@@ -916,10 +925,9 @@ async function adminSettings(){
  ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}</div>
  <div class="form-row">${field('min_withdraw_lua','Tối thiểu rút (Lúa)',s.min_withdraw_lua,'type="number" min="0" max="10000000" required')}
  ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}</div>
- <h3>💸 Phí xử lý rút tiền và đổi thẻ cào</h3>
- <p class="note">Phí cố định mỗi yêu cầu, cộng thêm vào số Lúa khách rút hoặc đổi thẻ. Nhập 0 để miễn phí. Khách được xem phí trước khi gửi; nếu Admin từ chối, hoàn cả phí. Thay đổi phí không ảnh hưởng các yêu cầu đã gửi.</p>
- <div class="form-row">${field('withdrawal_fee_lua','Phí mỗi lần rút tiền (Lúa) – ngân hàng',s.withdrawal_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
- ${field('card_fee_lua','Phí mỗi lần đổi thẻ cào (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}</div>
+ <h3>💸 Phí rút tiền và đổi thẻ cào</h3>
+ <p class="note">Rút 5.000đ – 24.999đ: thu thêm 2.000đ bằng Lúa. Rút từ 25.000đ: miễn phí. Khách nhận đủ số tiền muốn rút. Mức phí rút tự động theo số tiền, Admin không cần cài đặt. Nếu yêu cầu bị từ chối, hoàn toàn bộ Lúa đã giữ gồm phí. Yêu cầu cũ vẫn giữ nguyên phí lúc gửi.</p>
+ ${field('card_fee_lua','Phí mỗi lần đổi thẻ cào (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
  <h3>🛡️ Quota chống lạm dụng</h3>
  <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
  <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
@@ -1051,15 +1059,24 @@ function updatePayoutAccountFields(form){
 }
 function updateWithdrawalPreview(form){
  if(!form)return;
- const fee=Number(form.dataset.fee||0),rate=Number(form.dataset.rate||0);
+ const rate=Number(form.dataset.rate||0),fixedFeeVnd=Number(form.dataset.feeVnd||2000);
+ const freeFromVnd=Number(form.dataset.freeFromVnd||25000),minVnd=Number(form.dataset.minVnd||5000);
  const input=form.querySelector('[name="amount"]');
- const raw=String(input?.value||'').trim(),amount=Number(raw),valid=raw!==''&&Number.isSafeInteger(amount)&&amount>0;
+ const raw=String(input?.value||'').trim(),amount=Number(raw);
+ const valid=raw!==''&&Number.isSafeInteger(amount)&&amount>0&&rate>0&&amount%rate===0;
+ const vnd=valid?amount/rate:0,eligible=valid&&vnd>=minVnd;
+ const fee=eligible&&vnd<freeFromVnd?fixedFeeVnd*rate:0;
  const values=[
   ['withdraw-base',valid?fmt(amount)+' Lúa':'—'],
-  ['withdraw-total',valid?fmt(amount+fee)+' Lúa':'—'],
-  ['withdraw-payout',valid&&rate>0&&amount%rate===0?fmt(amount/rate)+' ₫':'—']
+  ['withdraw-fee',eligible?(fee?fmt(fee)+' Lúa ('+fmt(fixedFeeVnd)+'đ)':'Miễn phí'):'—'],
+  ['withdraw-total',eligible?fmt(amount+fee)+' Lúa':'—'],
+  ['withdraw-payout',valid?fmt(vnd)+' ₫':'—']
  ];
- for(const [id,text] of values){const el=form.querySelector('#'+id);if(el)el.textContent=text;}
+ for(const [id,value] of values){const el=form.querySelector('#'+id);if(el)el.textContent=value;}
+ const expected=form.querySelector('[name="expected_fee_lua"]');if(expected)expected.value=String(fee);
+ const help=form.querySelector('#withdraw-fee-help');if(help)help.textContent=valid&&!eligible
+  ?'Mức rút tối thiểu là '+fmt(minVnd)+'đ. Vui lòng nhập số tiền lớn hơn.'
+  :'Khách nhận đủ tiền rút; phí được giữ thêm bằng Lúa. Nếu Admin từ chối hoặc thông tin nhận tiền sai, toàn bộ Lúa và phí được hoàn.';
 }
 function updateCardPreview(form){
  if(!form)return;
