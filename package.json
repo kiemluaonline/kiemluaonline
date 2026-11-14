@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 migrations apply tram-lua-db --local",
     "db:remote": "wrangler d1 migrations apply tram-lua-db --remote",
-    "check": "node --check src/worker.js && node --check src/shop.js && node --check public/app.js && node --check public/shop-ui.js && node tests/api_smoke.mjs",
+    "check": "node --check src/worker.js && node --check src/shop.js && node --check public/app.js && node --check public/shop-ui.js && node tests/shop_contact_smoke.mjs && node tests/api_smoke.mjs",
     "check:google": "node --check src/worker.js && node --check src/shop.js && node --check public/app.js && node --check public/shop-ui.js && node tests/google_auth_smoke.mjs"
   },
   "devDependencies": {
