@@ -10,13 +10,15 @@ export async function shopOrdersAPI(req,env,H){
   const normalizeRef=value=>str(value,80).replace(/[\s\-]/g,'').toUpperCase();
   if(p==='/api/shop/orders'&&m==='GET'){
     const me=await auth(req,env);
-    // Tuyệt đối không trả commission_vnd, rate_snapshot, settled_reference cho thành viên.
+    // Cho thành viên chỉ dữ liệu hiển thị cần thiết; không đưa ghi chú của Admin,
+    // hoa hồng, tỷ lệ quy đổi, mã đối soát hay thông tin nội bộ xuống trình duyệt.
     const orders=await db.prepare(`SELECT o.id,o.order_reference,o.status,o.customer_note,
-      o.admin_note,o.reward_lua,o.estimated_reward_lua,o.created_at,o.updated_at,o.resolved_at,
+      o.reward_lua,o.estimated_reward_lua,o.created_at,o.updated_at,o.resolved_at,
       p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link
       FROM shop_orders o JOIN shop_products p ON p.id=o.product_id
       WHERE o.user_id=? ORDER BY o.created_at DESC LIMIT 150`).bind(me.id).all();
-    const events=await db.prepare(`SELECT e.order_id,e.status,e.detail,e.created_at FROM shop_order_events e
+    // Nhật ký có ghi chú đối chiếu riêng; chỉ gửi trạng thái + thời điểm cho khách.
+    const events=await db.prepare(`SELECT e.order_id,e.status,e.created_at FROM shop_order_events e
       JOIN shop_orders o ON o.id=e.order_id
       WHERE o.user_id=? ORDER BY e.created_at DESC LIMIT 500`).bind(me.id).all();
     return json({orders:orders.results.map(o=>({...o,
