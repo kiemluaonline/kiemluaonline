@@ -30,6 +30,14 @@ Trạng thái hiển thị đúng:
 3. **Đã giải quyết**: Admin đã đối chiếu hoa hồng THỰC NHẬN được TikTok quyết toán, nhập hoa hồng và số Lúa thưởng hợp lệ; ghi ví Lúa đúng một lần.
 4. **Từ chối**: đơn hủy, hoàn trả hoặc không đủ điều kiện; không cộng Lúa.
 
+### Lúa dự kiến khi Tạm duyệt – Chờ giải quyết (migration 0004)
+- Sau khi Admin đối chiếu đơn hợp lệ, bắt buộc nhập số Lúa **dự kiến nhận** (ví dụ: 2.000) cùng ghi chú kiểm tra trước khi bấm Tạm duyệt.
+- Thành viên chỉ nhìn thấy `🌾 Lúa dự kiến nhận ~ 2.000` ở trạng thái **Tạm duyệt – Chờ giải quyết**, kèm câu: **Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật sau khi đối soát hoàn tất. Đơn không đủ điều kiện sẽ không được nhận thưởng.**
+- Lúa dự kiến **không cộng vào ví**, không hiển thị hoa hồng thực tế, tỷ lệ chia hoặc số tiền Admin nhận.
+- Sau khi TikTok quyết toán và Admin đối chiếu, chỉ số Lúa **thực tế** mới được ghi vào ví đúng một lần. Nếu đơn bị từ chối, không phát Lúa.
+- Trước khi dùng bản cập nhật này, **sao lưu D1**, chạy [migrations/0004_shop_estimated_lua.sql](https://github.com/kiemluaonline/kiemluaonline/blob/main/migrations/0004_shop_estimated_lua.sql) trong Console của **đúng** CSDL `tram-lua-db`, sau migration 0003. File 0004 chỉ dùng `ALTER TABLE shop_orders ADD COLUMN`; không chạy nhiều lần.
+- Việc commit vào GitHub không có nghĩa bản mới đã triển khai trên Cloudflare. Kiểm tra deployment trước khi kiểm thử tài khoản thật.
+
 Thành viên có menu **Đơn hàng & Lúa**, theo dõi tiến độ, thông báo đổi trạng thái và tổng Lúa nhận từ mua sắm.
 Admin có menu **Duyệt đơn TikTok**. Chỉ Admin nhìn thấy hoa hồng thực nhận, tỷ giá Lúa/VNĐ, mã đối soát và ghi chú riêng.
 
@@ -49,7 +57,7 @@ Cần kiểm tra chính sách TikTok Shop và điều kiện chương trình tr�
 
 ## Vận hành an toàn
 - Khách gửi mã SP cùng ảnh hoặc liên kết trong ứng dụng nhắn tin. Trên web chỉ lưu mã, mô tả, kênh và trạng thái.
-- Một tài khoản gửi tối đa 5 yêu cầu/ngày; yêu cầu phải do Admin đối chiếu mã với cuộc trò chuyện trước khi đánh dấu có sản phẩm.
+- Yêu cầu **tìm sản phẩm** không giới hạn số lượt/ngày và số yêu cầu đang chờ; Admin vẫn đối chiếu mã SP với cuộc trò chuyện trước khi đánh dấu có sản phẩm. Quy tắc và giới hạn nhiệm vụ Link/App/Video không thay đổi.
 - Mỗi yêu cầu chuyển từ Chờ xử lý sang Đã có sản phẩm hoặc Không tìm thấy một lần.
 - Admin không nên đánh dấu khi chưa tìm được đúng sản phẩm, chưa có liên kết Affiliate hoặc sản phẩm chưa được bật.
 - Nút mua hàng dẫn khách tới TikTok Shop bên ngoài. Hệ thống **chưa** chứng minh được khách đó đã mua, nhận hàng, thanh toán hay bạn đã được giải quyết hoa hồng.
