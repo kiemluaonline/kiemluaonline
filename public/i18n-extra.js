@@ -634,6 +634,14 @@ window.TramExtraTranslations = {
   "Thông tin nhận tiền của bạn": "Koj cov ntaub ntawv txais nyiaj",
   "Lưu ngân hàng hoặc ZaloPay an toàn trong tài khoản. Bạn có thể sửa, xóa, chọn mặc định bất cứ lúc nào.": "Khaws txhab nyiaj lossis ZaloPay hauv koj tus as khauj. Koj hloov, rho lossis xaiv ua lub neej ntawd tau.",
   "Tài khoản đã lưu": "Cov as khauj twb khaws",
+  "Ví cũ • không dùng để rút mới": "Hnab nyiaj qub • tsis pub rho nyiaj tshiab lawm",
+  "Số tài khoản ngân hàng": "Tus lej as khauj txhab nyiaj",
+  "⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)": "⚙ Tswj cov as khauj khaws (yog xav tau)",
+  "Muốn dùng lại lần sau, tích ô lưu mặc định.": "Yog xav siv dua lwm zaus, kos qhov khaws ua lub neej ntawd.",
+  "✓ Lưu thông tin nhận tiền này làm mặc định cho lần rút sau": "✓ Khaws tus as khauj no ua lub neej ntawd rau lwm zaus rho nyiaj",
+  "Nhận qua ngân hàng, gồm BVBank khi có số tài khoản BVBank liên kết ZaloPay.": "Txais nyiaj hauv txhab nyiaj, nrog BVBank thaum koj muaj tus lej BVBank txuas nrog ZaloPay.",
+  "Hiện chỉ hỗ trợ lưu tài khoản ngân hàng.": "Tam sim no tsuas pub khaws as khauj txhab nyiaj xwb.",
+  "Hiện chỉ hỗ trợ rút qua tài khoản ngân hàng. Vui lòng chọn ngân hàng nhận tiền.": "Tam sim no rho nyiaj tau hauv txhab nyiaj xwb. Thov xaiv txhab nyiaj txais nyiaj.",
   "Chưa có tài khoản đã lưu. Bạn có thể thêm một lần để những lần sau chỉ cần chọn.": "Tseem tsis muaj as khauj khaws. Ntxiv ib zaug kom lwm zaus tsuas xaiv.",
   "Bạn chưa lưu tài khoản nào. Hãy thêm tài khoản đầu tiên ở biểu mẫu bên cạnh.": "Koj tseem tsis tau khaws as khauj. Thov ntxiv thawj tus ntawm daim ntawv ib sab.",
   "＋ Thêm tài khoản nhận tiền": "＋ Ntxiv as khauj txais nyiaj",
@@ -688,4 +696,8 @@ window.TramExtraTranslations = {
   "Ngân hàng nhận": "Txhab nyiaj txais",
   "Ví ZaloPay": "Hnab ZaloPay",
   "Thành viên có thể tự lưu tối đa 10 tài khoản nhận tiền, gồm ngân hàng hoặc ZaloPay, số tài khoản hoặc số điện thoại, tên chủ tài khoản và tên gợi nhớ, để chọn lại khi rút tiền. Thông tin đã lưu chỉ được hiển thị trong tài khoản đã đăng nhập của thành viên; thành viên có thể sửa hoặc xóa. Việc xóa thông tin đã lưu không xóa bản ghi thông tin nhận tiền của những yêu cầu rút đã gửi trước đó.": "Tus tswv cuab khaws tau txog 10 tus as khauj txais nyiaj, xws li txhab nyiaj lossis ZaloPay, tus lej as khauj lossis xov tooj, npe tus tswv thiab npe cim kom nco, kom xaiv tau dua thaum rho nyiaj. Cov ntaub ntawv khaws tsuas qhia hauv tus tswv cuab tus as khauj uas twb nkag lawm; nws kho lossis rho tawm tau. Kev rho tus as khauj khaws tsis rho cov ntaub ntawv txais nyiaj uas twb nyob hauv cov ntawv thov rho nyiaj qub."
+  "Phí mỗi lần rút tiền (Lúa) – ngân hàng": "Nqi rho nyiaj ib zaug (Lúa) – txhab nyiaj",
+  "Bạn đã CHUYỂN TIỀN THẬT đúng theo thông tin nhận và kiểm tra giao dịch thành công?": "Koj puas tau xa nyiaj tiag raws li daim ntawv txais thiab kuaj tias xa tiav lawm?",
+  "Website chỉ ghi nhận yêu cầu và trạng thái. Bạn chuyển tiền theo thông tin nhận của từng yêu cầu, đối chiếu giao dịch thực tế rồi mới bấm “Đã thanh toán”.": "Lub vev xaib tsuas teev daim ntawv thov thiab xwm txheej. Koj xa nyiaj raws li ntaub ntawv txais, kuaj qhov xa tiag ua ntej nias Them lawm.",
+  "Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận": "Lub vev xaib tsis xa nyiaj tus kheej. Admin xub pom zoo, ces xa nyiaj hauv txhab nyiaj sab nraud thiab kuaj qhov xa nyiaj tiag ua ntej lees paub",
 };
