@@ -1,6 +1,6 @@
 // Native browser confirmation uses the currently selected language.
 function askShopConfirm(message){
- const label=window.TramI18n?.translateLabel(message)??message;
+ const label=window.TramI18n?.translateLabel?.(message)??message;
  return window.confirm(label);
 }
 export function shopCategories(){
@@ -135,7 +135,7 @@ export async function handleShopAction(action,el,ctx){
       const channel=el.dataset.channel;
       const note=document.getElementById('shop-note')?.value||'';
       const r=await api('/api/shop/requests','POST',{channel,note});
-      const tr=text=>window.TramI18n?.translateLabel(text)??text;
+      const tr=text=>window.TramI18n?.translateLabel?.(text)??text;
        const msg=tr('Mã yêu cầu của tôi:')+' '+r.code+'\n'+tr('Tôi muốn tìm sản phẩm theo ảnh hoặc link gửi kèm.');
       const root=document.getElementById('modal-root');
       root.innerHTML=`<div class="modal-cover"><section class="modal shop-contact-modal" role="dialog" aria-modal="true" aria-label="Gửi yêu cầu sản phẩm">
