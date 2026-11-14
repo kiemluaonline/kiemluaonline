@@ -57,6 +57,14 @@ assert.match(frontendForWelcome,/if\(act==='back-home'\)/);
 assert.match(frontendForWelcome,/data-action="back-home"/);
 assert.match(frontendForWelcome,/const withdrawalCode = id/);
 assert.match(frontendForWelcome,/Mã lệnh:/);
+assert.match(frontendForWelcome,/data-action="toggle-notifications"/);
+assert.match(frontendForWelcome,/class="avatar header-avatar" data-go="profile"/);
+assert.match(frontendForWelcome,/function startPaidRotation\(\)/);
+assert.match(frontendForWelcome,/recent_payments/);
+assert.match(frontendForWelcome,/data-action="paid-next"/);
+assert.match(frontendForWelcome,/async function collectHeaderNotices\(\)/);
+assert.match(frontendForWelcome,/api\('\/api\/history'\)/);
+assert.match(frontendForWelcome,/state\.me\?\.user\?\.id/);
 
 assert.match(frontendForWelcome,/data-action="withdraw-max"/);
 assert.match(frontendForWelcome,/maximumWithdrawLua/);
@@ -311,6 +319,7 @@ assert.notEqual(changedDevice.data.device_code,userMe.data.device_code);
 const beforePayment=await call('/api/task-dashboard','GET',undefined,cookie);
 assert.equal(beforePayment.status,200);
 assert.equal(beforePayment.data.latest_payment,null,'No invented payout');
+assert.deepEqual(beforePayment.data.recent_payments,[],'No fake ticker entries without paid withdrawals');
 assert.equal(typeof beforePayment.data.submitted_today,'number');
 const referralMe=await call('/api/me','GET',undefined,refCookie);
 assert.equal(referralMe.data.balance,25);
@@ -392,6 +401,11 @@ assert.equal(dashboard.status,200);
 assert.equal(dashboard.data.latest_payment.vnd_amount,5000);
 assert.equal(dashboard.data.latest_payment.masked_account,'12******90');
 assert.equal(dashboard.data.latest_payment.bank_account,undefined);
+assert.equal(dashboard.data.recent_payments.length,1);
+assert.equal(dashboard.data.recent_payments[0].id,w2.data.id);
+assert.equal(dashboard.data.recent_payments[0].masked_account,'12******90');
+assert.equal(dashboard.data.recent_payments[0].bank_account,undefined,'No full bank account exposed publicly');
+assert.equal(dashboard.data.recent_payments[0].user_id,undefined,'No member ID exposed publicly');
 assert.ok(dashboard.data.link_lua>=100);
 // Chỉ rút qua ngân hàng (BVBank cũng hỗ trợ số tài khoản có chữ).
 // Form cũ và API giả mạo phương thức ZaloPay phải bị từ chối, không trừ ví.
@@ -439,6 +453,13 @@ assert.equal((await call('/api/admin/withdrawals/'+oldPaidID,'POST',{status:'pai
 const legacyPaid=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===oldPaidID);
 assert.equal(legacyPaid.status,'paid');
 assert.equal(legacyPaid.payment_method,'zalopay');
+const rotatingPaid=await call('/api/task-dashboard','GET',undefined,cookie);
+assert.equal(rotatingPaid.data.recent_payments.length,2,'Multiple truly paid requests become ticker slides');
+assert.equal(rotatingPaid.data.recent_payments[0].id,oldPaidID,'Newest paid request comes first');
+assert.equal(rotatingPaid.data.recent_payments[1].id,w2.data.id);
+assert.ok(rotatingPaid.data.recent_payments.every(x=>!('bank_account' in x)&&!('user_id' in x)));
+assert.equal(rotatingPaid.data.latest_payment.masked_account,rotatingPaid.data.recent_payments[0].masked_account);
+
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
 console.log('PASS: new ZaloPay withdrawals and wallet saving blocked; old ZaloPay D1 history/admin approve, pay and refund preserved.'); 
 // Biểu phí rút mới tự động theo VND; không phụ thuộc phí rút cố định cũ.
