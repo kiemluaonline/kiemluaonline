@@ -8,7 +8,7 @@ export async function cardRedemptionsPage(ctx){
  try{data=await api('/api/card-redemptions');}
  catch(err){
    return `<div class="cards-page">${heading('🎁 Đổi Lúa lấy thẻ cào','Tính năng này đang được chuẩn bị.')}
-    <div class="cards-warning" role="status">⚠️ Đổi thẻ cào chưa được kích hoạt trên máy chủ. Admin cần cài bảng dữ liệu và bật dịch vụ; ví Lúa hiện tại của bạn vẫn giữ nguyên.</div></div>`;
+    <div class="cards-warning" role="status">⚠️ Chưa tải được chức năng đổi thẻ cào. Tính năng có thể đang chờ thiết lập hoặc kết nối máy chủ gặp sự cố. Vui lòng thử lại sau; ví Lúa của bạn không bị thay đổi bởi việc mở trang.</div></div>`;
  }
  const rate=Number(data.rate||0),items=data.redemptions||[];
  const options=(data.denominations||[]).map(v=>{
@@ -58,7 +58,7 @@ export async function adminCardRedemptionsPage(ctx){
  try{data=await api('/api/admin/card-redemptions');}
  catch(err){
    return `<div class="cards-page">${heading('🎁 Quản lý đổi thẻ cào','Cài đặt và xét duyệt yêu cầu đổi thẻ.')}
-    <div class="cards-warning" role="status">⚠️ Chưa kích hoạt cơ sở dữ liệu đổi thẻ cào. Sao lưu D1 rồi chạy migrations/0005_cards.sql trong Cloudflare D1 Console trước khi mở chức năng này.</div></div>`;
+    <div class="cards-warning" role="status">⚠️ Không tải được quản lý thẻ cào. Hãy kiểm tra kết nối máy chủ và bảo đảm đã sao lưu D1, chạy migrations/0005_cards.sql trong Cloudflare D1 Console trước khi bật dịch vụ.</div></div>`;
  }
  const items=data.redemptions||[];
  const ready=data.secret_ready&&data.rate>0;
