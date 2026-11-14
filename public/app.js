@@ -1,5 +1,5 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-product-privacy-v5';
-import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-order-presets-v6';
+import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-reward-only-v7';
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
