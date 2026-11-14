@@ -23,6 +23,13 @@ const env={
   }}
 };
 const origin='http://localhost:8787';
+let payoutFixtureSerial=0;
+function adjustPayoutTestWallet(userId,delta){
+ if(!Number.isSafeInteger(delta)||delta===0)throw new Error('Invalid test credit/debit');
+ const key='tiered-payout-fixture-'+(++payoutFixtureSerial);
+ sqlite.prepare('INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id) VALUES(?,?,?,?,?,?)')
+   .run(key,userId,delta,'Test-only payout funding','test_fixture',key);
+}
 async function call(path,method='GET',body, cookie='',ip='192.0.2.15',device='11111111-2222-4333-8444-555555555555'){
  const headers={'CF-Connecting-IP':ip,'User-Agent':'Test-Browser/1.0','X-TL-Device':device};
  if(body!==undefined){headers['Content-Type']='application/json';headers['Origin']=origin;headers['X-Tram-Lua']='1';}
@@ -275,22 +282,27 @@ assert.equal(referralMe.data.balance,25);
 const checkin=await call('/api/checkin','POST',{},cookie,'203.0.113.10');assert.equal(checkin.status,200);
 assert.equal((await call('/api/checkin','POST',{},cookie,'203.0.113.10')).status,409);
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
-const w1=await call('/api/withdrawals','POST',{amount:40,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie,'203.0.113.10');
+// Fund only the isolated SQLite fixture, preserving earlier small-balance assertions.
+adjustPayoutTestWallet(userMe.data.user.id,69960);
+const w1=await call('/api/withdrawals','POST',{amount:50000,expected_fee_lua:20000,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie,'203.0.113.10');
 assert.equal(w1.status,200,JSON.stringify(w1));
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,65);
 assert.equal((await call('/api/withdrawals','POST',{amount:80,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie,'203.0.113.10')).status,400);
 const reject=await call(`/api/admin/withdrawals/${w1.data.id}`,'POST',{status:'rejected',admin_note:'Tai khoan chua xac minh'},admCookie);
 assert.equal(reject.status,200,JSON.stringify(reject));
+adjustPayoutTestWallet(userMe.data.user.id,-69960);
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
 // STK không đúng: hiển thị trạng thái riêng cho khách, nhưng vẫn hoàn Lúa
 // và giữ DB tương thích với schema đang chạy trên Cloudflare D1.
+adjustPayoutTestWallet(userMe.data.user.id,69980);
 const invalidWd=await call('/api/withdrawals','POST',{
- amount:20,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+ amount:50000,expected_fee_lua:20000,bank_name:'Ngan hang A',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
 },cookie,'203.0.113.10');
 assert.equal(invalidWd.status,200,JSON.stringify(invalidWd));
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,85);
 const invalidAction=await call('/api/admin/withdrawals/'+invalidWd.data.id,'POST',{status:'invalid_account'},admCookie);
 assert.equal(invalidAction.status,200,JSON.stringify(invalidAction));
+adjustPayoutTestWallet(userMe.data.user.id,-69980);
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,105);
 const invalidHistory=await call('/api/history','GET',undefined,cookie,'203.0.113.10');
 const invalidRecord=invalidHistory.data.withdrawals.find(w=>w.id===invalidWd.data.id);
@@ -320,8 +332,9 @@ assert.equal((await call('/api/me','GET',undefined,refCookie)).data.balance,25);
 const history=await call('/api/history','GET',undefined,cookie,'203.0.113.10');
 assert.ok(history.data.wallet_entries.length>=4);
 // Chỉ duyệt trước khi thanh toán; thử bỏ qua bước duyệt phải bị từ chối.
+adjustPayoutTestWallet(userMe.data.user.id,69980);
 const w2=await call('/api/withdrawals','POST',{
- amount:20,payment_method:'bank',bank_name:'Vietcombank',
+ amount:50000,expected_fee_lua:20000,payment_method:'bank',bank_name:'Vietcombank',
  bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
 },cookie,'203.0.113.10');
 assert.equal(w2.status,200);
@@ -341,7 +354,7 @@ assert.equal(paidWithdrawal.status,'paid');
 assert.equal((await call('/api/me','GET',undefined,cookie,'203.0.113.10')).data.balance,115);
 const dashboard=await call('/api/task-dashboard','GET',undefined,cookie,'203.0.113.10');
 assert.equal(dashboard.status,200);
-assert.equal(dashboard.data.latest_payment.vnd_amount,2);
+assert.equal(dashboard.data.latest_payment.vnd_amount,5000);
 assert.equal(dashboard.data.latest_payment.masked_account,'12******90');
 assert.equal(dashboard.data.latest_payment.bank_account,undefined);
 assert.ok(dashboard.data.link_lua>=100);
@@ -352,7 +365,7 @@ const invalidZaloPhone=await call('/api/withdrawals','POST',{
 },cookie);
 assert.equal(invalidZaloPhone.status,400);
 const blockedWallet=await call('/api/withdrawals','POST',{
- amount:10,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A'
+ amount:50000,payment_method:'zalopay',zalopay_phone:'0912345678',zalopay_owner:'NGUYEN VAN A',expected_fee_lua:20000
 },cookie);
 assert.equal(blockedWallet.status,400);
 assert.equal((await call('/api/payout-accounts','POST',{
