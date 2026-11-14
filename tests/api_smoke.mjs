@@ -6,6 +6,7 @@ import worker from '../src/worker.js';
 
 const sqlite = new DatabaseSync(':memory:');
 sqlite.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url),'utf8'));
+sqlite.exec(readFileSync(new URL('../migrations/0006_payout_accounts.sql', import.meta.url),'utf8'));
 class Statement {
   constructor(q){ this.q=q;this.values=[]; }
   bind(...args){ this.values=args;return this; }
@@ -1089,3 +1090,83 @@ console.log('PASS: per-member fraud statistics, shared IPv4 or IPv6 devices, mul
 
 
 
+
+ // Mỗi thành viên lưu được ngân hàng/ZaloPay của mình, không rò rỉ dữ liệu người khác.
+assert.equal((await call('/api/payout-accounts')).status,401);
+const emptyPayout=await call('/api/payout-accounts','GET',undefined,cookie);
+assert.equal(emptyPayout.status,200);
+assert.deepEqual(emptyPayout.data.accounts,[]);
+const ownBank=await call('/api/payout-accounts','POST',{
+ payment_method:'bank',bank_name:'BVBank',account_number:'99ZP987654321',
+ account_owner:'ZALOPAY TEST USER',nickname:'Tài khoản BVBank',is_default:true
+},cookie);
+assert.equal(ownBank.status,201,JSON.stringify(ownBank));
+const bankId=ownBank.data.id;
+const duplicate=await call('/api/payout-accounts','POST',{
+ payment_method:'bank',bank_name:'BVBank',account_number:'99ZP987654321',account_owner:'ZALOPAY TEST USER'
+},cookie);
+assert.equal(duplicate.status,409);
+const ownBank2=await call('/api/payout-accounts','POST',{
+ payment_method:'bank',bank_name:'Vietcombank',account_number:'1234567890',
+ account_owner:'TEST ACCOUNT OWNER',nickname:'Ngân hàng dự phòng'
+},cookie);
+assert.equal(ownBank2.status,201);
+const bank2id=ownBank2.data.id;
+const zaloSaved=await call('/api/payout-accounts','POST',{
+ payment_method:'zalopay',account_number:'0912345678',
+ account_owner:'TEST WALLET OWNER',nickname:'Ví ZaloPay'
+},cookie);
+assert.equal(zaloSaved.status,201);
+const savedAccounts=(await call('/api/payout-accounts','GET',undefined,cookie)).data.accounts;
+assert.equal(savedAccounts.length,3);
+assert.equal(savedAccounts.filter(x=>x.is_default).length,2,'Separate bank and ZaloPay defaults');
+assert.equal(savedAccounts.find(x=>x.id===bankId).is_default,1);
+assert.equal((await call('/api/payout-accounts','GET',undefined,refCookie)).data.accounts.length,0,'Other user cannot list saved recipients');
+assert.equal((await call('/api/payout-accounts/'+bankId,'PATCH',{
+ bank_name:'BVBank',account_number:'99ZP12345',account_owner:'FOREIGN',nickname:'X'
+},refCookie)).status,404,'Other user cannot edit');
+assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',undefined,refCookie)).status,404,'Other user cannot delete');
+assert.equal((await call('/api/payout-accounts/'+bankId+'/default','POST',{},refCookie)).status,404,'Other user cannot change defaults');
+assert.equal((await call('/api/admin/settings','PUT',{
+ withdrawals_enabled:'1',lua_per_vnd:'10',min_withdraw_lua:'10',withdrawal_fee_lua:'0'
+},admCookie)).status,200);
+const savedBalance=(await call('/api/me','GET',undefined,cookie)).data.balance;
+assert.equal((await call('/api/withdrawals','POST',{
+ amount:10,saved_account_id:zaloSaved.data.id,payment_method:'bank',
+ bank_name:'INVALID',bank_account:'not-valid',bank_owner:'OTHER'
+},refCookie)).status,404,'Cannot withdraw using another member saved account');
+const savedRequest=await call('/api/withdrawals','POST',{
+ amount:10,saved_account_id:bankId,payment_method:'zalopay',
+ bank_name:'ATTACKER BANK',bank_account:'00000',bank_owner:'ATTACKER'
+},cookie);
+assert.equal(savedRequest.status,200,JSON.stringify(savedRequest));
+const savedHistory=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===savedRequest.data.id);
+assert.equal(savedHistory.bank_name,'BVBank');
+assert.equal(savedHistory.bank_account,'99ZP987654321');
+assert.equal(savedHistory.bank_owner,'ZALOPAY TEST USER');
+assert.equal(savedHistory.payment_method,'bank');
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,savedBalance-10);
+const edited=await call('/api/payout-accounts/'+bankId,'PATCH',{
+ bank_name:'BVBank',account_number:'99ZP123456',account_owner:'UPDATED OWNER',
+ nickname:'Đã sửa',is_default:true
+},cookie);
+assert.equal(edited.status,200,JSON.stringify(edited));
+const afterEdit=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===savedRequest.data.id);
+assert.equal(afterEdit.bank_account,'99ZP987654321','Editing saved account never modifies pending withdrawal snapshot');
+assert.equal((await call('/api/payout-accounts/'+bank2id+'/default','POST',{},cookie)).status,200);
+const newDefaults=(await call('/api/payout-accounts','GET',undefined,cookie)).data.accounts;
+assert.equal(newDefaults.find(x=>x.id===bank2id).is_default,1);
+assert.equal(newDefaults.find(x=>x.id===bankId).is_default,0);
+assert.equal((await call('/api/payout-accounts/'+bank2id,'DELETE',undefined,cookie)).status,200);
+const defaultAfterDelete=(await call('/api/payout-accounts','GET',undefined,cookie)).data.accounts;
+assert.equal(defaultAfterDelete.find(x=>x.id===bankId).is_default,1,'Deleting a default account promotes remaining bank');
+assert.equal((await call('/api/admin/withdrawals/'+savedRequest.data.id,'POST',{
+ status:'rejected',admin_note:'Kiểm thử hoàn số Lúa đầy đủ'
+},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,savedBalance);
+assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',undefined,cookie)).status,200);
+assert.equal((await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===savedRequest.data.id).bank_account,
+ '99ZP987654321','Deleting saved account keeps withdrawal history intact');
+assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/saved_account_id/);
+assert.match(readFileSync(new URL('../public/payout-accounts-ui.js',import.meta.url),'utf8'),/Đặt mặc định/);
+console.log('PASS: saved bank and ZaloPay accounts, BVBank alphanumeric ID, owner isolation, recipient snapshots, default selection and safe deletions.');
