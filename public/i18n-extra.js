@@ -576,5 +576,19 @@ window.TramExtraTranslations = {
   "Nhập lý do từ chối đổi thẻ:": "Sau laj thawj tsis pom zoo pauv npav:",
   "Từ chối yêu cầu và hoàn đủ Lúa về ví khách?": "Koj puas xav tsis pom zoo thiab rov tag nrho Lúa rau qhua?",
   "Xác nhận đổi Lúa lấy thẻ cào? Lúa sẽ được giữ tạm và chờ Admin phát mã thẻ.": "Koj puas paub tseeb tias xav pauv Lúa ua daim npav? Lúa yuav raug tuav ib ntus, tos Admin muab npav.",
-  "Bạn đã kiểm tra đây là seri và mã nạp THẺ THẬT chưa dùng? Phát mã sẽ không thể thu hồi.": "Koj puas twb kuaj tias seri thiab tus lej no yog daim npav TIAG tsis tau siv? Thaum muab lawm rov thim tsis tau."
+  "Bạn đã kiểm tra đây là seri và mã nạp THẺ THẬT chưa dùng? Phát mã sẽ không thể thu hồi.": "Koj puas twb kuaj tias seri thiab tus lej no yog daim npav TIAG tsis tau siv? Thaum muab lawm rov thim tsis tau.",
+  "Nhấn tạo khóa để sao chép một giá trị bí mật ngẫu nhiên. Dán vào Cloudflare Workers → Settings → Variables and Secrets với tên": "Nias tsim tus yuam sij kom luam tus nqi zais uas tsim los ua keeb. Muab tso rau Cloudflare Workers → Settings → Variables and Secrets nrog lub npe",
+  ". Không gửi khóa cho ai, không đăng công khai và không đổi khóa sau khi đã phát thẻ.": ". Tsis txhob qhia tus yuam sij rau leej twg, tsis txhob tshaj tawm thiab tsis txhob hloov tom qab muab npav lawm.",
+  "Các nhà mạng: Viettel, VinaPhone, MobiFone. Mệnh giá: 10.000đ, 20.000đ, 50.000đ, 100.000đ, 200.000đ. Bạn cần chuẩn bị sẵn thẻ thật. Lúa được hoàn khi từ chối.": "Cov tuam txhab: Viettel, VinaPhone, MobiFone. Tus nqi npav: 10.000đ, 20.000đ, 50.000đ, 100.000đ, 200.000đ. Admin yuav tsum muaj daim npav tiag. Lúa rov qab thaum tsis pom zoo.",
+  "⚠️ Cần đặt CARD_VOUCHER_SECRET an toàn trong Cloudflare và tỷ giá Lúa/VNĐ trong Cài đặt trước khi bật. Không phát thẻ nếu chưa có mã thật.": "⚠️ Yuav tsum teeb CARD_VOUCHER_SECRET hauv Cloudflare thiab tus nqi pauv Lúa/VNĐ ua ntej qhib. Tsis txhob muab daim npav yog tsis muaj tus lej tiag.",
+  "⚠️ Đổi thẻ cào chưa được kích hoạt trên máy chủ. Admin cần cài bảng dữ liệu và bật dịch vụ; ví Lúa hiện tại của bạn vẫn giữ nguyên.": "⚠️ Kev pauv daim npav tseem tsis tau qhib rau server. Admin yuav tsum tsim database thiab qhib qhov kev pab no; koj cov Lúa tseem nyob li qub.",
+  "⚠️ Chưa kích hoạt cơ sở dữ liệu đổi thẻ cào. Sao lưu D1 rồi chạy migrations/0005_cards.sql trong Cloudflare D1 Console trước khi mở chức năng này.": "⚠️ Database rau kev pauv daim npav tseem tsis tau qhib. Khaws D1 ua ntej ces khiav migrations/0005_cards.sql hauv Cloudflare D1 Console.",
+  "Tính năng này đang được chuẩn bị.": "Qhov kev pab no tseem tab tom npaj.",
+  "Cài đặt và xét duyệt yêu cầu đổi thẻ.": "Teeb thiab tshuaj xyuas cov ntawv thov pauv daim npav.",
+  "Không mở được mã thẻ. Vui lòng liên hệ Admin.": "Qhib tsis tau tus lej npav. Thov tiv tauj Admin.",
+  "Admin chưa mở tính năng đổi thẻ cào hoặc chưa hoàn tất cấu hình.": "Admin tseem tsis tau qhib kev pauv daim npav lossis tsis tau teeb kom tiav.",
+  "Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.": "Lub tuam txhab xov tooj lossis tus nqi npav tsis raug.",
+  "Số dư Lúa không đủ để đổi thẻ hoặc yêu cầu chưa được lưu.": "Koj cov Lúa tsis txaus lossis daim ntawv thov tseem tsis tau khaws.",
+  "Seri thẻ này đã được phát cho một yêu cầu khác. Không phát trùng thẻ.": "Daim npav seri no twb muab rau lwm daim ntawv thov lawm. Tsis txhob muab npav ob zaug.",
+  "Cần đặt CARD_VOUCHER_SECRET (64 ký tự hex) và tỷ giá Lúa/VNĐ hợp lệ trước khi bật.": "Yuav tsum teeb CARD_VOUCHER_SECRET (64 cim hex) thiab tus nqi pauv Lúa/VNĐ ua ntej qhib."
 };
