@@ -92,3 +92,7 @@
 .sorder-admin-estimate small{font-size:11px;line-height:1.6;color:#6a886c}
 .sorder-estimate-help{font-size:11px;line-height:1.65;color:#648369;margin:1px 0 7px}
 @media(max-width:560px){.sorder-estimate{padding:16px}.sorder-estimate-amount{font-size:33px}}
+
+/* Xác nhận cuối chỉ hiển thị trong Admin; checkbox gọn, không dùng chiều rộng của input văn bản. */
+.sorder-admin-form .sorder-final-check{display:flex;align-items:flex-start;gap:10px;padding:12px 13px;border:1px solid #cde4d1;border-radius:12px;background:#f3faf2;color:#376647;font-size:12px;font-weight:700;line-height:1.6;cursor:pointer}
+.sorder-admin-form .sorder-final-check input[type=checkbox]{appearance:auto;width:18px;min-width:18px;max-width:18px;height:18px;margin:2px 0 0;padding:0;flex:0 0 18px;accent-color:#166946;box-shadow:none}
