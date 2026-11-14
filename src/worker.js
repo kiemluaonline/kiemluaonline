@@ -1338,6 +1338,9 @@ async function handler(req, env) {
     if (amount % rate !== 0) fail(400, `Số Lúa cần chia hết cho ${rate} để quy đổi ra VNĐ.`);
     if (!Number.isSafeInteger(fee) || fee < 0 || fee > 10000000 || !Number.isSafeInteger(amount+fee) || amount+fee>1000000000)
       fail(409,'Phí rút tiền chưa hợp lệ, vui lòng liên hệ Admin.');
+    // Không được âm thầm thu phí mới từ trang Safari cũ hoặc biểu mẫu chưa cập nhật.
+    if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
+      fail(409,'Phí rút tiền đã thay đổi. Vui lòng tải lại trang và xác nhận tổng Lúa trước khi gửi.');
     // Dùng các cột ngân hàng sẵn có để lưu 2 kênh nhận tiền, không cần migration D1.
     // Dữ liệu cũ không có payment_method vẫn được hiểu là chuyển khoản ngân hàng.
     const method = str(b.payment_method || 'bank', 20);
