@@ -42,6 +42,7 @@ export async function shopOrdersPage(ctx){
     <div class="sorder-summary-card sorder-summary-lua"><span>🌾 Lúa đã nhận</span><strong>${fmt(accrued)}</strong><small>Không tính Lúa dự kiến</small></div>
    </section>
    <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Vào sản phẩm trong gian hàng, chọn “Đã mua? Báo đơn”, sau đó gửi ID đơn hàng. Bạn có thể theo dõi trạng thái và nhận Lúa khi đơn được giải quyết.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
+   <aside class="sorder-origin-policy" role="note"><strong>⚠️ Chỉ xét Lúa cho đơn mua đúng trang trưng bày của Admin</strong><p>Đơn phải được đặt qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm tại Trạm Có Lúa. Mua ở nơi khác sẽ không được tính thưởng Lúa, kể cả khi gửi ID đơn hàng.</p></aside>
    ${alerts.unread?`<div class="sorder-notice" role="status" aria-live="polite">🔔 Có <strong>${fmt(alerts.unread)} đơn hàng vừa được cập nhật</strong>. Xem trạng thái mới và phần thưởng bên dưới.</div>`:''}
    <div class="sorder-section-heading"><h2>Lịch sử đơn hàng</h2><span>${fmt(orders.length)} đơn</span></div>
    ${orders.length?`<div class="sorder-list">${orders.map(o=>{
@@ -103,7 +104,7 @@ export async function adminShopOrdersPage(ctx){
      ${o.status==='pending'?`<form class="sorder-admin-form" data-form="shop-order-provisional"><input type="hidden" name="id" value="${esc(o.id)}">
        <div class="sorder-preset-label">Kết quả kiểm tra ID đơn hàng (chỉ Admin xem)</div>
        <div class="sorder-preset-note"><span aria-hidden="true">✓</span><p>${esc(verifiedNote)}</p></div>
-       <p class="sorder-preset-hint">Nội dung có sẵn. Chỉ tạm duyệt sau khi đã kiểm tra đúng ID đơn hàng và sản phẩm.</p>
+       <p class="sorder-preset-hint">Nội dung có sẵn. Chỉ tạm duyệt sau khi đã kiểm tra đúng ID, sản phẩm và xác minh đơn phát sinh từ trang trưng bày hoặc liên kết do Admin giới thiệu. ID trùng khớp thôi chưa đủ.</p>
        <label for="shop-estimate-${esc(o.id)}">🌾 Lúa dự kiến nhận (chỉ Admin nhập)</label>
        <input id="shop-estimate-${esc(o.id)}" name="estimated_reward_lua" type="number" inputmode="numeric" min="1" max="10000000" step="1" required placeholder="Ví dụ 2000">
        <p class="sorder-estimate-help">Khách sẽ thấy Lúa dự kiến kèm thông báo “có thể tăng hoặc giảm”. Chưa cộng ví và không công khai hoa hồng.</p>
@@ -139,6 +140,7 @@ export async function handleShopOrderAction(action,el,ctx){
    <button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
    <div class="sorder-report-icon">🛍️</div><h3>Báo đã đặt hàng</h3><p><b>${esc(name)}</b></p>
    <p>Đã mua trên TikTok? Hãy mở <b>TikTok → Đơn hàng → Chi tiết đơn</b>, sao chép mã đơn và điền dưới đây. Việc báo đơn chưa có nghĩa là đã được xác minh.</p>
+   <div class="sorder-report-policy" role="note"><strong>⚠️ Lưu ý trước khi gửi ID đơn hàng</strong><p>Bạn phải mua qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm do Trạm Có Lúa giới thiệu. Nếu mua bên ngoài, ID đơn hàng sẽ không được xét thưởng Lúa dù bạn gửi về website.</p></div>
    <form data-form="shop-order-report" class="sorder-admin-form">
      <input type="hidden" name="product_id" value="${esc(id)}">
      <label for="sorder-report-id">Mã đơn hàng TikTok <span aria-hidden="true">*</span></label><input id="sorder-report-id" name="order_reference" required minlength="8" maxlength="64" placeholder="Mã đơn trong TikTok Shop">
