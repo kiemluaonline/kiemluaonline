@@ -75,7 +75,7 @@ export async function shopOrdersAPI(req,env,H){
       ORDER BY CASE o.status WHEN 'pending' THEN 0 WHEN 'provisional' THEN 1 ELSE 2 END,
       o.created_at DESC LIMIT 250`).all();
     const rate=await db.prepare("SELECT value FROM settings WHERE key='lua_per_vnd'").first();
-    return json({orders:rows.results,lua_per_vnd:Number(rate?.value||0)});
+    return json({orders:rows.results,lua_per_vnd:Number(rate?.value||0),verification_note:ORDER_CHECK_NOTE,rejection_reasons:ORDER_REJECTION_REASONS});
   }
   const match=p.match(/^\/api\/admin\/shop\/orders\/([0-9a-f-]{36})$/i);
   if(match&&m==='POST'){
