@@ -92,6 +92,24 @@ const pendingAdminForm=await adminShopOrdersPage({
  esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
 assert.match(pendingAdminForm,/name="estimated_reward_lua"/);
 assert.match(pendingAdminForm,/placeholder="Ví dụ 2000"/);
+const invalidUpdate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:-5},'admin1');
+assert.equal(invalidUpdate.status,400);
+const updatedEstimate=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:2500},'admin1');
+assert.equal(updatedEstimate.status,200,'Admin can adjust Lua estimate while provisional');
+assert.equal(db.prepare('SELECT estimated_reward_lua FROM shop_orders WHERE id=?').get(oid).estimated_reward_lua,2500);
+assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,'Adjusting estimated Lua must not credit wallet');
+orders=(await call('/api/shop/orders')).data.orders;
+assert.equal(orders[0].estimated_reward_lua,2500);
+const revisedEstimatePage=await shopOrdersPage({
+ api:async p=>p==='/api/shop/orders'?{orders,events:[]}:{unread:0},
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
+assert.match(revisedEstimatePage,/~ 2500/);
+const provisionalAdminView=(await call('/api/admin/shop/orders','GET',undefined,'admin1')).data;
+const editEstimateAdminPage=await adminShopOrdersPage({
+ api:async()=>({orders:provisionalAdminView.orders,lua_per_vnd:1}),
+ esc:x=>String(x),heading:()=>'',fmt:x=>String(x),dt:x=>x});
+assert.match(editEstimateAdminPage,/data-form="shop-order-estimate"/);
+assert.match(editEstimateAdminPage,/Lúa dự kiến đang hiển thị cho khách/);
 const duplicateCheck=await call('/api/admin/shop/orders/'+oid,'POST',{status:'provisional',admin_note:'Lặp lại'},'admin1');
 assert.equal(duplicateCheck.status,409);
 const overpay=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:500,reward_lua:2000,settled_reference:ref},'admin1');
@@ -103,6 +121,8 @@ assert.equal(settled.data.reward_lua,3000);
 assert.equal(db.prepare("SELECT SUM(amount) n FROM wallet_entries WHERE user_id='user1' AND reference_type='shop_order'").get().n,3000);
 const repeated=await call('/api/admin/shop/orders/'+oid,'POST',{status:'resolved',commission_vnd:10000,reward_lua:3000,settled_reference:ref},'admin1');
 assert.equal(repeated.status,409);
+const forbiddenUpdateAfterResolved=await call('/api/admin/shop/orders/'+oid,'POST',{status:'estimate',estimated_reward_lua:4000},'admin1');
+assert.equal(forbiddenUpdateAfterResolved.status,409,'Cannot revise estimate after real Lua was settled');
 assert.equal(db.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_id=?").get(oid).n,1);
 assert.equal(db.prepare("SELECT COUNT(*) n FROM shop_order_events WHERE order_id=? AND status='resolved'").get(oid).n,1);
 orders=(await call('/api/shop/orders')).data.orders;
