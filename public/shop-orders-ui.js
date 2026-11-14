@@ -1,3 +1,8 @@
+// Native browser confirmation uses the currently selected language.
+function askOrderConfirm(message){
+ const label=window.TramI18n?.translateLabel(message)??message;
+ return window.confirm(label);
+}
 export function shopOrderMeta(status) {
  const entries={
   pending:{text:'Chờ xác minh',symbol:'⌛',color:'pending',summary:'Đã tiếp nhận ID đơn hàng của bạn. Hệ thống đang chờ Admin kiểm tra và xác nhận thông tin.',rewardLabel:'Lúa chưa xác định'},
@@ -159,16 +164,16 @@ export async function handleShopOrderSubmit(kind,b,ctx){
  if(!b.id)throw new Error('Không xác định được đơn hàng.');
  let payload;
  if(kind==='shop-order-provisional'){
-  if(!confirm('Đã kiểm tra đúng ID đơn hàng và sản phẩm trong TikTok Shop? Tạm duyệt KHÔNG yêu cầu đã giao hoặc thanh toán và KHÔNG cộng Lúa.'))return true;
+  if(!askOrderConfirm('Đã kiểm tra đúng ID đơn hàng và sản phẩm trong TikTok Shop? Tạm duyệt KHÔNG yêu cầu đã giao hoặc thanh toán và KHÔNG cộng Lúa.'))return true;
   payload={status:'provisional',estimated_reward_lua:Number(b.estimated_reward_lua)};
  }else if(kind==='shop-order-estimate'){
-  if(!confirm('Cập nhật số Lúa dự kiến cho khách? Đây chỉ là số ước tính, chưa cộng vào ví.'))return true;
+  if(!askOrderConfirm('Cập nhật số Lúa dự kiến cho khách? Đây chỉ là số ước tính, chưa cộng vào ví.'))return true;
   payload={status:'estimate',estimated_reward_lua:Number(b.estimated_reward_lua)};
  }else if(kind==='shop-order-resolve'){
-  if(!confirm('XÁC NHẬN CUỐI: Hàng đã giao, đã thanh toán, không bị hoàn/hủy và hoa hồng TikTok đã quyết toán hợp lệ? Số Lúa thực tế sẽ được cộng vào ví đúng một lần.'))return true;
+  if(!askOrderConfirm('XÁC NHẬN CUỐI: Hàng đã giao, đã thanh toán, không bị hoàn/hủy và hoa hồng TikTok đã quyết toán hợp lệ? Số Lúa thực tế sẽ được cộng vào ví đúng một lần.'))return true;
   payload={status:'resolved',reward_lua:Number(b.reward_lua),settled_reference:b.settled_reference,delivery_paid_confirmed:b.delivery_paid_confirmed==='1'};
  }else{
-  if(!confirm('Xác nhận từ chối đơn này và không thưởng Lúa?'))return true;
+  if(!askOrderConfirm('Xác nhận từ chối đơn này và không thưởng Lúa?'))return true;
   payload={status:'rejected',reason_code:b.reason_code};
  }
  const result=await api('/api/admin/shop/orders/'+id,'POST',payload);
