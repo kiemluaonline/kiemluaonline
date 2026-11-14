@@ -686,3 +686,10 @@ html[lang="hmn"] .language-legal-notice{display:block}
  .header-notification-panel{position:fixed;top:74px;left:12px;right:12px;width:auto;max-height:75dvh}
 }
 @media(prefers-reduced-motion:reduce){.paid-slide,.task-payment.has-paid-rotation .paid-slide-progress{animation:none}}
+
+
+/* Một thẻ thanh toán dùng chung, luôn nằm trên nội dung của mọi menu thành viên. */
+.global-payment-wrap[hidden]{display:none!important}
+.global-payment-wrap:not([hidden]){margin:0 0 18px}
+.global-payment-wrap>.task-payment{margin:0}
+@media(max-width:570px){.global-payment-wrap:not([hidden]){margin-bottom:15px}}
