@@ -1,4 +1,5 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js';
+import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js';
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
@@ -17,11 +18,11 @@ const BANK_LIST = [
   ['other','Ngân hàng khác (nhập tên)']
 ];
 const NAV = [
-  ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['shop','🛍️','Mua sắm nhận Lúa'],['referrals','♧','Tuyển Ref'],
+  ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['shop','🛍️','Mua sắm nhận Lúa'],['shop-orders','📦','Đơn hàng & Lúa'],['referrals','♧','Tuyển Ref'],
   ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
 ];
 const ADMIN_NAV = [
-  ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],['admin-shop','🛍️','Quản lý mua sắm'],
+  ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],['admin-shop','🛍️','Quản lý mua sắm'],['admin-shop-orders','📦','Duyệt đơn TikTok'],
   ['admin-users','☻','Thành viên'],['admin-reviews','✓','Duyệt bằng chứng'],
   ['admin-withdrawals','⇢','Yêu cầu rút tiền'],['admin-security','♙','Chống gian lận'],
   ['admin-settings','⚙','Cài đặt'],['profile','☻','Hồ sơ của tôi']
@@ -316,6 +317,12 @@ async function navigate(view){
   root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
  }
  if(state.me?.user.role==='member'){
+  api('/api/shop/orders/alerts').then(r=>{
+   document.querySelectorAll('[data-go="shop-orders"]').forEach(btn=>{
+    btn.querySelector('.shop-nav-badge')?.remove();
+    if(r.unread){const span=document.createElement('span');span.className='shop-nav-badge';span.textContent=String(r.unread);btn.appendChild(span);}
+   });
+  }).catch(()=>{});
   api('/api/shop/alerts').then(r=>{
    document.querySelectorAll('[data-go="shop"]').forEach(btn=>{
     btn.querySelector('.shop-nav-badge')?.remove();
@@ -326,9 +333,9 @@ async function navigate(view){
 }
 async function page(view){
  switch(view){
- case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'referrals':return referrals();
+ case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'shop-orders':return shopOrdersPage({api,esc,heading,fmt,dt});case 'referrals':return referrals();
  case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'history':return history();case 'profile':return profile();
- case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-users':return adminUsers();
+ case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt});case 'admin-users':return adminUsers();
  case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
  default:return empty('Trang chưa được cấu hình');
@@ -336,9 +343,10 @@ async function page(view){
 }
 async function overview(){
  const m=state.me;
- const [tasks,shoppingAlerts]=await Promise.all([api('/api/tasks'),api('/api/shop/alerts').catch(()=>({unread:0}))]);
+ const [tasks,shoppingAlerts,orderAlerts]=await Promise.all([api('/api/tasks'),api('/api/shop/alerts').catch(()=>({unread:0})),api('/api/shop/orders/alerts').catch(()=>({unread:0}))]);
  const available=tasks.tasks.filter(t=>!t.my_status).length;
  return `${heading('Xin chào, '+m.user.name+' 👋','Mỗi Lúa đều có nguồn gốc rõ ràng, được lưu vào lịch sử.')}
+ ${orderAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">📦</span><div><strong>${orderAlerts.unread} đơn mua sắm vừa cập nhật!</strong><p>Kiểm tra trạng thái và lịch sử nhận Lúa trong Đơn hàng & Lúa.</p></div><button type="button" class="btn sm" data-go="shop-orders">Xem đơn →</button></div>`:''}
  ${shoppingAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">🎉</span><div><strong>Bạn có ${shoppingAlerts.unread} sản phẩm theo yêu cầu đã được tìm thấy!</strong><p>Nhấn để xem liên kết mua hàng trong gian hàng Trạm Có Lúa.</p></div><button type="button" class="btn sm" data-go="shop">Xem sản phẩm →</button></div>`:''}
  <section class="card hero"><div><div class="small">VÍ TÍCH LŨY</div><h2>${fmt(m.balance)} Lúa hiện có</h2><p>Tham gia nhiệm vụ và theo dõi số dư của bạn. Phần thưởng chỉ phát sinh từ nhiệm vụ hợp lệ.</p><button class="btn gold" data-go="tasks">Xem nhiệm vụ →</button></div><div class="hero-icon brand-hero-logo"><img src="/logo.svg" width="104" height="104" alt="Biểu tượng Trạm Có Lúa"></div></section>
  <section class="grid four section"><div class="card"><div class="metric-label">Số dư hiện tại</div><div class="metric">${fmt(m.balance)}</div><div class="metric-caption">Lúa có thể sử dụng</div></div>
@@ -1011,6 +1019,7 @@ app.addEventListener('click',async e=>{
  try{
   if(act.startsWith('shop-')){
    if(await handleShopAction(act,el,{api,toast,navigate,state,esc}))return;
+   if(await handleShopOrderAction(act,el,{api,toast,navigate,state,esc}))return;
   }
   if(act==='open-auth'){
    state.authMode=el.dataset.authMode==='register'?'register':'login';
@@ -1136,6 +1145,7 @@ app.addEventListener('submit',async e=>{
  try{
   if(kind.startsWith('shop-')){
    if(await handleShopSubmit(kind,b,{api,toast,navigate,state}))return;
+   if(await handleShopOrderSubmit(kind,b,{api,toast,navigate,state}))return;
   }
   if(kind==='fraud-search'){
    state.fraudSearch=String(b.keyword||'').trim().slice(0,120);
