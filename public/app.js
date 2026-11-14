@@ -321,6 +321,8 @@ async function navigate(view){
   }
   root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
  }
+ if(view==='withdrawals')updateWithdrawalFields(root.querySelector('form[data-form="withdraw"]'));
+ if(view==='payout-accounts')updatePayoutAccountFields(root.querySelector('form[data-form="payout-account"]'));
  if(state.me?.user.role==='member'){
   api('/api/shop/orders/alerts').then(r=>{
    document.querySelectorAll('[data-go="shop-orders"]').forEach(btn=>{
@@ -1005,19 +1007,54 @@ async function shrinkAppProof(file) {
 
 async function afterAction(view=state.view){await refreshMe();if(state.me)await navigate(view);}
 
-function updateWithdrawalFields(form) {
-  if(!form)return;
-  const isBank=form.querySelector('[name="payment_method"]')?.value!=='zalopay';
-  const isOther=isBank && form.querySelector('[name="bank_name"]')?.value==='other';
-  const enabled=!form.querySelector('button[type="submit"]')?.disabled;
-  const bank=document.getElementById('withdraw-bank-fields'),zalo=document.getElementById('withdraw-zalopay-fields'),other=document.getElementById('withdraw-bank-other');
-  if(!bank||!zalo||!other)return;
-  bank.hidden=!isBank;zalo.hidden=isBank;other.hidden=!isOther;
-  for(const input of bank.querySelectorAll('input,select')){
-    const active=isBank && (input.name!=='bank_other'||isOther) && enabled;
-    input.disabled=!active;input.required=active;
-  }
-  for(const input of zalo.querySelectorAll('input,select')){input.disabled=isBank||!enabled;input.required=!isBank&&enabled;}
+function updateWithdrawalFields(form){
+ if(!form)return;
+ const savedId=form.querySelector('[name="saved_account_id"]')?.value||'';
+ const saved=state.savedPayoutAccounts.find(a=>a.id===savedId);
+ const methodSelect=form.querySelector('[name="payment_method"]');
+ if(saved&&methodSelect)methodSelect.value=saved.payment_method;
+ const isBank=methodSelect?.value!=='zalopay',isOther=isBank&&form.querySelector('[name="bank_name"]')?.value==='other';
+ const enabled=!form.querySelector('button[type="submit"]')?.disabled;
+ const bank=form.querySelector('#withdraw-bank-fields'),zalo=form.querySelector('#withdraw-zalopay-fields');
+ const other=form.querySelector('#withdraw-bank-other'),preview=form.querySelector('#saved-payout-preview');
+ if(!bank||!zalo||!other)return;
+ bank.hidden=!isBank||!!saved;zalo.hidden=isBank||!!saved;other.hidden=!isOther;
+ for(const input of bank.querySelectorAll('input,select')){
+   const active=!saved&&isBank&&(input.name!=='bank_other'||isOther)&&enabled;
+   input.disabled=!active;input.required=active;
+ }
+ for(const input of zalo.querySelectorAll('input,select')){input.disabled=!!saved||isBank||!enabled;input.required=!saved&&!isBank&&enabled;}
+ const account=form.querySelector('[name="bank_account"]');
+ if(account){
+   const bvbank=isBank&&form.querySelector('[name="bank_name"]')?.value==='BVBank';
+   account.setAttribute('inputmode',bvbank?'text':'numeric');
+   account.setAttribute('pattern',bvbank?'[A-Za-z0-9]{5,30}':'[0-9]{5,30}');
+   account.placeholder=bvbank?'Ví dụ: 99ZP... hoặc số tài khoản':'Nhập số tài khoản ngân hàng';
+ }
+ if(preview){
+   preview.textContent=saved?
+     'Đã chọn: '+saved.bank_name+' · '+saved.account_number+' · '+saved.account_owner:
+     'Bạn đang nhập tài khoản mới; nếu muốn dùng lại lần sau, hãy lưu trong Tài khoản nhận tiền.';
+ }
+}
+function updatePayoutAccountFields(form){
+ if(!form)return;
+ const method=form.querySelector('[name="payment_method"]')?.value||'bank';
+ const bankFields=form.querySelector('#saved-bank-fields'),bank=form.querySelector('[name="bank_name"]');
+ const other=form.querySelector('#saved-bank-other'),otherInput=form.querySelector('[name="bank_other"]');
+ const number=form.querySelector('[name="account_number"]'),label=form.querySelector('#saved-number-label');
+ const isBank=method==='bank',isOther=isBank&&bank?.value==='other';
+ if(bankFields)bankFields.hidden=!isBank;
+ if(bank){bank.disabled=!isBank;bank.required=isBank;}
+ if(other)other.hidden=!isOther;
+ if(otherInput){otherInput.disabled=!isOther;otherInput.required=isOther;}
+ if(number){
+   const bvbank=isBank&&bank?.value==='BVBank';
+   number.setAttribute('inputmode',!isBank?'tel':bvbank?'text':'numeric');
+   number.setAttribute('pattern',!isBank?'0[0-9]{9}':bvbank?'[A-Za-z0-9]{5,30}':'[0-9]{5,30}');
+   number.placeholder=!isBank?'0xxxxxxxxx':bvbank?'Ví dụ: 99ZP...':'Nhập số tài khoản';
+ }
+ if(label)label.textContent=isBank?'Số tài khoản':'Số điện thoại ZaloPay';
 }
 function updateWithdrawalPreview(form){
  if(!form)return;
@@ -1051,8 +1088,16 @@ app.addEventListener('input',e=>{
 app.addEventListener('change',e=>{
  if(e.target.matches('form[data-form="card-redeem"] [name="denomination_vnd"]'))updateCardPreview(e.target.closest('form'));
  if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
- if(e.target.matches('form[data-form="withdraw"] [name="payment_method"],form[data-form="withdraw"] [name="bank_name"]')){
-  updateWithdrawalFields(e.target.closest('form'));
+ if(e.target.matches('form[data-form="payout-account"] [name="payment_method"],form[data-form="payout-account"] [name="bank_name"]')){
+  updatePayoutAccountFields(e.target.closest('form'));
+ }
+ if(e.target.matches('form[data-form="withdraw"] [name="payment_method"],form[data-form="withdraw"] [name="bank_name"],form[data-form="withdraw"] [name="saved_account_id"]')){
+  const form=e.target.closest('form');
+  if(e.target.name==='payment_method'){
+   const saved=state.savedPayoutAccounts.find(a=>a.id===form.querySelector('[name="saved_account_id"]')?.value);
+   if(saved&&saved.payment_method!==e.target.value)form.querySelector('[name="saved_account_id"]').value='';
+  }
+  updateWithdrawalFields(form);
  }
  if(e.target.matches('#task-form [name="category"]')){
   const video=e.target.value==='video', input=document.querySelector('#task-form [name="min_seconds"]');
