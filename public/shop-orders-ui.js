@@ -41,7 +41,7 @@ export async function shopOrdersPage(ctx){
     <div class="sorder-summary-card"><span>⌛ Đang xử lý</span><strong>${fmt(pending)}</strong><small>Chờ xác minh / giải quyết</small></div>
     <div class="sorder-summary-card sorder-summary-lua"><span>🌾 Lúa đã nhận</span><strong>${fmt(accrued)}</strong><small>Không tính Lúa dự kiến</small></div>
    </section>
-   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Mở gian hàng, chọn sản phẩm đã mua trong mục “Báo đơn hàng” riêng, rồi gửi ID đơn hàng. Bạn có thể theo dõi trạng thái và nhận Lúa khi đơn được giải quyết.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
+   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Sau khi mua qua gian hàng hoặc liên kết của Admin, vào mục “Báo đơn hàng” riêng và nhập ID đơn TikTok, không cần chọn sản phẩm. Admin sẽ kiểm tra nguồn mua trước khi xét Lúa.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
    <aside class="sorder-origin-policy" role="note"><strong>⚠️ Chỉ xét Lúa cho đơn mua đúng trang trưng bày của Admin</strong><p>Đơn phải được đặt qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm tại Trạm Có Lúa. Mua ở nơi khác sẽ không được tính thưởng Lúa, kể cả khi gửi ID đơn hàng.</p></aside>
    ${alerts.unread?`<div class="sorder-notice" role="status" aria-live="polite">🔔 Có <strong>${fmt(alerts.unread)} đơn hàng vừa được cập nhật</strong>. Xem trạng thái mới và phần thưởng bên dưới.</div>`:''}
    <div class="sorder-section-heading"><h2>Lịch sử đơn hàng</h2><span>${fmt(orders.length)} đơn</span></div>
@@ -76,7 +76,7 @@ export async function shopOrdersPage(ctx){
        <ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${e.status==='pending'?'Đã tiếp nhận ID đơn hàng.':e.status==='provisional'?'ID đơn đã được xác minh, đang chờ hoàn tất.':e.status==='resolved'?'Đơn đã giải quyết và phần thưởng đã vào ví.':e.status==='rejected'?'Đơn hàng không đủ điều kiện nhận thưởng.':'Trạng thái đã cập nhật.'}</p></li>`).join('')}</ol>
        </details>
      </article>`;
-   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Sau khi mua trong gian hàng, vào mục “Báo đơn hàng” riêng để lưu ID và theo dõi thưởng Lúa tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
+   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Sau khi mua qua gian hàng của Admin, nhập ID đơn TikTok tại mục “Báo đơn hàng” riêng để theo dõi thưởng Lúa.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
    <div class="sorder-footnote">Đây là trạng thái cập nhật trên Trạm Có Lúa, không phải dữ liệu đơn hàng đồng bộ trực tiếp từ TikTok. Lúa dự kiến không phải phần thưởng đã nhận. Lúa chính thức chỉ được cộng khi đơn hợp lệ và được giải quyết.</div>
  </div>`;
 }
@@ -133,19 +133,13 @@ export async function adminShopOrdersPage(ctx){
 
 export async function handleShopOrderAction(action,el,ctx){
  const {esc}=ctx;
- if(action!=='shop-report-order'&&action!=='shop-report-selected')return false;
- let id=el.dataset.id||'',name=el.dataset.title||'Sản phẩm TikTok Shop';
- if(action==='shop-report-selected'){
-  const pick=document.getElementById('shop-report-product'),option=pick?.selectedOptions?.[0];
-  id=pick?.value||'';
-  if(!id){ctx.toast('Hãy chọn sản phẩm đã mua trước khi báo mã đơn.',true);pick?.focus();return true;}
-  name=option?.textContent?.trim()||name;
- }
+ if(action!=='shop-report-order')return false;
+ const id=el.dataset.id||'',name=el.dataset.title||'';
  const root=document.getElementById('modal-root');
  root.innerHTML=`<div class="modal-cover"><section class="modal sorder-report-modal" role="dialog" aria-modal="true" aria-label="Báo đã đặt hàng">
    <button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
-   <div class="sorder-report-icon">🛍️</div><h3>Báo đã đặt hàng</h3><p><b>${esc(name)}</b></p>
-   <p>Đã mua trên TikTok? Hãy mở <b>TikTok → Đơn hàng → Chi tiết đơn</b>, sao chép mã đơn và điền dưới đây. Việc báo đơn chưa có nghĩa là đã được xác minh.</p>
+   <div class="sorder-report-icon">🛍️</div><h3>Báo đã đặt hàng</h3>${name?`<p><b>${esc(name)}</b></p>`:''}
+   <p>Vào <b>TikTok → Đơn hàng → Chi tiết đơn</b>, sao chép mã đơn và nhập dưới đây. Không cần chọn sản phẩm; Admin sẽ đối chiếu ID, sản phẩm và nguồn mua.</p>
    <div class="sorder-report-policy" role="note"><strong>⚠️ Lưu ý trước khi gửi ID đơn hàng</strong><p>Bạn phải mua qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm do Trạm Có Lúa giới thiệu. Nếu mua bên ngoài, ID đơn hàng sẽ không được xét thưởng Lúa dù bạn gửi về website.</p></div>
    <form data-form="shop-order-report" class="sorder-admin-form">
      <input type="hidden" name="product_id" value="${esc(id)}">
@@ -164,7 +158,7 @@ export async function handleShopOrderSubmit(kind,b,ctx){
  const {api,toast,navigate}=ctx;
  if(!kind.startsWith('shop-order-'))return false;
  if(kind==='shop-order-report'){
-  const result=await api('/api/shop/orders','POST',{product_id:b.product_id,order_reference:b.order_reference,note:b.note||''});
+  const result=await api('/api/shop/orders','POST',{order_reference:b.order_reference,note:b.note||'',...(b.product_id?{product_id:b.product_id}:{})});
   document.getElementById('modal-root').innerHTML='';
   toast(result.message);await navigate('shop-orders');return true;
  }
