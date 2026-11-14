@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS card_redemptions (
  rate_snapshot INTEGER NOT NULL CHECK(rate_snapshot>0),
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','delivered','rejected')),
  card_payload_encrypted TEXT NOT NULL DEFAULT '',
+ card_serial_fingerprint TEXT UNIQUE,
  admin_note TEXT NOT NULL DEFAULT '',
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  reviewed_at TEXT,
