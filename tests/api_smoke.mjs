@@ -406,54 +406,89 @@ assert.equal(legacyPaid.status,'paid');
 assert.equal(legacyPaid.payment_method,'zalopay');
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
 console.log('PASS: new ZaloPay withdrawals and wallet saving blocked; old ZaloPay D1 history/admin approve, pay and refund preserved.'); 
-// Phí xử lý cố định: khách thấy trước khi gửi, máy chủ trừ thêm vào Lúa giữ;
-// nếu từ chối hoặc STK sai thì hoàn CẢ phần phí, không ảnh hưởng giao dịch cũ.
-assert.equal((await call('/api/admin/settings','PUT',
- {withdrawal_fee_lua:'3',card_fee_lua:'7'},admCookie)).status,200);
+// Biểu phí rút mới tự động theo VND; không phụ thuộc phí rút cố định cũ.
+assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'3',card_fee_lua:'7'},admCookie)).status,200);
 const feeMeta=await call('/api/meta');
-assert.equal(feeMeta.data.withdrawal_fee_lua,3);
+assert.equal(feeMeta.data.withdrawal_fee_lua,0,'Legacy fixed withdrawal fee is not used');
+assert.equal(feeMeta.data.withdrawal_fee_vnd,2000);
+assert.equal(feeMeta.data.withdrawal_free_from_vnd,25000);
+assert.equal(feeMeta.data.withdrawal_min_vnd,5000);
 assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.settings.card_fee_lua,'7');
 const feeBefore=(await call('/api/me','GET',undefined,cookie)).data.balance;
-const blockedOldBrowser=await call('/api/withdrawals','POST',
- {amount:20,payment_method:'bank',bank_name:'Vietcombank',bank_account:'1234567890',bank_owner:'NGUYEN VAN A'},cookie);
-assert.equal(blockedOldBrowser.status,409,'Old Safari form cannot trigger hidden new fee');
+
+// Dưới 5.000đ không cho rút, kể cả khi đủ Lúa.
+const tooSmall=await call('/api/withdrawals','POST',{
+ amount:49990,expected_fee_lua:20000,payment_method:'bank',bank_name:'Vietcombank',
+ bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(tooSmall.status,400);
+const blockedOldBrowser=await call('/api/withdrawals','POST',{
+ amount:50000,payment_method:'bank',bank_name:'Vietcombank',
+ bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(blockedOldBrowser.status,409,'Old Safari form cannot bypass a newly required 2,000đ fee');
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
-const withFee=await call('/api/withdrawals','POST',
- {amount:20,payment_method:'bank',bank_name:'Vietcombank',
-  bank_account:'1234567890',bank_owner:'NGUYEN VAN A',expected_fee_lua:3},cookie);
+adjustPayoutTestWallet(userMe.data.user.id,70000);
+const withFee=await call('/api/withdrawals','POST',{
+ amount:50000,expected_fee_lua:20000,payment_method:'bank',bank_name:'Vietcombank',
+ bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+},cookie);
 assert.equal(withFee.status,200,JSON.stringify(withFee));
-assert.equal(withFee.data.amount_lua,20);
-assert.equal(withFee.data.fee_lua,3);
-assert.equal(withFee.data.total_lua,23);
-assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore-23);
+assert.equal(withFee.data.amount_lua,50000);
+assert.equal(withFee.data.fee_lua,20000);
+assert.equal(withFee.data.total_lua,70000);
+assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
 const feeHistory=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===withFee.data.id);
-assert.equal(feeHistory.fee_lua,3);
-assert.equal(feeHistory.vnd_amount,2,'Fee is charged in extra Lua, not deducted from VNĐ payout');
-assert.equal((await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals.find(x=>x.id===withFee.data.id).fee_lua,3);
-assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'9'},admCookie)).status,200);
-assert.equal((await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===withFee.data.id).fee_lua,3,
- 'Already submitted requests retain original fee snapshot');
-assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',
- {status:'rejected',admin_note:'Đã kiểm tra, từ chối giao dịch.'},admCookie)).status,200);
+assert.equal(feeHistory.fee_lua,20000);
+assert.equal(feeHistory.vnd_amount,5000,'Fee does not reduce actual transfer amount');
+assert.equal((await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals.find(x=>x.id===withFee.data.id).fee_lua,20000);
+
+// Admin setting for old fixed fee no longer affects any new request or old held fee.
+assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'99999'},admCookie)).status,200);
+assert.equal((await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(x=>x.id===withFee.data.id).fee_lua,20000);
+assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',{status:'rejected',admin_note:'Kiểm thử hoàn số Lúa đầy đủ'},admCookie)).status,200);
+adjustPayoutTestWallet(userMe.data.user.id,-70000);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
-assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',
- {status:'rejected',admin_note:'Trùng lặp'},admCookie)).status,409);
+assert.equal((await call('/api/admin/withdrawals/'+withFee.data.id,'POST',{status:'rejected',admin_note:'Trùng lặp'},admCookie)).status,409);
+
+// 24.999đ vẫn thu đúng 2.000đ, 25.000đ miễn hoàn toàn.
+adjustPayoutTestWallet(userMe.data.user.id,269990);
+const almostFree=await call('/api/withdrawals','POST',{
+ amount:249990,expected_fee_lua:20000,payment_method:'bank',bank_name:'BVBank',
+ bank_account:'99ZP123456',bank_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(almostFree.status,200,JSON.stringify(almostFree));
+assert.equal(almostFree.data.fee_lua,20000);
+assert.equal(almostFree.data.total_lua,269990);
+assert.equal((await call('/api/admin/withdrawals/'+almostFree.data.id,'POST',{status:'rejected',admin_note:'Kiểm thử biên 24.999đ'},admCookie)).status,200);
+adjustPayoutTestWallet(userMe.data.user.id,-269990);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
-assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'100000'},admCookie)).status,200);
-assert.equal((await call('/api/withdrawals','POST',
- {amount:20,payment_method:'bank',bank_name:'Vietcombank',bank_account:'1234567890',bank_owner:'NGUYEN VAN A',expected_fee_lua:100000},cookie)).status,400,
- 'Withdraw amount alone is insufficient when fee is larger than remaining balance');
+adjustPayoutTestWallet(userMe.data.user.id,250000);
+const freeWd=await call('/api/withdrawals','POST',{
+ amount:250000,expected_fee_lua:0,payment_method:'bank',bank_name:'BIDV',
+ bank_account:'1234567890',bank_owner:'NGUYEN VAN A'
+},cookie);
+assert.equal(freeWd.status,200,JSON.stringify(freeWd));
+assert.equal(freeWd.data.fee_lua,0);
+assert.equal(freeWd.data.total_lua,250000);
+assert.equal((await call('/api/admin/withdrawals/'+freeWd.data.id,'POST',{status:'rejected',admin_note:'Kiểm thử miễn phí 25.000đ'},admCookie)).status,200);
+adjustPayoutTestWallet(userMe.data.user.id,-250000);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
-assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'5'},admCookie)).status,200);
-const feeInvalid=await call('/api/withdrawals','POST',
- {amount:20,payment_method:'bank',bank_name:'BVBank',bank_account:'99ZP123456',bank_owner:'NGUYEN VAN A',expected_fee_lua:5},cookie);
+
+// STK sai sau khi Admin duyệt vẫn hoàn một lần cả tiền rút lẫn phí.
+adjustPayoutTestWallet(userMe.data.user.id,70000);
+const feeInvalid=await call('/api/withdrawals','POST',{
+ amount:50000,expected_fee_lua:20000,payment_method:'bank',bank_name:'BVBank',
+ bank_account:'99ZP123456',bank_owner:'NGUYEN VAN A'
+},cookie);
 assert.equal(feeInvalid.status,200,JSON.stringify(feeInvalid));
-assert.equal(feeInvalid.data.total_lua,25);
+assert.equal(feeInvalid.data.total_lua,70000);
 assert.equal((await call('/api/admin/withdrawals/'+feeInvalid.data.id,'POST',{status:'approved'},admCookie)).status,200);
 assert.equal((await call('/api/admin/withdrawals/'+feeInvalid.data.id,'POST',{status:'invalid_account'},admCookie)).status,200);
+adjustPayoutTestWallet(userMe.data.user.id,-70000);
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,feeBefore);
-assert.equal((await call('/api/admin/settings','PUT',{withdrawal_fee_lua:'0',card_fee_lua:'0'},admCookie)).status,200);
-console.log('PASS: withdrawal and card fee Admin settings, extra Lua hold, visible frozen fee, double-refund protection and invalid-account fee refunds.');
+assert.equal((await call('/api/admin/settings','PUT',{card_fee_lua:'0'},admCookie)).status,200);
+console.log('PASS: 5,000–24,999 VND costs 2,000 VND; 25,000+ is free; legacy fees ignored, refused/invalid requests refund exact held Lua.');
 const riskSummary=await call('/api/admin/risk-events','GET',undefined,admCookie);
 assert.equal(riskSummary.status,200);
 assert.ok(Array.isArray(riskSummary.data.repeated_devices));
