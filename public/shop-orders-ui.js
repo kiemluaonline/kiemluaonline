@@ -36,7 +36,7 @@ export async function shopOrdersPage(ctx){
               <div class="sorder-estimate-head"><span>🌾 Lúa dự kiến nhận</span><span class="sorder-estimate-sparkle">✦</span></div>
               <div class="sorder-estimate-amount">~ ${fmt(o.estimated_reward_lua)} <small>Lúa</small></div>
               <div class="sorder-estimate-wallet">♧ Chưa cộng vào ví Lúa</div>
-              <p><strong>Lưu ý:</strong> Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật sau khi đối soát hoàn tất. Đơn không đủ điều kiện sẽ không được nhận thưởng.</p>
+              <p><strong>Lưu ý:</strong> Số Lúa trên chỉ là dự kiến, có thể tăng hoặc giảm tùy theo kết quả giải quyết đơn hàng. Lúa chính thức chỉ được cập nhật khi đơn hàng đã giải quyết. Đơn không đủ điều kiện sẽ không được nhận thưởng.</p>
              </div>`
            :`<div class="sorder-wait">Chưa ghi Lúa vào ví. ${o.status==='provisional'?'Chưa có số Lúa dự kiến; đơn hàng đang chờ giải quyết.':o.status==='rejected'?'Đơn không đủ điều kiện nhận thưởng.':'Admin cần xác minh đơn hàng.'}</div>`}
        <details class="sorder-timeline"><summary>Xem lịch sử xử lý <span>⌄</span></summary><ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${e.status==='pending'?'Đã tiếp nhận ID đơn hàng.':e.status==='provisional'?'Đã tạm duyệt và đang chờ giải quyết.':e.status==='resolved'?'Đơn đã giải quyết, Lúa chính thức đã ghi vào ví.':e.status==='rejected'?'Đơn không đủ điều kiện nhận thưởng.':'Trạng thái đã cập nhật.'}</p></li>`).join('')}</ol></details>
