@@ -686,5 +686,6 @@ window.TramExtraTranslations = {
   "Không thể đổi loại khi sửa": "Hloov hom tsis tau thaum kho",
   "Phương thức nhận tiền": "Txoj kev txais nyiaj",
   "Ngân hàng nhận": "Txhab nyiaj txais",
-  "Ví ZaloPay": "Hnab ZaloPay"
+  "Ví ZaloPay": "Hnab ZaloPay",
+  "Thành viên có thể tự lưu tối đa 10 tài khoản nhận tiền, gồm ngân hàng hoặc ZaloPay, số tài khoản hoặc số điện thoại, tên chủ tài khoản và tên gợi nhớ, để chọn lại khi rút tiền. Thông tin đã lưu chỉ được hiển thị trong tài khoản đã đăng nhập của thành viên; thành viên có thể sửa hoặc xóa. Việc xóa thông tin đã lưu không xóa bản ghi thông tin nhận tiền của những yêu cầu rút đã gửi trước đó.": "Tus tswv cuab khaws tau txog 10 tus as khauj txais nyiaj, xws li txhab nyiaj lossis ZaloPay, tus lej as khauj lossis xov tooj, npe tus tswv thiab npe cim kom nco, kom xaiv tau dua thaum rho nyiaj. Cov ntaub ntawv khaws tsuas qhia hauv tus tswv cuab tus as khauj uas twb nkag lawm; nws kho lossis rho tawm tau. Kev rho tus as khauj khaws tsis rho cov ntaub ntawv txais nyiaj uas twb nyob hauv cov ntawv thov rho nyiaj qub."
 };
