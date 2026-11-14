@@ -375,6 +375,8 @@
   "Đã hủy vì chưa nhập đúng XOA.": "Raug tso tseg vim tsis tau sau XOA kom raug.",
   "[Bằng chứng đã xóa sau xét duyệt]": "[Pov thawj raug rho tom qab kuaj lawm]"
 };
+ // Bản dịch mở rộng cho mua sắm, đơn TikTok, Admin và thông báo.
+ Object.assign(translations, window.TramExtraTranslations||{});
  const originals=new WeakMap();
  const attributes=new WeakMap();
  const AVAILABLE=new Set(['vi','hmn']);
@@ -392,15 +394,57 @@
   if(match)return 'Muaj '+match[1]+' Lúa';
   match=/^Nhiệm vụ đã tạo \(([\d.,]+)\)$/.exec(v);
   if(match)return 'Cov haujlwm tsim lawm ('+match[1]+')';
+  // Các câu chứa số lượng / mã thật không có sẵn trong từ điển cố định.
+  const counts=[
+   [/^([\\d.,]+) sản phẩm$/,'yam khoom'],
+   [/^([\\d.,]+) sản phẩm đang hiển thị$/,'yam khoom tab tom qhia'],
+   [/^([\\d.,]+) yêu cầu$/,'daim ntawv thov'],
+   [/^([\\d.,]+) yêu cầu đang chờ$/,'daim ntawv thov tseem tos'],
+   [/^([\\d.,]+) đang chờ$/,'tseem tos'],
+   [/^([\\d.,]+) đơn$/,'daim xaj khoom'],
+   [/^([\\d.,]+) đơn đã ghi nhận$/,'daim xaj tau teev tseg'],
+   [/^([\\d.,]+) đơn hàng vừa được cập nhật$/,'daim xaj nyuam qhuav hloov']
+  ];
+  for(const [pattern,suffix] of counts){
+   match=pattern.exec(v);if(match)return match[1]+' '+suffix;
+  }
+  match=/^Bước ([123])\\/3$/.exec(v);
+  if(match)return 'Kauj ruam '+match[1]+'/3';
+  match=/^([0-3]) – (.+)$/.exec(v);
+  if(match){
+   const text=translation(match[2]);
+   if(text!==null)return match[1]+' – '+text;
+  }
+  match=/^Đã tạo yêu cầu (SP-[A-Z0-9-]+)$/.exec(v);
+  if(match)return 'Tsim daim ntawv thov '+match[1]+' lawm';
+  match=/^Đã tạo yêu cầu (SP-[A-Z0-9-]+)\\.$/.exec(v);
+  if(match)return 'Tsim daim ntawv thov '+match[1]+' lawm.';
+  match=/^Đã tìm thấy (\\d+) yêu cầu mới\\. Xem đường link mua trong mục Theo dõi yêu cầu bên dưới\\.$/.exec(v);
+  if(match)return 'Muaj '+match[1]+' daim ntawv thov tshiab twb nrhiav tau lawm. Saib cov link yuav khoom hauv qab.';
+  match=/^\\+([\\d.,]+) Lúa$/.exec(v);
+  if(match)return '+'+match[1]+' Lúa';
+  match=/^~ ([\\d.,]+) Lúa$/.exec(v);
+  if(match)return '~ '+match[1]+' Lúa';
+  match=/^Đã tạo yêu cầu (.+)$/.exec(v);
+  if(match&&match[1].startsWith('SP-'))return 'Tsim daim ntawv thov '+match[1]+' lawm';
   return null;
  }
  function translateText(node){
   const parent=node.parentElement;
   if(!parent||parent.closest('script,style,textarea,code,pre,[contenteditable="true"],.captcha'))return;
   let original=originals.get(node);
-  if(original===undefined){
+  if(original!==undefined){
+   const prev=translation(original.trim());
+   const rendered=prev===null?original:original.replace(original.trim(),prev);
+   if(node.nodeValue!==original&&node.nodeValue!==rendered){
+    // Ứng dụng vừa cập nhật cùng một text node: không dùng lại bản dịch cũ.
+    original=node.nodeValue;
+    if(translation(original.trim())===null){originals.delete(node);return;}
+    originals.set(node,original);
+   }
+  }else{
    original=node.nodeValue;
-   // Không lưu vào WeakMap nếu đây là văn bản động/chưa có bản dịch.
+   // Không sửa nội dung khách nhập hoặc dữ liệu động không có bản dịch.
    if(translation(original.trim())===null)return;
    originals.set(node,original);
   }
@@ -416,7 +460,15 @@
   let original=attributes.get(el);
   for(const name of names){
    if(!el.hasAttribute(name))continue;
-   const value=original?.[name]??el.getAttribute(name);
+   let value=original?.[name]??el.getAttribute(name);
+   if(original?.[name]!==undefined){
+    const rendered=translation(original[name]);
+    const displayed=el.getAttribute(name);
+    if(displayed!==original[name]&&displayed!==rendered){
+     value=displayed;
+     original[name]=value;
+    }
+   }
    const translated=translation(value);
    if(translated===null)continue;
    if(!original){original={};attributes.set(el,original);}
@@ -464,12 +516,18 @@
   translateTree(document.body);
   const observer=new MutationObserver(mutations=>{
    for(const change of mutations){
-    for(const node of change.addedNodes)translateTree(node);
+    if(change.type==='childList'){
+     for(const node of change.addedNodes)translateTree(node);
+    }else if(change.type==='characterData')translateText(change.target);
+    else if(change.type==='attributes')translateAttributes(change.target);
    }
   });
-  observer.observe(document.body,{childList:true,subtree:true});
+  observer.observe(document.body,{
+   childList:true,subtree:true,characterData:true,attributes:true,
+   attributeFilter:['placeholder','aria-label','title']
+  });
  }
- window.TramI18n={getLanguage:()=>language,setLanguage,translateTree};
+ window.TramI18n={getLanguage:()=>language,setLanguage,translateTree,translateLabel:v=>language==='hmn'?(translation(String(v))??String(v)):String(v)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',onReady,{once:true});
  else onReady();
 })();
