@@ -163,3 +163,16 @@
  .sorder-customer .sorder-award-final strong{font-size:19px}
 }
 @media(prefers-reduced-motion:reduce){.sorder-customer *{scroll-behavior:auto}}
+
+/* Admin: xác minh một chạm, lý do từ chối cố định, không còn nhập đoạn văn. */
+.sorder-admin .sorder-preset-label{font-size:12px;color:#426c55;font-weight:800;margin-top:3px}
+.sorder-admin .sorder-preset-note{display:flex;align-items:flex-start;gap:11px;padding:15px 16px;border-radius:14px;border:1px solid #b8dbc3;background:linear-gradient(135deg,#f2faf4,#fbfefa);color:#25543b;line-height:1.65}
+.sorder-admin .sorder-preset-note>span{display:grid;place-items:center;width:27px;height:27px;flex:0 0 27px;background:#d9efde;border-radius:50%;color:#157146;font-weight:900}
+.sorder-admin .sorder-preset-note p{font-size:13px;font-weight:650;margin:1px 0 0}
+.sorder-admin .sorder-preset-hint{font-size:11px;color:#6f8978;line-height:1.65;margin:0 0 5px}
+.sorder-admin .sorder-admin-form select{appearance:auto;width:100%;min-width:0;min-height:48px;padding:11px 12px;border:1px solid #cddfd1;border-radius:11px;background:#fff;color:#214b33;font-size:12px;line-height:1.6}
+.sorder-admin .sorder-admin-form select:focus{outline:none;border-color:#287e59;box-shadow:0 0 0 3px #1a745b20}
+.sorder-admin .sorder-reject-form{background:#fffaf9;padding:14px;border-radius:15px;border:1px solid #f3dcd7}
+.sorder-admin .sorder-reject-form label{color:#8a493e}
+.sorder-admin .sorder-reject-form .btn{white-space:normal}
+@media(max-width:560px){.sorder-admin .sorder-preset-note{padding:12px}.sorder-admin .sorder-reject-form{padding:12px}}
