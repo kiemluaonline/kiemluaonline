@@ -54,7 +54,7 @@ export async function shopOrdersAPI(req,env,H){
   const admin=await auth(req,env,'admin');
   if(p==='/api/admin/shop/orders'&&m==='GET'){
     const rows=await db.prepare(`SELECT o.id,o.user_id,o.product_id,o.order_reference,o.status,
-      o.customer_note,o.admin_note,o.commission_vnd,o.reward_lua,o.rate_snapshot,
+      o.customer_note,o.admin_note,o.verification_note,o.commission_vnd,o.reward_lua,o.rate_snapshot,
       o.settled_reference,o.created_at,o.updated_at,o.reviewed_at,o.resolved_at,
       u.name,u.email,p.title AS product_title
       FROM shop_orders o JOIN users u ON u.id=o.user_id
@@ -77,9 +77,9 @@ export async function shopOrdersAPI(req,env,H){
       const privateNote=str(b.admin_note,300);
       if(privateNote.length<10)fail(400,'Ghi chú đối chiếu đơn đã giao và đã thanh toán (ít nhất 10 ký tự).');
       const results=await db.batch([
-        db.prepare(`UPDATE shop_orders SET status='provisional',admin_note=?,
+        db.prepare(`UPDATE shop_orders SET status='provisional',admin_note=?,verification_note=?,
           reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,seen_at=NULL
-          WHERE id=? AND status='pending'`).bind('Đơn đã được đối chiếu, chờ giải quyết hoa hồng.',oid),
+          WHERE id=? AND status='pending'`).bind('Đơn đã được đối chiếu, chờ giải quyết hoa hồng.',privateNote,oid),
         db.prepare(`INSERT INTO shop_order_events(id,order_id,actor_id,status,detail)
           SELECT ?,id,?,'provisional','Đã xác minh nhận hàng/thanh toán; chờ TikTok giải quyết hoa hồng'
           FROM shop_orders WHERE id=? AND status='provisional'
