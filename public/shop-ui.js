@@ -24,7 +24,7 @@ export async function shopPage(ctx){
   const visible=data.products.filter(x=>activeCategory==='all'||x.category===activeCategory);
   const ready=data.requests.filter(x=>x.status==='ready'&&x.product_link);
   const fresh=ready.filter(x=>!x.seen_at);
-  if(fresh.length)api('/api/shop/requests/read','POST',{}).catch(()=>{});
+  if(fresh.length)await api('/api/shop/requests/read','POST',{}).catch(()=>{});
   const contact=(which)=>!!data.contacts[which];
   return `<div class="shop-page">
    <section class="shop-hero">
