@@ -110,6 +110,9 @@ console.log('PASS: shop requests have no daily or pending-count quota; wallet re
 // Public shopping cards must not reveal affiliate-program wording even by default.
 const product={id:'p123',title:'Dầu gội',description:'',link:'https://vt.tiktok.com/ZS123456/',category:'beauty'};
 const memberCard=shopCard(product,x=>String(x));
+assert.match(memberCard,/Xem & mua ngay/,'Approved primary button label is present');
+assert.match(memberCard,/Lúa xét khi đơn hàng hoàn tất/,'No immediate Lua payout promise');
+assert.doesNotMatch(memberCard,/Nhận Lúa ngay|nhận Lúa ngay/i,'Do not promise instant rewards');
 assert.doesNotMatch(memberCard,/Affiliate|tiếp thị liên kết|hoa hồng|lợi nhuận|đối soát/i);
 const memberShop=await shopPage({
  api:async path=>({products:[product],requests:[],contacts:{zalo:'',telegram:''}}),
