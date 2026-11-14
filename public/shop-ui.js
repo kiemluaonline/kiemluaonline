@@ -98,7 +98,7 @@ export async function adminShopPage(ctx){
     </form>
    </div>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Danh sách sản phẩm</h2><p>Bật/tắt hoặc sửa sản phẩm mà không ảnh hưởng nhiệm vụ cũ.</p></div></div>
-   ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc(p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
+   ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
    </section>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Yêu cầu sản phẩm từ khách</h2><p>Đối chiếu mã SP ở đầu thẻ với mã khách gửi trên Zalo/Telegram. Bạn có thể chọn sản phẩm có sẵn hoặc nhập link sản phẩm mới ngay tại yêu cầu để tự báo khách.</p></div><span class="shop-count">${pending.length} đang chờ</span></div>
    ${d.requests.length?`<div class="shop-admin-requests">${d.requests.map(r=>`<article class="shop-admin-request"><div class="shop-request-top"><strong>${esc(r.code)}</strong><span class="shop-state shop-state-${esc(r.status)}">${r.status==='pending'?'Chờ xử lý':r.status==='ready'?'Đã có sản phẩm':'Từ chối'}</span></div>
@@ -135,7 +135,8 @@ export async function handleShopAction(action,el,ctx){
       const channel=el.dataset.channel;
       const note=document.getElementById('shop-note')?.value||'';
       const r=await api('/api/shop/requests','POST',{channel,note});
-      const msg='Mã yêu cầu của tôi: '+r.code+'\nTôi muốn tìm sản phẩm theo ảnh hoặc link gửi kèm.';
+      const tr=text=>window.TramI18n?.translateLabel(text)??text;
+       const msg=tr('Mã yêu cầu của tôi:')+' '+r.code+'\n'+tr('Tôi muốn tìm sản phẩm theo ảnh hoặc link gửi kèm.');
       const root=document.getElementById('modal-root');
       root.innerHTML=`<div class="modal-cover"><section class="modal shop-contact-modal" role="dialog" aria-modal="true" aria-label="Gửi yêu cầu sản phẩm">
        <button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
