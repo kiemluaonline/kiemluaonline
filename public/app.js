@@ -1,5 +1,8 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-product-privacy-v5';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-reward-only-v7';
+// Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
+const localizedConfirm=message=>window.confirm(window.TramI18n?.translateLabel(message)??message);
+const localizedPrompt=(message,defaultValue='')=>window.prompt(window.TramI18n?.translateLabel(message)??message,defaultValue);
 // Giao diện dùng dữ liệu thật từ /api. Không gán Lúa ở phía trình duyệt.
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
@@ -1083,28 +1086,28 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    const type=el.dataset.lockType==='confirmed'?'confirmed':'review';
    if(el.dataset.status==='suspended'){
     if(type==='confirmed'){
-     reason=prompt('Ghi lý do xác định vi phạm nghiêm trọng (chỉ Admin xem; tối thiểu 10 ký tự):','Vi phạm nghiêm trọng quy định chống gian lận của Trạm Có Lúa.')||'';
+     reason=localizedPrompt('Ghi lý do xác định vi phạm nghiêm trọng (chỉ Admin xem; tối thiểu 10 ký tự):','Vi phạm nghiêm trọng quy định chống gian lận của Trạm Có Lúa.')||'';
      if(reason.trim().length<10)return;
-     evidence=prompt('Nhập bằng chứng cụ thể đã đối chiếu (bắt buộc ít nhất 20 ký tự; không chỉ dựa vào IP trùng):','')||'';
+     evidence=localizedPrompt('Nhập bằng chứng cụ thể đã đối chiếu (bắt buộc ít nhất 20 ký tự; không chỉ dựa vào IP trùng):','')||'';
      if(evidence.trim().length<20){toast('Cần mô tả bằng chứng cụ thể trước khi khóa vĩnh viễn.',true);return;}
-     if(!confirm('XÁC NHẬN KHÓA VĨNH VIỄN? Khách sẽ thấy mẫu thông báo vi phạm nghiêm trọng. Chưa tự xóa Lúa hay tự từ chối mọi giao dịch.'))return;
+     if(!localizedConfirm('XÁC NHẬN KHÓA VĨNH VIỄN? Khách sẽ thấy mẫu thông báo vi phạm nghiêm trọng. Chưa tự xóa Lúa hay tự từ chối mọi giao dịch.'))return;
     }else{
-     reason=prompt('Nhập lý do tạm khóa để xác minh (tối thiểu 10 ký tự):','Hoạt động tài khoản cần được xác minh thêm.')||'';
+     reason=localizedPrompt('Nhập lý do tạm khóa để xác minh (tối thiểu 10 ký tự):','Hoạt động tài khoản cần được xác minh thêm.')||'';
      if(reason.trim().length<10)return;
-     if(!confirm('Tạm khóa để xác minh và dừng duyệt/thanh toán khoản rút chưa hoàn tất?'))return;
+     if(!localizedConfirm('Tạm khóa để xác minh và dừng duyệt/thanh toán khoản rút chưa hoàn tất?'))return;
     }
-   }else if(!confirm(type==='confirmed'?'Đây là tài khoản đã bị khóa vĩnh viễn. Bạn chắc chắn muốn khôi phục tài khoản?':'Mở lại tài khoản và tiếp tục xử lý yêu cầu rút tiền?'))return;
+   }else if(!localizedConfirm(type==='confirmed'?'Đây là tài khoản đã bị khóa vĩnh viễn. Bạn chắc chắn muốn khôi phục tài khoản?':'Mở lại tài khoản và tiếp tục xử lý yêu cầu rút tiền?'))return;
    await api('/api/admin/users/'+encodeURIComponent(el.dataset.id),'PATCH',{
     status:el.dataset.status,suspension_type:type,suspension_reason:reason,suspension_evidence:evidence
    });
    toast('Đã cập nhật loại khóa tài khoản.');await navigate('admin-users');return;
   }
   if(act==='review'){
-   if(!confirm(el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
+   if(!localizedConfirm(el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status});toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
   }
   if(act==='erase-evidence'){
-    if(!confirm('Bạn muốn XÓA VĨNH VIỄN ảnh/nội dung bằng chứng đã duyệt hoặc từ chối này? Không thể khôi phục bằng chứng. Lịch sử nhiệm vụ và Lúa của khách vẫn được giữ nguyên.'))return;
+    if(!localizedConfirm('Bạn muốn XÓA VĨNH VIỄN ảnh/nội dung bằng chứng đã duyệt hoặc từ chối này? Không thể khôi phục bằng chứng. Lịch sử nhiệm vụ và Lúa của khách vẫn được giữ nguyên.'))return;
     await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id)+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'});
     toast('Đã xóa bằng chứng. Vẫn giữ kết quả duyệt và Lúa của thành viên.');
     await afterAction('admin-reviews');return;
@@ -1112,9 +1115,9 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='erase-all-processed-evidence'){
     const count=Number(el.dataset.count);
     if(!Number.isSafeInteger(count)||count<1){toast('Không có bằng chứng cần xóa. Hãy tải lại danh sách.',true);return;}
-    if(!confirm('CẢNH BÁO: Bạn sắp XÓA VĨNH VIỄN bằng chứng của '+count+' hồ sơ đã duyệt hoặc từ chối (kể cả hồ sơ cũ không hiển thị). Số Lúa và lịch sử nhiệm vụ không bị xóa. Bạn muốn tiếp tục?'))return;
+    if(!localizedConfirm('CẢNH BÁO: Bạn sắp XÓA VĨNH VIỄN bằng chứng của '+count+' hồ sơ đã duyệt hoặc từ chối (kể cả hồ sơ cũ không hiển thị). Số Lúa và lịch sử nhiệm vụ không bị xóa. Bạn muốn tiếp tục?'))return;
     const required='XOA '+count;
-    const answer=prompt('Để xác nhận xóa bằng chứng của đúng '+count+' hồ sơ, nhập '+required+':','');
+    const answer=localizedPrompt('Để xác nhận xóa bằng chứng của đúng '+count+' hồ sơ, nhập '+required+':','');
     if(answer!==required){toast('Đã hủy vì chưa nhập đúng '+required+'.',true);return;}
     const result=await api('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE',expected_count:count});
     toast(result.message);await afterAction('admin-reviews');return;
@@ -1122,18 +1125,18 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='withdraw-admin'){
    let note='',riskOverride='';
    if(['approved','paid'].includes(el.dataset.status)&&el.dataset.riskLevel==='serious'){
-    riskOverride=prompt('⚠️ Tài khoản có nhiều tín hiệu rủi ro. Sau khi đối chiếu bằng chứng, nhập lý do cho phép duyệt/chi trả (ít nhất 20 ký tự):','')||'';
+    riskOverride=localizedPrompt('⚠️ Tài khoản có nhiều tín hiệu rủi ro. Sau khi đối chiếu bằng chứng, nhập lý do cho phép duyệt/chi trả (ít nhất 20 ký tự):','')||'';
     if(riskOverride.trim().length<20)return;
    }
    if(el.dataset.status==='approved'){
-     if(!confirm('Duyệt yêu cầu rút tiền này? Yêu cầu sẽ chuyển sang Đã duyệt, chưa phải đã thanh toán.'))return;
+     if(!localizedConfirm('Duyệt yêu cầu rút tiền này? Yêu cầu sẽ chuyển sang Đã duyệt, chưa phải đã thanh toán.'))return;
    }else if(el.dataset.status==='paid'){
-     if(!confirm('Bạn đã CHUYỂN TIỀN THẬT qua ngân hàng hoặc ZaloPay và kiểm tra giao dịch thành công?'))return;
-     note=prompt('Nhập mã giao dịch hoặc ghi chú đối chiếu thanh toán (bắt buộc):','')||'';
+     if(!localizedConfirm('Bạn đã CHUYỂN TIỀN THẬT qua ngân hàng hoặc ZaloPay và kiểm tra giao dịch thành công?'))return;
+     note=localizedPrompt('Nhập mã giao dịch hoặc ghi chú đối chiếu thanh toán (bắt buộc):','')||'';
      if(!note.trim())return;
    }else if(el.dataset.status==='invalid_account'){
-     if(!confirm('Xác nhận số tài khoản không đúng? Khách sẽ được thông báo và hoàn Lúa để gửi yêu cầu mới.'))return;
-   }else{note=prompt('Nhập lý do từ chối (bắt buộc):','')||'';if(!note.trim())return;}
+     if(!localizedConfirm('Xác nhận số tài khoản không đúng? Khách sẽ được thông báo và hoàn Lúa để gửi yêu cầu mới.'))return;
+   }else{note=localizedPrompt('Nhập lý do từ chối (bắt buộc):','')||'';if(!note.trim())return;}
    await api('/api/admin/withdrawals/'+encodeURIComponent(el.dataset.id),'POST',{status:el.dataset.status,admin_note:note,risk_override_note:riskOverride});toast('Đã xử lý yêu cầu rút tiền.');await afterAction('admin-withdrawals');return;
   }
  }catch(err){toast(err.message,true);}
