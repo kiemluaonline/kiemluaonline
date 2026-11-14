@@ -961,8 +961,9 @@ const heldMember=networkMembers[0];
 sqlite.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
  VALUES(?,?,30,'Test reward','smoke','hold-member')`).run('hold-reward-2026',heldMember.id);
 await call('/api/admin/settings','PUT',{withdrawals_enabled:'1',lua_per_vnd:'10',min_withdraw_lua:'10'},admCookie);
+adjustPayoutTestWallet(heldMember.id,69980);
 const heldWithdrawal=await call('/api/withdrawals','POST',{
- amount:20,payment_method:'bank',bank_name:'BIDV',
+ amount:50000,expected_fee_lua:20000,payment_method:'bank',bank_name:'BIDV',
  bank_account:'1234567890',bank_owner:'NETWORK MEMBER'
 },heldMember.cookie);
 assert.equal(heldWithdrawal.status,200,JSON.stringify(heldWithdrawal));
@@ -1081,8 +1082,9 @@ const activeAnti=await call('/api/me','GET',undefined,antiA.cookie,'203.0.113.20
 assert.equal(activeAnti.status,200,'Scoring does not auto-suspend a customer');
 sqlite.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
  VALUES(?,?,100,'Mock task reward','smoke','antifraud-funds')`).run('antifraud-funds-entry',antiA.id);
+adjustPayoutTestWallet(antiA.id,69980);
 const antiWD=await call('/api/withdrawals','POST',{
- amount:20,payment_method:'bank',bank_name:'BIDV',
+ amount:50000,expected_fee_lua:20000,payment_method:'bank',bank_name:'BIDV',
  bank_account:'908070605040',bank_owner:'TEST HOLDER'
 },antiA.cookie,'203.0.113.200',antiBrowser);
 assert.equal(antiWD.status,200,JSON.stringify(antiWD));
@@ -1205,14 +1207,15 @@ assert.equal((await call('/api/admin/settings','PUT',{
 },admCookie)).status,200);
 const savedBalance=(await call('/api/me','GET',undefined,newLogin.cookie)).data.balance;
 assert.equal((await call('/api/withdrawals','POST',{
- amount:10,saved_account_id:oldSavedId,payment_method:'bank',
+ amount:50000,expected_fee_lua:20000,saved_account_id:oldSavedId,payment_method:'bank',
  bank_name:'INVALID',bank_account:'not-valid',bank_owner:'OTHER'
 },refCookie)).status,404,'Cannot withdraw using another member saved account');
 assert.equal((await call('/api/withdrawals','POST',{
- amount:10,saved_account_id:oldSavedId,payment_method:'bank'
+ amount:50000,expected_fee_lua:20000,saved_account_id:oldSavedId,payment_method:'bank'
 },newLogin.cookie)).status,400,'Old saved wallet cannot be used for new requests');
+adjustPayoutTestWallet(ownerOfOld,69990);
 const savedRequest=await call('/api/withdrawals','POST',{
- amount:10,saved_account_id:bankId,payment_method:'zalopay',
+ amount:50000,expected_fee_lua:20000,saved_account_id:bankId,payment_method:'zalopay',
  bank_name:'ATTACKER BANK',bank_account:'00000',bank_owner:'ATTACKER'
 },newLogin.cookie);
 assert.equal(savedRequest.status,200,JSON.stringify(savedRequest));
@@ -1239,6 +1242,7 @@ assert.equal(defaultAfterDelete.find(x=>x.id===bankId).is_default,1,'Deleting a 
 assert.equal((await call('/api/admin/withdrawals/'+savedRequest.data.id,'POST',{
  status:'rejected',admin_note:'Kiểm thử hoàn số Lúa đầy đủ'
 },admCookie)).status,200);
+adjustPayoutTestWallet(ownerOfOld,-69990);
 assert.equal((await call('/api/me','GET',undefined,newLogin.cookie)).data.balance,savedBalance);
 assert.equal((await call('/api/payout-accounts/'+bankId,'DELETE',{},newLogin.cookie)).status,200);
 assert.equal((await call('/api/history','GET',undefined,newLogin.cookie)).data.withdrawals.find(x=>x.id===savedRequest.data.id).bank_account,
