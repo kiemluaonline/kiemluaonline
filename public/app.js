@@ -654,7 +654,7 @@ async function withdrawals(){
  const data=await api('/api/history'), meta=state.meta;
  const t=`${heading('Yêu cầu rút tiền','Theo dõi: Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra và chi trả bằng ngân hàng hoặc ZaloPay.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
- const form=`<form class="card" data-form="withdraw" data-fee="${Number(meta.withdrawal_fee_lua)||0}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3>
+ const form=`<form class="card" data-form="withdraw" data-fee="${Number(meta.withdrawal_fee_lua)||0}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="${Number(meta.withdrawal_fee_lua)||0}">
  ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
  <div class="note">Tối thiểu ${fmt(meta.min_withdraw_lua)} Lúa • ${meta.lua_per_vnd?fmt(meta.lua_per_vnd)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'} • Số dư: ${fmt(state.me.balance)} Lúa</div>
  <div class="withdraw-fee-preview" role="status">
