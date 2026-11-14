@@ -4,7 +4,7 @@
 - **Rút dưới 5.000đ**: không được gửi yêu cầu.
 - **Rút từ 5.000đ đến 24.999đ**: phụ thu **2.000đ** cho mỗi yêu cầu, tính thành Lúa theo tỷ giá Admin hiện đặt.
 - **Rút từ 25.000đ trở lên**: **miễn phí rút tiền**.
-- Giới hạn tối thiểu bổ sung theo Lúa do Admin từng đặt, nếu cao hơn mức quy đổi 5.000đ, vẫn có hiệu lực.
+- Mức rút tối thiểu cố định **5.000đ theo tỷ giá hiện hành**. Cài đặt ngưỡng Lúa tối thiểu cũ không còn được áp dụng để tránh mâu thuẫn, nhưng không xóa giá trị cũ trong D1.
 - Không trừ phí khỏi số tiền khách nhận; máy chủ giữ riêng phần Lúa tương đương phí **cộng thêm** vào số Lúa quy đổi.
 
 ### Ví dụ
