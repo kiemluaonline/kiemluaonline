@@ -193,3 +193,47 @@
 @media(max-width:570px){
  .sorder-origin-policy,.sorder-report-policy{padding:12px 13px}
 }
+
+
+/* Báo đơn trên iPhone: giữ modal đúng viewport và chặn Safari auto-zoom. */
+#modal-root:has(.sorder-report-modal) .modal-cover{
+ position:fixed;inset:0;z-index:65;
+ display:flex;align-items:center;justify-content:center;
+ padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+ overflow-y:auto;overflow-x:hidden;
+ overscroll-behavior:contain;
+}
+.sorder-report-modal{
+ box-sizing:border-box;display:block;
+ flex:0 1 520px;max-width:min(520px,100%);
+ width:100%;min-width:0;
+ max-height:calc(100dvh - 24px);
+ overflow-y:auto;overflow-x:hidden;
+ overscroll-behavior:contain;
+ margin:auto;padding:22px;
+ border-radius:20px;
+ font-size:14px;
+}
+.sorder-report-modal *{max-width:100%;box-sizing:border-box}
+.sorder-report-modal h3{font-size:23px;line-height:1.25;overflow-wrap:anywhere}
+.sorder-report-modal>p,.sorder-report-modal .sorder-report-policy p{overflow-wrap:anywhere}
+.sorder-report-modal .sorder-admin-form{min-width:0;max-width:100%}
+.sorder-report-modal .sorder-admin-form input,
+.sorder-report-modal .sorder-admin-form textarea{
+ display:block;width:100%;max-width:100%;min-width:0;
+ font-size:16px!important;line-height:1.4;
+}
+.sorder-report-modal .sorder-admin-form .btn{width:100%;white-space:normal}
+@media(max-width:570px){
+ #modal-root:has(.sorder-report-modal) .modal-cover{align-items:flex-start;padding:12px}
+ .sorder-report-modal{
+  flex:0 1 auto;max-width:100%;max-height:calc(100dvh - 24px);
+  padding:17px 15px;border-radius:17px;
+ }
+ .sorder-report-modal .sorder-report-icon{font-size:30px}
+ .sorder-report-modal h3{font-size:21px;margin:5px 0 8px}
+ .sorder-report-modal>p{font-size:12px;line-height:1.6}
+ .sorder-report-modal .sorder-report-policy{padding:10px 11px;margin:9px 0 10px}
+ .sorder-report-modal .sorder-admin-form{margin-top:10px;padding-top:11px;gap:7px}
+ .sorder-report-modal .sorder-admin-form textarea{min-height:70px}
+}
