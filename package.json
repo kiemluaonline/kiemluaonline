@@ -9,8 +9,8 @@
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 migrations apply tram-lua-db --local",
     "db:remote": "wrangler d1 migrations apply tram-lua-db --remote",
-    "check": "node --check src/worker.js && node --check src/shop.js && node --check src/shop-orders.js && node --check public/app.js && node --check public/shop-ui.js && node --check public/shop-orders-ui.js && node --check public/i18n.js && node --check public/i18n-extra.js && node tests/shop_contact_smoke.mjs && node tests/shop_quick_fulfill.mjs && node tests/shop_orders_smoke.mjs && node tests/i18n_hmoob_smoke.mjs && node tests/i18n_legacy_cache_smoke.mjs && node tests/api_smoke.mjs",
-    "check:google": "node --check src/worker.js && node --check src/shop.js && node --check src/shop-orders.js && node --check public/app.js && node --check public/shop-ui.js && node --check public/shop-orders-ui.js && node --check public/i18n.js && node --check public/i18n-extra.js && node tests/google_auth_smoke.mjs"
+    "check": "node --check src/worker.js && node --check src/shop.js && node --check src/shop-orders.js && node --check src/card-redemptions.js && node --check public/card-redemptions-ui.js && node --check public/app.js && node --check public/shop-ui.js && node --check public/shop-orders-ui.js && node --check public/i18n.js && node --check public/i18n-extra.js && node tests/shop_contact_smoke.mjs && node tests/shop_quick_fulfill.mjs && node tests/shop_orders_smoke.mjs && node tests/card_redemptions_smoke.mjs && node tests/i18n_hmoob_smoke.mjs && node tests/i18n_legacy_cache_smoke.mjs && node tests/api_smoke.mjs",
+    "check:google": "node --check src/worker.js && node --check src/shop.js && node --check src/shop-orders.js && node --check src/card-redemptions.js && node --check public/card-redemptions-ui.js && node --check public/app.js && node --check public/shop-ui.js && node --check public/shop-orders-ui.js && node --check public/i18n.js && node --check public/i18n-extra.js && node tests/google_auth_smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.45.0"
