@@ -1,7 +1,7 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261114-shop-origin-v13';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261114-shop-origin-v13';
 import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261114-fees-v3';
-import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-payout-inline-v1';
+import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-bank-only-v1';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
 const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message),defaultValue);
@@ -12,7 +12,7 @@ const publicHomeHTML = app.innerHTML;
 const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
-  ['BVBank','BVBank – Ngân hàng TMCP Bản Việt (có thể nhận từ ZaloPay)'],['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
+  ['BVBank','BVBank (hỗ trợ số tài khoản liên kết ZaloPay 99ZP)'],['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
   ['Agribank','Agribank'],['MB Bank','MB Bank'],['Techcombank','Techcombank'],
   ['ACB','ACB'],['VPBank','VPBank'],['TPBank','TPBank'],
   ['Sacombank','Sacombank'],['VIB','VIB'],['SHB','SHB'],
@@ -322,7 +322,7 @@ async function navigate(view){
   root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
  }
  if(view==='withdrawals')updateWithdrawalFields(root.querySelector('form[data-form="withdraw"]'));
- if(view==='payout-accounts')updatePayoutAccountFields(root.querySelector('form[data-form="payout-account"]'));
+ if(view==='withdrawals')updatePayoutAccountFields(root.querySelector('form[data-form="payout-account"]'));
  if(state.me?.user.role==='member'){
   api('/api/shop/orders/alerts').then(r=>{
    document.querySelectorAll('[data-go="shop-orders"]').forEach(btn=>{
@@ -341,7 +341,7 @@ async function navigate(view){
 async function page(view){
  switch(view){
  case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'shop-orders':return shopOrdersPage({api,esc,heading,fmt,dt});case 'referrals':return referrals();
- case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'payout-accounts':return withdrawals();case 'cards':return cardRedemptionsPage({api,esc,heading,dt});case 'history':return history();case 'profile':return profile();
+ case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'cards':return cardRedemptionsPage({api,esc,heading,dt});case 'history':return history();case 'profile':return profile();
  case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt});case 'admin-users':return adminUsers();
  case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();case 'admin-cards':return adminCardRedemptionsPage({api,esc,heading,dt});
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
@@ -657,11 +657,11 @@ async function withdrawals(){
  const [data,accountsData]=await Promise.all([api('/api/history'),api('/api/payout-accounts').catch(()=>({accounts:[],unavailable:true}))]);
  const meta=state.meta;
  state.savedPayoutAccounts=accountsData.accounts||[];
- const savedAccounts=state.savedPayoutAccounts;
- const defaultBank=savedAccounts.find(x=>x.payment_method==='bank'&&x.is_default);
- const preferred=defaultBank||savedAccounts.find(x=>x.is_default)||savedAccounts[0];
+ const savedAccounts=state.savedPayoutAccounts.filter(x=>x.payment_method==='bank');
+ const defaultBank=savedAccounts.find(x=>x.is_default);
+ const preferred=defaultBank||savedAccounts[0];
  const savedSelection=preferred?.id||'';
- const t=`${heading('Yêu cầu rút tiền','Theo dõi: Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra và chi trả bằng ngân hàng hoặc ZaloPay.')}`;
+ const t=`${heading('Yêu cầu rút tiền','Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra trước khi chuyển khoản ngân hàng.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
  const form=`<form class="card" data-form="withdraw" data-fee="${Number(meta.withdrawal_fee_lua)||0}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="${Number(meta.withdrawal_fee_lua)||0}">
  ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
@@ -674,33 +674,28 @@ async function withdrawals(){
    <div><span>Tiền nhận dự kiến:</span><b id="withdraw-payout">—</b></div>
    <p class="note">Phí được cộng thêm vào số Lúa rút. Nếu bị từ chối hoặc thông tin nhận tiền sai, hoàn đủ cả tiền rút và phí.</p>
  </div>
- <div class="withdraw-saved-picker">
-  <label for="withdraw-saved-account">🏦 Chọn tài khoản nhận tiền đã lưu</label>
+ ${savedAccounts.length?`<div class="withdraw-saved-picker">
+  <label for="withdraw-saved-account">🏦 Tài khoản ngân hàng đã lưu</label>
   <select id="withdraw-saved-account" name="saved_account_id" ${!meta.withdrawals_enabled?'disabled':''}>
    <option value="">＋ Nhập tài khoản mới</option>
    ${savedAccounts.map(a=>`<option value="${esc(a.id)}" ${a.id===savedSelection?'selected':''}>${esc(a.nickname||a.bank_name)} – ${esc(a.account_number)}${a.is_default?' ✓':''}</option>`).join('')}
   </select>
   <div id="saved-payout-preview" class="withdraw-saved-description">${preferred?'Đã chọn: '+esc(preferred.bank_name)+' · '+esc(preferred.account_number)+' · '+esc(preferred.account_owner):'Chưa có tài khoản đã lưu. Bạn có thể thêm một lần để những lần sau chỉ cần chọn.'}</div>
-  <p class="note">Muốn thêm tài khoản mới? Chọn “Nhập tài khoản mới” rồi điền thông tin bên dưới.</p>
- </div>
- <div id="withdraw-payment-method">${select('payment_method','Phương thức nhận tiền',[['bank','Chuyển khoản ngân hàng'],['zalopay','Ví ZaloPay']],preferred?.payment_method||'bank')}</div>
+ </div>`:''}
+ <input type="hidden" name="payment_method" value="bank">
+ <p class="note">Nhận qua ngân hàng, gồm BVBank khi có số tài khoản BVBank liên kết ZaloPay.</p>
  <div id="withdraw-bank-fields">
  <div class="field"><label for="bank_name">Ngân hàng nhận</label><select id="bank_name" name="bank_name" required ${!meta.withdrawals_enabled?'disabled':''}>${BANK_LIST.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select></div>
  <div id="withdraw-bank-other" hidden>${field('bank_other','Nhập tên ngân hàng khác','',`disabled`)}</div>
  ${field('bank_account','Số tài khoản ngân hàng (BVBank có thể có chữ)','',`required inputmode="numeric" pattern="[0-9]{5,30}" ${!meta.withdrawals_enabled?'disabled':''}`)}
  ${field('bank_owner','Tên chủ tài khoản ngân hàng','',`required ${!meta.withdrawals_enabled?'disabled':''}`)}
  </div>
- <div id="withdraw-zalopay-fields" hidden>
- ${field('zalopay_phone','Số điện thoại đăng ký ZaloPay','',`type="tel" inputmode="tel" pattern="0[0-9]{9}" maxlength="10" placeholder="0xxxxxxxxx" disabled`)}
- ${field('zalopay_owner','Tên chủ ví ZaloPay','',`disabled`)}
- <p class="note">Ví ZaloPay phải thuộc số điện thoại người nhận. Admin sẽ chuyển tiền và đối chiếu thủ công.</p>
- </div>
  <label id="withdraw-save-account-line" class="saved-payout-check"><input type="checkbox" name="save_account_default" value="1" ${!meta.withdrawals_enabled?'disabled':''}> ✓ Lưu thông tin nhận tiền này làm mặc định cho lần rút sau</label>
  <button class="btn" type="submit" ${!meta.withdrawals_enabled?'disabled':''}>Gửi yêu cầu</button>
  <p class="note">Lúa sẽ được giữ ngay khi gửi để không bị rút trùng. Nếu Admin từ chối hoặc đánh dấu số tài khoản không đúng, hệ thống tự hoàn Lúa.</p></form>`;
  const rows=data.withdrawals.map(w=>`<tr><td>${dt(w.created_at)}</td><td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div></td><td>${fmt(w.vnd_amount)} ₫</td><td>${esc(w.payment_method==='zalopay'?'ZaloPay':w.bank_name)}<div class="small muted">${esc(w.bank_account)}</div></td><td>${chip(w.status)}</td><td>${esc(w.admin_note||'—')}</td></tr>`);
  const manager=await payoutAccountsPage({api,esc,heading,bankList:BANK_LIST,embedded:true});
- return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Quản trị viên duyệt yêu cầu trước, sau đó thực hiện chuyển khoản ngân hàng hoặc ZaloPay ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>Lịch sử yêu cầu rút</h3>${table(['Thời gian','Số Lúa','Giá trị VNĐ','Nhận qua','Trạng thái','Ghi chú'],rows)}</section>`;
+ return t+info+`<section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>Lịch sử yêu cầu rút</h3>${table(['Thời gian','Số Lúa','Giá trị VNĐ','Nhận qua','Trạng thái','Ghi chú'],rows)}</section>`;
 }
 async function history(){
  const d=await api('/api/history');
@@ -781,7 +776,7 @@ async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
  const risks=new Map((riskData.profiles||[]).map(x=>[x.user_id,x]));
  return `${heading('Yêu cầu rút tiền','Bước 1: Duyệt yêu cầu. Bước 2: Chuyển tiền thật. Bước 3: Đánh dấu đã thanh toán.')}
- <div class="callout">Website chỉ ghi nhận yêu cầu và tình trạng. Bạn phải tự chuyển tiền qua ngân hàng hoặc ZaloPay ngoài hệ thống và đối chiếu trước khi bấm “Đã thanh toán”.</div>
+ <div class="callout">Website chỉ ghi nhận yêu cầu và trạng thái. Bạn chuyển tiền theo thông tin nhận của từng yêu cầu, đối chiếu giao dịch thực tế rồi mới bấm “Đã thanh toán”.</div>
  <section class="card section">${table(['Thành viên','Số tiền','Kênh nhận','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr>
  <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div>${risks.get(w.user_id)?.level==='serious'?`<div class="small red">⚠ Cần đối chiếu trước khi thanh toán • ${fmt(risks.get(w.user_id).score)}/100</div>`:''}</td>
  <td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div><div class="green">${fmt(w.vnd_amount)} ₫</div></td>
@@ -924,7 +919,7 @@ async function adminSettings(){
  ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}</div>
  <h3>💸 Phí xử lý rút tiền và đổi thẻ cào</h3>
  <p class="note">Phí cố định mỗi yêu cầu, cộng thêm vào số Lúa khách rút hoặc đổi thẻ. Nhập 0 để miễn phí. Khách được xem phí trước khi gửi; nếu Admin từ chối, hoàn cả phí. Thay đổi phí không ảnh hưởng các yêu cầu đã gửi.</p>
- <div class="form-row">${field('withdrawal_fee_lua','Phí mỗi lần rút tiền (Lúa) – ngân hàng / ZaloPay',s.withdrawal_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
+ <div class="form-row">${field('withdrawal_fee_lua','Phí mỗi lần rút tiền (Lúa) – ngân hàng',s.withdrawal_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
  ${field('card_fee_lua','Phí mỗi lần đổi thẻ cào (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}</div>
  <h3>🛡️ Quota chống lạm dụng</h3>
  <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
@@ -1013,24 +1008,21 @@ function updateWithdrawalFields(form){
  if(!form)return;
  const savedId=form.querySelector('[name="saved_account_id"]')?.value||'';
  const saved=state.savedPayoutAccounts.find(a=>a.id===savedId);
- const methodSelect=form.querySelector('[name="payment_method"]');
- if(saved&&methodSelect)methodSelect.value=saved.payment_method;
- const isBank=methodSelect?.value!=='zalopay',isOther=isBank&&form.querySelector('[name="bank_name"]')?.value==='other';
+ const isOther=form.querySelector('[name="bank_name"]')?.value==='other';
  const enabled=!form.querySelector('button[type="submit"]')?.disabled;
- const bank=form.querySelector('#withdraw-bank-fields'),zalo=form.querySelector('#withdraw-zalopay-fields');
+ const bank=form.querySelector('#withdraw-bank-fields');
  const other=form.querySelector('#withdraw-bank-other'),preview=form.querySelector('#saved-payout-preview');
  const saveLine=form.querySelector('#withdraw-save-account-line');
  if(saveLine){saveLine.hidden=!!saved;saveLine.querySelector('input').disabled=!!saved||!enabled;}
- if(!bank||!zalo||!other)return;
- bank.hidden=!isBank||!!saved;zalo.hidden=isBank||!!saved;other.hidden=!isOther;
+ if(!bank||!other)return;
+ bank.hidden=!!saved;other.hidden=!!saved||!isOther;
  for(const input of bank.querySelectorAll('input,select')){
-   const active=!saved&&isBank&&(input.name!=='bank_other'||isOther)&&enabled;
+   const active=!saved&&(input.name!=='bank_other'||isOther)&&enabled;
    input.disabled=!active;input.required=active;
  }
- for(const input of zalo.querySelectorAll('input,select')){input.disabled=!!saved||isBank||!enabled;input.required=!saved&&!isBank&&enabled;}
  const account=form.querySelector('[name="bank_account"]');
  if(account){
-   const bvbank=isBank&&form.querySelector('[name="bank_name"]')?.value==='BVBank';
+   const bvbank=form.querySelector('[name="bank_name"]')?.value==='BVBank';
    account.setAttribute('inputmode',bvbank?'text':'numeric');
    account.setAttribute('pattern',bvbank?'[A-Za-z0-9]{5,30}':'[0-9]{5,30}');
    account.placeholder=bvbank?'Ví dụ: 99ZP... hoặc số tài khoản':'Nhập số tài khoản ngân hàng';
@@ -1038,27 +1030,25 @@ function updateWithdrawalFields(form){
  if(preview){
    preview.textContent=saved?
      'Đã chọn: '+saved.bank_name+' · '+saved.account_number+' · '+saved.account_owner:
-     'Bạn đang nhập tài khoản mới. Tích ô lưu mặc định bên dưới nếu muốn dùng lại lần sau.';
+     'Muốn dùng lại lần sau, tích ô lưu mặc định.';
  }
 }
 function updatePayoutAccountFields(form){
  if(!form)return;
- const method=form.querySelector('[name="payment_method"]')?.value||'bank';
  const bankFields=form.querySelector('#saved-bank-fields'),bank=form.querySelector('[name="bank_name"]');
  const other=form.querySelector('#saved-bank-other'),otherInput=form.querySelector('[name="bank_other"]');
- const number=form.querySelector('[name="account_number"]'),label=form.querySelector('#saved-number-label');
- const isBank=method==='bank',isOther=isBank&&bank?.value==='other';
- if(bankFields)bankFields.hidden=!isBank;
- if(bank){bank.disabled=!isBank;bank.required=isBank;}
+ const number=form.querySelector('[name="account_number"]');
+ const isOther=bank?.value==='other';
+ if(bankFields)bankFields.hidden=false;
+ if(bank){bank.disabled=false;bank.required=true;}
  if(other)other.hidden=!isOther;
  if(otherInput){otherInput.disabled=!isOther;otherInput.required=isOther;}
  if(number){
-   const bvbank=isBank&&bank?.value==='BVBank';
-   number.setAttribute('inputmode',!isBank?'tel':bvbank?'text':'numeric');
-   number.setAttribute('pattern',!isBank?'0[0-9]{9}':bvbank?'[A-Za-z0-9]{5,30}':'[0-9]{5,30}');
-   number.placeholder=!isBank?'0xxxxxxxxx':bvbank?'Ví dụ: 99ZP...':'Nhập số tài khoản';
+   const bvbank=bank?.value==='BVBank';
+   number.setAttribute('inputmode',bvbank?'text':'numeric');
+   number.setAttribute('pattern',bvbank?'[A-Za-z0-9]{5,30}':'[0-9]{5,30}');
+   number.placeholder=bvbank?'Ví dụ: 99ZP...':'Nhập số tài khoản';
  }
- if(label)label.textContent=isBank?'Số tài khoản':'Số điện thoại ZaloPay';
 }
 function updateWithdrawalPreview(form){
  if(!form)return;
@@ -1095,13 +1085,8 @@ app.addEventListener('change',e=>{
  if(e.target.matches('form[data-form="payout-account"] [name="payment_method"],form[data-form="payout-account"] [name="bank_name"]')){
   updatePayoutAccountFields(e.target.closest('form'));
  }
- if(e.target.matches('form[data-form="withdraw"] [name="payment_method"],form[data-form="withdraw"] [name="bank_name"],form[data-form="withdraw"] [name="saved_account_id"]')){
-  const form=e.target.closest('form');
-  if(e.target.name==='payment_method'){
-   const saved=state.savedPayoutAccounts.find(a=>a.id===form.querySelector('[name="saved_account_id"]')?.value);
-   if(saved&&saved.payment_method!==e.target.value)form.querySelector('[name="saved_account_id"]').value='';
-  }
-  updateWithdrawalFields(form);
+ if(e.target.matches('form[data-form="withdraw"] [name="bank_name"],form[data-form="withdraw"] [name="saved_account_id"]')){
+  updateWithdrawalFields(e.target.closest('form'));
  }
  if(e.target.matches('#task-form [name="category"]')){
   const video=e.target.value==='video', input=document.querySelector('#task-form [name="min_seconds"]');
@@ -1246,7 +1231,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    if(el.dataset.status==='approved'){
      if(!localizedConfirm('Duyệt yêu cầu rút tiền này? Yêu cầu sẽ chuyển sang Đã duyệt, chưa phải đã thanh toán.'))return;
    }else if(el.dataset.status==='paid'){
-     if(!localizedConfirm('Bạn đã CHUYỂN TIỀN THẬT qua ngân hàng hoặc ZaloPay và kiểm tra giao dịch thành công?'))return;
+     if(!localizedConfirm('Bạn đã CHUYỂN TIỀN THẬT đúng theo thông tin nhận và kiểm tra giao dịch thành công?'))return;
      note=localizedPrompt('Nhập mã giao dịch hoặc ghi chú đối chiếu thanh toán (bắt buộc):','')||'';
      if(!note.trim())return;
    }else if(el.dataset.status==='invalid_account'){
@@ -1289,17 +1274,17 @@ app.addEventListener('submit',async e=>{
   }
   if(kind==='password'){const r=await api('/api/me/password','POST',b);state.me=null;renderAuth();toast(r.message);}
   if(kind==='withdraw'){
-    if(b.payment_method==='bank'&&b.bank_name==='other'&&!b.bank_other?.trim())throw new Error('Nhập tên ngân hàng nhận tiền.');
+    if(!b.saved_account_id&&b.bank_name==='other'&&!b.bank_other?.trim())throw new Error('Nhập tên ngân hàng nhận tiền.');
     const r=await api('/api/withdrawals','POST',{...b,amount:Number(b.amount)});
     let savedOk=false,saveError='';
     if(b.save_account_default==='1'&&!b.saved_account_id){
-      const bank=b.payment_method==='zalopay'?'ZaloPay':b.bank_name==='other'?String(b.bank_other||'').trim():b.bank_name;
-      const number=b.payment_method==='zalopay'?String(b.zalopay_phone||'').trim():String(b.bank_account||'').trim();
-      const owner=b.payment_method==='zalopay'?String(b.zalopay_owner||'').trim():String(b.bank_owner||'').trim();
+      const bank=b.bank_name==='other'?String(b.bank_other||'').trim():b.bank_name;
+      const number=String(b.bank_account||'').trim();
+      const owner=String(b.bank_owner||'').trim();
       try{
         const existing=state.savedPayoutAccounts.find(a=>a.payment_method===b.payment_method&&a.bank_name===bank&&a.account_number===number);
         if(existing)await api('/api/payout-accounts/'+encodeURIComponent(existing.id)+'/default','POST',{});
-        else await api('/api/payout-accounts','POST',{payment_method:b.payment_method,bank_name:bank,account_number:number,account_owner:owner,nickname:'',is_default:true});
+        else await api('/api/payout-accounts','POST',{payment_method:'bank',bank_name:bank,account_number:number,account_owner:owner,nickname:'',is_default:true});
         savedOk=true;
       }catch(e){saveError=e.message||'Không thể lưu tài khoản.';}
     }
