@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { shopOrdersAPI, ORDER_CHECK_NOTE, ORDER_REJECTION_REASONS } from '../src/shop-orders.js';
+import { shopOrdersAPI, ORDER_CHECK_NOTE, ORDER_REJECTION_REASONS, UNASSIGNED_SHOP_PRODUCT_ID } from '../src/shop-orders.js';
 import { shopOrdersPage,adminShopOrdersPage } from '../public/shop-orders-ui.js';
 
 const db=new DatabaseSync(':memory:');
@@ -243,4 +243,24 @@ for(const code of ['0','1','3']){
  assert.equal(db.prepare('SELECT admin_note FROM shop_orders WHERE id=?').get(created.data.id).admin_note,ORDER_REJECTION_REASONS[code]);
 }
 assert.equal(db.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE user_id='user2'").get().n,0,'Rejected orders cannot add Lua');
-console.log('PASS: TikTok order reporting, manual verification, settled commission, one-time credit, statuses, alerts and private earnings.');
+// Thành viên báo ID đơn mà không cần chọn bất kỳ sản phẩm nào.
+const noPicker=await call('/api/shop/orders','POST',{order_reference:'TIKTOKNOPICKER20261115',note:'Đã mua từ link Admin'},'user1');
+assert.equal(noPicker.status,201,'ID-only order reporting must work on the existing D1 schema');
+const unassigned=db.prepare('SELECT product_id,status FROM shop_orders WHERE id=?').get(noPicker.data.id);
+assert.equal(unassigned.product_id,UNASSIGNED_SHOP_PRODUCT_ID,'Do not silently attribute a sale to an arbitrary product');
+assert.equal(unassigned.status,'pending');
+assert.equal(db.prepare('SELECT is_active FROM shop_products WHERE id=?').get(UNASSIGNED_SHOP_PRODUCT_ID).is_active,0,
+ 'Technical placeholder must not appear in public products');
+assert.equal((await call('/api/shop/orders')).data.orders.find(o=>o.id===noPicker.data.id).product_title,
+ 'Chưa xác định sản phẩm – Admin đối chiếu ID');
+const adminNoPicker=(await call('/api/admin/shop/orders','GET',undefined,'admin1')).data.orders.find(x=>x.id===noPicker.data.id);
+assert.equal(adminNoPicker.status,'pending');
+assert.equal(adminNoPicker.product_title,'Chưa xác định sản phẩm – Admin đối chiếu ID');
+const nextNoPicker=await call('/api/shop/orders','POST',{order_reference:'TIKTOKNOPICKER20261116'},'user2');
+assert.equal(nextNoPicker.status,201);
+assert.equal(db.prepare('SELECT COUNT(*) n FROM shop_products WHERE id=?').get(UNASSIGNED_SHOP_PRODUCT_ID).n,1,
+ 'The same hidden unassigned product must be reused, never create extra product cards');
+assert.equal(db.prepare('SELECT COUNT(*) n FROM wallet_entries WHERE reference_type=? AND reference_id=?').get('shop_order',noPicker.data.id).n,0);
+assert.equal((await call('/api/admin/shop/orders/'+noPicker.data.id,'POST',{status:'rejected',reason_code:'3'},'admin1')).status,200,
+ 'Admin still decides whether the ID-only order meets the source requirements');
+console.log('PASS: TikTok ID-only order reports preserve source checks, old orders, manual verification, private fields and one-time Lua settlement.');
