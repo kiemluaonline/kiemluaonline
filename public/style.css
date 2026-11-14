@@ -616,3 +616,44 @@ html[lang="hmn"] .language-legal-notice{display:block}
 .withdraw-history-value span{color:#3e6b53;font-size:14px;font-weight:600}
 .withdraw-history-meta{font-size:12px;color:#64796d;margin:6px 0;line-height:1.6;overflow-wrap:anywhere}
 .withdraw-history-item p{font-size:13px;line-height:1.6;margin:11px 0 0;color:#557365}
+
+
+/* Thẻ thanh toán tự luân phiên các lệnh paid thật, không lộ số tài khoản. */
+.task-payment .paid-slide[hidden],.paid-rotation-controls[hidden]{display:none!important}
+.paid-slide{min-height:105px;animation:paid-slide-in .28s ease}
+@keyframes paid-slide-in{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.paid-rotation-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:8px}
+.paid-rotation-controls button{border:1px solid #b8deca;background:#fff;color:#156244;width:32px;height:32px;border-radius:10px;font-size:22px;display:grid;place-items:center;line-height:1}
+.paid-rotation-count{font-weight:800;font-size:12px;color:#366c54;font-variant-numeric:tabular-nums}
+.paid-rotation-controls button:focus-visible{outline:2px solid #15845f;outline-offset:2px}
+
+/* Hai nút trên góc phải: chuông và truy cập Hồ sơ, luôn hiện trên iPhone. */
+.topbar{position:relative;z-index:30}
+.topbar .top-right{flex-shrink:0;min-width:0}
+.header-icon-button,.topbar .header-avatar{flex:0 0 38px;width:38px;height:38px;min-width:38px;border:1px solid #d5e6dc;border-radius:50%;background:#f1f8f2;color:#175f44;display:inline-grid!important;place-items:center;position:relative;padding:0}
+.header-icon-button:hover,.topbar .header-avatar:hover{background:#e0f2e6;text-decoration:none}
+.topbar .header-avatar{background:#216e55;border-color:#216e55;color:#fff;font-size:16px;font-weight:800}
+.header-icon-button:focus-visible,.topbar .header-avatar:focus-visible{outline:3px solid #d0b55e;outline-offset:2px}
+.header-notice-badge{position:absolute;right:-4px;top:-5px;min-width:18px;height:18px;padding:2px 4px;background:#cf4b35;border-radius:12px;color:#fff;font-size:10px;font-weight:800;line-height:14px}
+.header-notice-badge[hidden]{display:none!important}
+.header-notification-panel{position:absolute;right:24px;top:calc(100% - 1px);width:min(390px,calc(100vw - 28px));max-height:min(68vh,540px);overflow:hidden;background:#fff;border:1px solid #d5e5da;box-shadow:0 18px 55px #092e2640;border-radius:17px;z-index:35;display:flex;flex-direction:column;color:#224c3c}
+.header-notification-panel[hidden]{display:none!important}
+.header-notification-title{padding:15px 16px;border-bottom:1px solid #e1ede4;display:flex;justify-content:space-between;align-items:center}
+.header-notification-title strong{font-size:15px}
+.header-notification-title button{border:0;background:transparent;color:#567466;font-size:24px;min-width:30px;min-height:30px}
+.header-notification-content{overflow-y:auto;overscroll-behavior:contain;padding:6px;max-height:440px}
+.header-notification-item{display:flex;flex-direction:column;align-items:flex-start;width:100%;gap:5px;padding:13px 12px;text-align:left;background:#fff;color:#285943;border:0;border-bottom:1px solid #edf2ee;white-space:normal;border-radius:8px}
+.header-notification-item:hover,.header-notification-item:focus-visible{background:#edf7f1}
+.header-notification-item strong{font-size:13px;line-height:1.4}
+.header-notification-item span{font-size:12px;line-height:1.55;color:#647d6e;overflow-wrap:anywhere}
+.header-notification-item small{font-size:11px;color:#799083}
+.header-notification-empty{padding:18px 12px;color:#6b8576;font-size:13px}
+@media(max-width:600px){
+ .topbar{padding-left:12px;padding-right:12px}
+ .topbar .language-toggle{display:none}
+ .topbar .top-right{gap:6px}
+ .topbar .header-avatar,.topbar .header-icon-button{flex-basis:36px;width:36px;height:36px;min-width:36px}
+ .topbar .balance-pill{padding:7px 8px;font-size:12px}
+ .header-notification-panel{position:fixed;top:74px;left:12px;right:12px;width:auto;max-height:75dvh}
+}
+@media(prefers-reduced-motion:reduce){.paid-slide{animation:none}}
