@@ -86,7 +86,7 @@ export async function adminShopPage(ctx){
      <div class="shop-admin-buttons"><button class="btn" type="submit">💾 ${edit.id?'Lưu thay đổi':'Thêm sản phẩm'}</button>${edit.id?'<button type="button" class="btn alt" data-action="shop-reset-product">Thêm mới</button>':''}</div>
     </form>
     <form class="card" data-form="shop-contact"><h3>💬 Kênh liên hệ Admin</h3><p class="note">Khách gửi ảnh/link trực tiếp qua Zalo hoặc Telegram, không tải ảnh lên máy chủ.</p>
-      ${field('shop-zalo','Số Zalo hoặc link zalo.me',d.contacts.zalo||'','placeholder="https://zalo.me/..."')}
+      ${field('shop-zalo','Số Zalo hoặc link QR zaloapp.com',d.contacts.zalo||'','placeholder="https://zaloapp.com/qr/p/... hoặc zalo.me/..."')}
       ${field('shop-telegram','Username hoặc link Telegram',d.contacts.telegram||'','placeholder="@username hoặc https://t.me/..."')}
       <button class="btn" type="submit">Lưu kênh liên hệ</button>
       <div class="shop-admin-tip">Thông tin này được dùng cho nút liên hệ ở trang mua sắm, không xuất hiện trên trang Admin khác.</div>
