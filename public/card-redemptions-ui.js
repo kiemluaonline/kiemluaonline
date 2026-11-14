@@ -22,7 +22,7 @@ export async function cardRedemptionsPage(ctx){
     <div class="cards-hero-icon" aria-hidden="true">🎁</div></div>
   ${!data.enabled?`<div class="cards-warning" role="status">⚠️ Chức năng đổi thẻ cào chưa được Admin mở. Bạn vẫn có thể xem lịch sử thẻ đã đổi ở phía dưới.</div>`:''}
   <div class="cards-columns">
-   <form class="card cards-exchange-form" data-form="card-redeem" data-fee="${fee}" data-rate="${rate}">
+   <form class="card cards-exchange-form" data-form="card-redeem" data-fee="${fee}" data-rate="${rate}"><input type="hidden" name="expected_fee_lua" value="${fee}">
      <h3>Chọn thẻ cào muốn đổi</h3>
      <label for="card-carrier">Nhà mạng</label><select id="card-carrier" name="carrier" required ${data.enabled?'':'disabled'}>
        ${(data.carriers||[]).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}
@@ -145,7 +145,7 @@ export async function handleCardSubmit(kind,b,ctx){
  let response;
  if(kind==='card-redeem'){
    if(!ask('Xác nhận đổi Lúa lấy thẻ cào? Lúa sẽ được giữ tạm và chờ Admin phát mã thẻ.'))return true;
-   response=await api('/api/card-redemptions','POST',{carrier:b.carrier,denomination_vnd:Number(b.denomination_vnd)});
+   response=await api('/api/card-redemptions','POST',{carrier:b.carrier,denomination_vnd:Number(b.denomination_vnd),expected_fee_lua:Number(b.expected_fee_lua)});
    toast(response.message);await navigate('cards');
  }else if(kind==='card-settings'){
    response=await api('/api/admin/card-redemptions/settings','POST',{enabled:b.enabled});
