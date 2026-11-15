@@ -284,16 +284,33 @@
 }
 .shop-showcase-entry .shop-report-heading strong{color:#205c3f;}
 .shop-showcase-entry .shop-report-heading span{color:#5a7561;}
+/* CTA báo đơn: chữ trắng tương phản cao với nền xanh; không giả trạng thái bị khóa. */
 .shop-showcase-entry .shop-report-open.btn:not(:disabled){
  align-self:flex-start;
- border:1px solid #d0aa54;
- color:#22452e;
- background:linear-gradient(110deg,#f1cd79,#fae6a9);
- box-shadow:0 6px 16px rgba(168,126,45,.16);
+ min-height:54px;
+ border:1px solid #d7b260;
+ border-radius:13px;
+ color:#fff!important;
+ -webkit-text-fill-color:#fff;
+ font-weight:850;
+ font-size:15px;
+ text-shadow:0 1px 2px rgba(3,46,28,.2);
+ opacity:1;
+ cursor:pointer;
+ background:linear-gradient(120deg,#125f42,#198558 64%,#218a60);
+ box-shadow:0 7px 17px rgba(15,104,65,.22),0 0 0 1px rgba(242,207,126,.15);
 }
 .shop-showcase-entry .shop-report-open.btn:not(:disabled):hover{
- background:linear-gradient(110deg,#f8db93,#ffeabd);
- box-shadow:0 9px 18px rgba(168,126,45,.20);
+ background:linear-gradient(120deg,#166e49,#1b9561);
+ box-shadow:0 10px 22px rgba(15,104,65,.28);
+}
+.shop-showcase-entry .shop-report-open.btn:not(:disabled):focus-visible{
+ outline:3px solid #deb95c;
+ outline-offset:3px;
+}
+.shop-showcase-entry .shop-report-open.btn:disabled{
+ cursor:not-allowed;
+ opacity:.48;
 }
 @media(max-width:570px){
  .shop-showcase-entry>.shop-report-section{margin:1px 0 0;padding:14px 0 0;border-radius:0;}
