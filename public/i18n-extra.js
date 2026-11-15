@@ -262,7 +262,7 @@ window.TramExtraTranslations = {
   "Trạng thái thực tế": "Xwm txheej tiag",
   "Trạm Có Lúa – Hệ thống chống gian lận": "Trạm Có Lúa – Tshuab tiv thaiv kev dag",
   "hoặc": "lossis",
-  "Gmail mới sẽ được hướng dẫn đồng ý điều khoản để tạo tài khoản thành viên; Gmail đã liên kết sẽ đăng nhập ngay.": "Gmail tshiab yuav tsum pom zoo cov cai kom tsim as khauj; Gmail uas twb txuas lawm nkag tau tam sim.",
+  "Gmail mới sẽ tự tạo tài khoản sau khi Google xác minh; Gmail đã liên kết đăng nhập ngay. Không cần tích điều khoản.": "Gmail tshiab yuav tsim as khauj thaum Google txheeb xyuas tiav; Gmail uas twb txuas lawm nkag tau tam sim. Tsis tas kos lub thawv cai.",
   "Vui lòng thử lại sau hoặc liên hệ quản trị viên.": "Thov sim dua tom qab lossis tiv tauj Admin.",
   "Đã liên kết": "Twb txuas lawm",
   "Liên kết Google": "Txuas Google",
@@ -764,4 +764,8 @@ window.TramExtraTranslations = {
   "Sau khi mua qua gian hàng của Admin, nhập ID đơn TikTok tại mục “Báo đơn hàng” riêng để theo dõi thưởng Lúa.": "Thaum yuav ntawm Admin lub khw lawm, sau TikTok ID rau hauv qhov qhia daim xaj cais kom saib Lúa.",
   "Vào TikTok → Đơn hàng → Chi tiết đơn, sao chép mã đơn và nhập dưới đây. Không cần chọn sản phẩm; Admin sẽ đối chiếu ID, sản phẩm và nguồn mua.": "Mus rau TikTok → Cov ntawv xaj → Xov xwm daim xaj, luam tus lej xaj rau hauv qab no. Tsis tas xaiv yam khoom; Admin mam txheeb ID, yam khoom thiab qhov chaw yuav.",
   "Chưa tải được các giao dịch đã thanh toán. Bạn có thể tải lại trang để thử.": "Thauj tsis tau cov kev them nyiaj tiav. Koj rov rub nplooj ntawv sim dua.",
+  "Email đã được Google xác minh. Đây là phiên đăng nhập Google cũ, bạn chỉ cần tiếp tục để hoàn tất tạo tài khoản, không cần mật khẩu hoặc tích ô điều khoản.": "Google twb txheeb xyuas email lawm. Qhov no yog kev nkag Google qub; nias mus ntxiv kom tsim as khauj tiav, tsis tas lo lus zais lossis kos lub thawv cai.",
+  "Bạn có thể đọc": "Koj nyeem tau",
+  "Điều khoản": "Cov cai siv",
+  "Chính sách quyền riêng tư": "Txoj cai ntiag tug",
 };
