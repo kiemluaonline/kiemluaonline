@@ -1,5 +1,9 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Đã mua? Báo đơn →": "Twb yuav lawm? Qhia daim xaj →",
+  "Sau khi mua qua trang trưng bày của Admin hoặc link sản phẩm do Trạm giới thiệu, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.": "Tom qab yuav ntawm Admin lub khw tso saib lossis txoj link khoom uas Trạm qhia, xa TikTok tus lej xaj xwb. Tsis tas xaiv yam khoom; Admin mam kuaj qhov chaw yuav ua ntej pom zoo Lúa.",
+  "Sau khi mua qua gian hàng hoặc liên kết của Admin, trở lại Mua sắm nhận Lúa và bấm “Đã mua? Báo đơn” để nhập ID đơn TikTok. Không cần chọn sản phẩm; Admin sẽ kiểm tra nguồn mua trước khi xét Lúa.": "Tom qab yuav hauv Admin lub khw lossis ntawm nws txoj link, rov mus rau Mua sắm nhận Lúa ces nias “Đã mua? Báo đơn” sau TikTok tus lej xaj. Tsis tas xaiv yam khoom; Admin mam kuaj qhov chaw yuav.",
+  "Sau khi mua qua gian hàng của Admin, vào Mua sắm nhận Lúa và bấm “Đã mua? Báo đơn” để gửi ID, sau đó theo dõi thưởng Lúa tại đây.": "Tom qab yuav ntawm Admin lub khw, mus rau Mua sắm nhận Lúa ces nias “Đã mua? Báo đơn” xa tus lej xaj; tom qab ntawd saib koj cov Lúa ntawm no.",
   "GIAN HÀNG CHÍNH THỨC CỦA ADMIN": "ADMIN LUB KHW MUA KHOOM",
   "Khám phá trang trưng bày TikTok Shop": "Saib Admin nplooj nthuav khoom TikTok Shop",
   "Nhấn để xem các sản phẩm Admin đã trưng bày. Chọn mua qua đúng liên kết, sau đó gửi mã đơn để được kiểm tra điều kiện nhận Lúa.": "Nias saib cov khoom Admin tso rau hauv TikTok Shop. Yuav raws txoj link raug, ces xa tus lej xaj kom kuaj seb puas tsim nyog tau Lúa.",
