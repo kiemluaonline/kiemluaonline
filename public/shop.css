@@ -511,3 +511,65 @@
  .shop-buy-after-steps li,.sorder-report-howto li{padding:10px 9px 10px 42px;}
  .sorder-report-howto{padding:12px 10px;}
 }
+
+
+/* SHOP-GUIDE-IMAGES-20261115: three optimized illustrated guides */
+.shop-guide-image-details{
+ margin:7px 0 10px;min-width:0;
+ border:1px solid #c8dfbe;border-radius:13px;
+ background:linear-gradient(140deg,#f5fdf2,#fffaf0);
+ overflow:hidden;
+}
+.shop-guide-image-details summary{
+ padding:13px 12px;cursor:pointer;color:#1a6b49;
+ font-size:12px;line-height:1.45;font-weight:850;
+ list-style-position:inside;outline-offset:-3px;
+}
+.shop-guide-image-details summary:focus-visible{
+ outline:3px solid #e3c26c;border-radius:11px;
+}
+.shop-guide-image-details[open] summary{border-bottom:1px solid #dbebd9;}
+.shop-guide-image-details a{
+ display:block;padding:10px;max-width:100%;min-width:0;
+ cursor:zoom-in;text-decoration:none;
+}
+.shop-guide-image-details img{
+ display:block;width:100%;max-width:100%;height:auto;
+ border-radius:9px;border:1px solid #e2e9d9;
+ background:white;object-fit:contain;
+}
+.shop-guide-image-tip{
+ color:#607961!important;font-size:11px!important;
+ margin:0 0 11px!important;padding:0 12px;
+}
+.shop-request-content>.shop-guide-image-details{margin:16px 0 7px;}
+.shop-guide-admin{padding:20px!important;margin:22px 0!important;border:1px solid #d2e7d3!important;}
+.shop-guide-admin>h3{color:#175739;margin:0 0 8px;}
+.shop-guide-admin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:17px 0;}
+.shop-guide-upload{
+ display:flex;flex-direction:column;gap:11px;
+ min-width:0;padding:15px 12px;border-radius:15px;
+ border:1px solid #d4e5d5;
+ background:linear-gradient(140deg,#f8fdf7,#fffcf0);
+}
+.shop-guide-upload h4{font-size:14px;color:#175f42;line-height:1.45;margin:0;}
+.shop-guide-upload .shop-product-photo-field{display:flex;flex-direction:column;gap:9px;min-width:0;}
+.shop-guide-upload .shop-photo-preview{
+ width:100%;height:auto;max-height:220px;min-height:80px;
+}
+.shop-guide-upload .shop-photo-preview img{
+ max-height:200px;object-fit:contain;
+}
+.shop-guide-upload .shop-admin-buttons{display:flex;flex-wrap:wrap;gap:9px;}
+.shop-guide-upload .shop-admin-buttons>.btn{white-space:normal;}
+@media(max-width:900px){
+ .shop-guide-admin-grid{grid-template-columns:minmax(0,1fr);gap:11px;}
+ .shop-guide-upload{padding:15px;}
+ .shop-guide-upload .shop-photo-preview{max-width:250px;}
+}
+@media(max-width:570px){
+ .shop-guide-admin{padding:17px 13px!important;margin:17px 0!important;}
+ .shop-guide-image-details a{padding:7px;}
+ .shop-guide-image-details summary{font-size:13px;}
+ .shop-guide-upload .shop-photo-preview{max-width:100%;}
+}
