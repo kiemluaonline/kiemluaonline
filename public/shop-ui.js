@@ -95,7 +95,7 @@ export async function shopPage(ctx){
   // và vẫn hiện riêng nếu Admin chưa thiết lập link.
   const reportSection=`<section class="shop-order-entry shop-report-section" id="shop-report-order" aria-label="Báo đơn hàng sau khi mua">
     <div class="shop-report-heading"><div><strong>📦 Đã mua hàng? Báo đơn tại đây</strong>
-      <span>Sau khi mua qua trang trưng bày của Admin hoặc link sản phẩm do Trạm giới thiệu, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.</span></div>
+      <span>Mua xong, vào TikTok Shop → Đơn hàng → Chi tiết đơn hàng, sao chép ID. Quay lại đây bấm “Đã mua? Báo đơn”, dán ID rồi nhấn “Gửi xác minh đơn hàng”. Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.</span></div>
       <button type="button" class="btn alt sm shop-report-history" data-go="shop-orders">Lịch sử đơn hàng</button>
     </div>
     <button type="button" class="btn shop-report-open" data-action="shop-report-order">📦 Đã mua? Báo đơn</button>
@@ -133,8 +133,14 @@ export async function shopPage(ctx){
     </div>
     <div class="shop-buy-guide-finish">
       <span class="shop-buy-guide-finish-icon" aria-hidden="true">📦</span>
-      <div><strong>Mua xong, quay lại website để báo đơn!</strong>
-        <p>Trở lại Trạm Có Lúa, bấm “Đã mua? Báo đơn” rồi nhập mã đơn hàng TikTok. Admin kiểm tra nguồn mua và chỉ cộng Lúa khi đơn hợp lệ, được giải quyết.</p>
+      <div><strong>Đặt hàng xong? Làm đủ 4 bước để báo đơn nhận Lúa!</strong>
+        <ol class="shop-buy-after-steps">
+          <li><b>Mở TikTok Shop</b> → vào <b>Đơn hàng</b> → chọn <b>đơn vừa đặt</b> và mở <b>Chi tiết đơn hàng</b>.</li>
+          <li>Tìm <b>Số đơn hàng / ID đơn hàng</b>, bấm <b>Sao chép</b>. Đây là mã đơn hàng, không phải mã sản phẩm.</li>
+          <li><b>Quay lại Trạm Có Lúa</b> → vào <b>Mua sắm nhận Lúa</b> → bấm <b>“📦 Đã mua? Báo đơn”</b>.</li>
+          <li><b>Dán ID đơn hàng</b> vào ô <b>“Mã đơn hàng TikTok”</b>, rồi bấm <b>“Gửi xác minh đơn hàng”</b>.</li>
+        </ol>
+        <p class="shop-buy-after-note">Sau khi gửi, xem trạng thái tại “Lịch sử đơn hàng”. Admin sẽ kiểm tra nguồn mua và chỉ xét Lúa cho đơn hợp lệ, đã giải quyết. Đặt hàng xong mà chưa gửi ID thì website chưa ghi nhận báo đơn.</p>
       </div>
       <a href="#shop-report-order" class="shop-buy-guide-report">Đến chỗ báo đơn ↓</a>
     </div>
