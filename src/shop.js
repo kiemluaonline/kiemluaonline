@@ -15,6 +15,21 @@ export function normalizeZaloContact(raw) {
   return null;
 }
 
+// Link trang trưng bày TikTok Shop do Admin cung cấp, không nhận website ngoài.
+export function normalizeShopShowcaseURL(raw) {
+  const value=String(raw||'').trim();
+  if(!value)return '';
+  if(value.length>900)return null;
+  let u;
+  try{u=new URL(value);}catch{return null;}
+  const host=u.hostname.toLowerCase();
+  const allowed=host==='tiktok.com'||host.endsWith('.tiktok.com')
+    ||host==='tiktokshop.com'||host.endsWith('.tiktokshop.com');
+  if(u.protocol!=='https:'||!allowed||u.username||u.password
+     ||(u.port&&u.port!=='443')||u.pathname==='/')return null;
+  return u.href;
+}
+
 export async function shopAPI(req, env, H) {
   const {auth, readBody, fail, json, id, str} = H;
   const path = new URL(req.url).pathname;
@@ -37,9 +52,13 @@ export async function shopAPI(req, env, H) {
     return {title, description, link, category, active:body.is_active === true || String(body.is_active) === '1' ? 1 : 0};
   };
   const shopContacts = async () => {
-    const rows = await db.prepare("SELECT key,value FROM settings WHERE key IN ('shop_contact_zalo','shop_contact_telegram')").all();
+    const rows = await db.prepare("SELECT key,value FROM settings WHERE key IN ('shop_contact_zalo','shop_contact_telegram','shop_showcase_url')").all();
     const values = Object.fromEntries(rows.results.map(r => [r.key, r.value]));
-    return {zalo:values.shop_contact_zalo || '', telegram:values.shop_contact_telegram || ''};
+    return {
+      zalo:values.shop_contact_zalo || '',
+      telegram:values.shop_contact_telegram || '',
+      showcase_url:normalizeShopShowcaseURL(values.shop_showcase_url)||''
+    };
   };
   if (path === '/api/shop' && method === 'GET') {
     const user = await auth(req,env);
@@ -48,7 +67,7 @@ export async function shopAPI(req, env, H) {
       db.prepare("SELECT r.id,r.code,r.note,r.channel,r.status,r.product_id,r.created_at,r.updated_at,r.seen_at,p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link FROM shop_requests r LEFT JOIN shop_products p ON p.id=r.product_id WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 60").bind(user.id).all(),
       shopContacts()
     ]);
-    return json({products:products.results,requests:requests.results,contacts});
+    return json({products:products.results,requests:requests.results,contacts,showcase_url:contacts.showcase_url});
   }
   if (path === '/api/shop/alerts' && method === 'GET') {
     const user = await auth(req,env);
@@ -81,7 +100,15 @@ export async function shopAPI(req, env, H) {
       db.prepare("SELECT r.id,r.code,r.channel,r.note,r.status,r.product_id,r.created_at,r.updated_at,u.name,u.email,p.title AS product_title FROM shop_requests r JOIN users u ON u.id=r.user_id LEFT JOIN shop_products p ON p.id=r.product_id ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").all(),
       shopContacts()
     ]);
-    return json({products:products.results,requests:requests.results,contacts});
+    return json({products:products.results,requests:requests.results,contacts,showcase_url:contacts.showcase_url});
+  }
+  if(path === '/api/admin/shop/showcase' && method === 'PUT'){
+    const body=await readBody(req);
+    const url=normalizeShopShowcaseURL(body.url);
+    if(url===null)fail(400,'Link trưng bày chưa hợp lệ. Hãy dán link HTTPS từ TikTok Shop, không phải website khác.');
+    await db.prepare("INSERT INTO settings(key,value) VALUES('shop_showcase_url',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .bind(url).run();
+    return json({ok:true,showcase_url:url});
   }
   if (path === '/api/admin/shop/contact' && method === 'PUT') {
     const body = await readBody(req);
