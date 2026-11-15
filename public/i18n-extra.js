@@ -766,6 +766,4 @@ window.TramExtraTranslations = {
   "Chưa tải được các giao dịch đã thanh toán. Bạn có thể tải lại trang để thử.": "Thauj tsis tau cov kev them nyiaj tiav. Koj rov rub nplooj ntawv sim dua.",
   "Email đã được Google xác minh. Đây là phiên đăng nhập Google cũ, bạn chỉ cần tiếp tục để hoàn tất tạo tài khoản, không cần mật khẩu hoặc tích ô điều khoản.": "Google twb txheeb xyuas email lawm. Qhov no yog kev nkag Google qub; nias mus ntxiv kom tsim as khauj tiav, tsis tas lo lus zais lossis kos lub thawv cai.",
   "Bạn có thể đọc": "Koj nyeem tau",
-  "Điều khoản": "Cov cai siv",
-  "Chính sách quyền riêng tư": "Txoj cai ntiag tug",
 };
