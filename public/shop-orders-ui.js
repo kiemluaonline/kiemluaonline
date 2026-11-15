@@ -139,11 +139,20 @@ export async function handleShopOrderAction(action,el,ctx){
  root.innerHTML=`<div class="modal-cover"><section class="modal sorder-report-modal" role="dialog" aria-modal="true" aria-label="Báo đã đặt hàng">
    <button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
    <div class="sorder-report-icon">🛍️</div><h3>Báo đã đặt hàng</h3>${name?`<p><b>${esc(name)}</b></p>`:''}
-   <p>Vào <b>TikTok → Đơn hàng → Chi tiết đơn</b>, sao chép mã đơn và nhập dưới đây. Không cần chọn sản phẩm; Admin sẽ đối chiếu ID, sản phẩm và nguồn mua.</p>
+   <div class="sorder-report-howto" role="note">
+     <strong>📋 Cách báo đơn sau khi đã đặt hàng</strong>
+     <ol>
+       <li>Trong <b>TikTok Shop</b>, mở <b>Đơn hàng</b> → chọn đơn vừa đặt → <b>Chi tiết đơn hàng</b>.</li>
+       <li>Ở mục <b>Số đơn hàng / ID đơn hàng</b>, bấm <b>Sao chép</b>.</li>
+       <li>Quay về Trạm Có Lúa, <b>dán ID đơn hàng</b> vào ô bên dưới.</li>
+       <li>Bấm <b>“Gửi xác minh đơn hàng”</b> để Admin kiểm tra.</li>
+     </ol>
+   </div>
+   <p class="note">Chỉ cần mã đơn hàng TikTok, không cần chọn sản phẩm hoặc gửi ảnh.</p>
    <div class="sorder-report-policy" role="note"><strong>⚠️ Lưu ý trước khi gửi ID đơn hàng</strong><p>Bạn phải mua qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm do Trạm Có Lúa giới thiệu. Nếu mua bên ngoài, ID đơn hàng sẽ không được xét thưởng Lúa dù bạn gửi về website.</p></div>
    <form data-form="shop-order-report" class="sorder-admin-form">
      <input type="hidden" name="product_id" value="${esc(id)}">
-     <label for="sorder-report-id">Mã đơn hàng TikTok <span aria-hidden="true">*</span></label><input id="sorder-report-id" name="order_reference" required minlength="8" maxlength="64" placeholder="Mã đơn trong TikTok Shop">
+     <label for="sorder-report-id">Mã đơn hàng TikTok <span aria-hidden="true">*</span></label><input id="sorder-report-id" name="order_reference" required minlength="8" maxlength="64" inputmode="numeric" placeholder="Dán ID đơn hàng đã sao chép tại đây">
      <label for="sorder-report-note">Ghi chú thêm (không bắt buộc)</label><textarea id="sorder-report-note" name="note" maxlength="220" placeholder="Ngày đặt hoặc thông tin giúp Admin kiểm tra..."></textarea>
      <button type="submit" class="btn">Gửi xác minh đơn hàng</button>
    </form>
