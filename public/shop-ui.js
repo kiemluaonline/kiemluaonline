@@ -31,6 +31,7 @@ export async function shopPage(ctx){
   const fresh=ready.filter(x=>!x.seen_at);
   if(fresh.length)await api('/api/shop/requests/read','POST',{}).catch(()=>{});
   const contact=(which)=>!!data.contacts[which];
+  const showcaseURL=data.showcase_url||data.contacts?.showcase_url||'';
   return `<div class="shop-page">
    <section class="shop-hero">
     <div class="shop-hero-copy"><div class="shop-kicker"><span class="shop-kicker-dot"></span> MUA SẮM THÔNG MINH • TÍCH LÚA</div>
@@ -40,6 +41,14 @@ export async function shopPage(ctx){
     </div>
     <div class="shop-hero-visual" aria-hidden="true"><div class="shop-deco-orbit shop-orbit-one"></div><div class="shop-deco-orbit shop-orbit-two"></div><div class="shop-main-bag">🛍️</div><div class="shop-floating shop-floating-one">🌾 Tích Lúa</div><div class="shop-floating shop-floating-two">✨ Món bạn thích</div></div>
    </section>
+   ${showcaseURL?`<section class="shop-showcase-entry" aria-label="Trang trưng bày TikTok Shop của Admin">
+    <div class="shop-showcase-icon" aria-hidden="true">🌾</div>
+    <div class="shop-showcase-copy"><span class="shop-showcase-kicker">GIAN HÀNG CHÍNH THỨC CỦA ADMIN</span>
+      <h3>Khám phá trang trưng bày TikTok Shop</h3>
+      <p>Nhấn để xem các sản phẩm Admin đã trưng bày. Chọn mua qua đúng liên kết, sau đó gửi mã đơn để được kiểm tra điều kiện nhận Lúa.</p>
+    </div>
+    <a class="shop-showcase-link" href="${esc(showcaseURL)}" target="_blank" rel="noopener noreferrer sponsored">🛍️ Vào trang trưng bày <span aria-hidden="true">↗</span></a>
+   </section>`:''}
    <div class="shop-trust-strip"><span>✓ Tự chọn sản phẩm</span><span>✓ Không cần tải ảnh lên web</span><span>✓ Thưởng sau xác minh</span></div>
    <aside class="shop-origin-policy" aria-label="Quy định mua đúng trang trưng bày" role="note">
      <span class="shop-origin-policy-icon" aria-hidden="true">⚠️</span>
@@ -111,6 +120,16 @@ export async function adminShopPage(ctx){
       <div class="shop-admin-tip">Thông tin này được dùng cho nút liên hệ ở trang mua sắm, không xuất hiện trên trang Admin khác.</div>
     </form>
    </div>
+   <form class="card shop-showcase-admin" data-form="shop-showcase">
+     <h3>🛍️ Trang trưng bày TikTok Shop của Admin</h3>
+     <p class="note">Dán link trang trưng bày mà bạn đã sao chép từ TikTok Shop. Khách sẽ thấy nút vào gian hàng ngay đầu mục “Mua sắm nhận Lúa”.</p>
+     ${field('shop-showcase-url','Link trang trưng bày TikTok Shop',d.showcase_url||'','type="url" maxlength="900" placeholder="https://www.tiktok.com/... hoặc https://vt.tiktok.com/..."')}
+     <div class="shop-showcase-admin-actions">
+       <button class="btn" type="submit">💾 Lưu link trang trưng bày</button>
+       ${d.showcase_url?`<a class="btn alt" href="${esc(d.showcase_url)}" target="_blank" rel="noopener noreferrer">Kiểm tra link ↗</a>`:''}
+     </div>
+     <p class="note">Để trống rồi lưu nếu muốn ẩn nút bên phía khách. Chỉ lưu link TikTok HTTPS; không thay đổi danh sách sản phẩm hoặc lịch sử đơn hàng.</p>
+   </form>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Danh sách sản phẩm</h2><p>Bật/tắt hoặc sửa sản phẩm mà không ảnh hưởng nhiệm vụ cũ.</p></div></div>
    ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
    </section>
@@ -202,6 +221,10 @@ export async function handleShopSubmit(kind,b,ctx){
       status:'ready_new',title:b.title,link:b.link,category:b.category||'other',description:''
     });
     toast(result.message);await navigate('admin-shop');return true;
+  }
+  if(kind==='shop-showcase'){
+    await api('/api/admin/shop/showcase','PUT',{url:b['shop-showcase-url']||''});
+    toast('Đã lưu link trang trưng bày TikTok Shop.');await navigate('admin-shop');return true;
   }
   if(kind==='shop-contact'){
     await api('/api/admin/shop/contact','PUT',{zalo:b['shop-zalo']||'',telegram:b['shop-telegram']||''});
