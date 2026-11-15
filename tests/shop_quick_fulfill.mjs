@@ -90,6 +90,19 @@ const showcasePage=await shopPage({
 });
 assert.match(showcasePage,/href="https:\/\/www\.tiktok\.com\/@tramcolua\/shop\?tab=products"/);
 assert.match(showcasePage,/Vào trang trưng bày/);
+assert.match(showcasePage,/HƯỚNG DẪN CHO KHÁCH HÀNG/);
+assert.match(showcasePage,/Có 2 cách mua hàng để được xét Lúa/);
+assert.match(showcasePage,/Cách 1: Mua tại trang trưng bày TikTok Shop/);
+assert.match(showcasePage,/Cách 2: Mua từ gian hàng trên website/);
+assert.match(showcasePage,/Xem &amp; mua ngay – Tích Lúa/,'Website shopping instructions must mention Buy now CTA.');
+assert.match(showcasePage,/Mua xong, quay lại website để báo đơn!/);
+assert.match(showcasePage,/href="#shop-showcase"/,'Method 1 should jump to Admin showcase.');
+assert.match(showcasePage,/href="#shop-catalog"/,'Method 2 should jump to product listings.');
+assert.match(showcasePage,/href="#shop-report-order"/,'Instructions should jump to report button.');
+assert.match(showcasePage,/id="shop-showcase"/);
+assert.ok(showcasePage.indexOf('class="shop-buy-guide"')<showcasePage.indexOf('class="shop-showcase-entry"'),
+ 'Two purchasing methods must appear before customers shop.');
+
 assert.match(showcasePage,/data-action="shop-report-order"(?![^>]*disabled)/,
  'Báo đơn phải là nút có thể bấm.');
 const shopStyles=readFileSync(new URL('../public/shop.css',import.meta.url),'utf8');
@@ -116,6 +129,12 @@ const hiddenPage=await shopPage({
  esc:x=>String(x),state:{shopCategory:'all'}
 });
 assert.doesNotMatch(hiddenPage,/class="shop-showcase-entry"/);
+assert.match(hiddenPage,/Cách 1: Mua tại trang trưng bày TikTok Shop/);
+assert.match(hiddenPage,/Trang trưng bày đang được cập nhật/);
+assert.doesNotMatch(hiddenPage,/href="#shop-showcase"/,
+ 'Without a showcase URL, do not offer a broken showcase anchor.');
+assert.match(hiddenPage,/href="#shop-catalog"/,'Website catalog remains accessible.');
+
 assert.match(hiddenPage,/id="shop-report-order"/,'Without a showcase link, buyers can still report their orders.');
 assert.equal((hiddenPage.match(/data-action="shop-report-order"/g)||[]).length,1);
 assert.ok(hiddenPage.indexOf('id="shop-report-order"')>hiddenPage.indexOf('id="shop-catalog"'),
