@@ -1,5 +1,18 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "HƯỚNG DẪN CHO KHÁCH HÀNG": "QHIA RAU COV NEEG YUAV KHOOM",
+  "Có 2 cách mua hàng để được xét Lúa": "Muaj 2 txoj kev yuav khoom kom tau kuaj Lúa",
+  "Chọn một trong hai cách bên dưới và mua qua đúng đường dẫn do Trạm Có Lúa cung cấp.": "Xaiv ib txoj kev hauv qab no thiab yuav raws txoj link uas Trạm Có Lúa muab.",
+  "Cách 1: Mua tại trang trưng bày TikTok Shop": "Txoj kev 1: Yuav ntawm TikTok Shop nplooj nthuav khoom",
+  "Bấm “Vào trang trưng bày” của Admin ngay trên website, chọn sản phẩm bạn thích và đặt mua trực tiếp trên TikTok Shop.": "Nias “Vào trang trưng bày” ntawm Admin hauv website, xaiv yam khoom koj nyiam thiab yuav ncaj qha hauv TikTok Shop.",
+  "Đến trang trưng bày ↓": "Mus rau nplooj nthuav khoom ↓",
+  "Trang trưng bày đang được cập nhật": "Nplooj nthuav khoom tseem tab tom kho",
+  "Cách 2: Mua từ gian hàng trên website": "Txoj kev 2: Yuav ntawm khw hauv website",
+  "Vào “Gian hàng của Trạm” bên dưới, chọn món muốn mua rồi bấm “Xem & mua ngay – Tích Lúa” để mở đúng link TikTok Shop và đặt hàng.": "Mus rau “Gian hàng của Trạm” hauv qab no, xaiv yam khoom koj xav yuav ces nias “Xem & mua ngay – Tích Lúa” kom qhib TikTok Shop link raug thiab xaj khoom.",
+  "Xem sản phẩm trên website ↓": "Saib cov khoom hauv website ↓",
+  "Mua xong, quay lại website để báo đơn!": "Yuav tas lawm, rov qab rau website qhia tus lej xaj!",
+  "Trở lại Trạm Có Lúa, bấm “Đã mua? Báo đơn” rồi nhập mã đơn hàng TikTok. Admin kiểm tra nguồn mua và chỉ cộng Lúa khi đơn hợp lệ, được giải quyết.": "Rov mus rau Trạm Có Lúa, nias “Đã mua? Báo đơn” thiab sau TikTok tus lej xaj. Admin yuav kuaj qhov chaw yuav; tsuas ntxiv Lúa thaum daim xaj raug cai thiab ua tiav.",
+  "Đến chỗ báo đơn ↓": "Mus rau qhov qhia daim xaj ↓",
   "Đã mua? Báo đơn →": "Twb yuav lawm? Qhia daim xaj →",
   "Sau khi mua qua trang trưng bày của Admin hoặc link sản phẩm do Trạm giới thiệu, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.": "Tom qab yuav ntawm Admin lub khw tso saib lossis txoj link khoom uas Trạm qhia, xa TikTok tus lej xaj xwb. Tsis tas xaiv yam khoom; Admin mam kuaj qhov chaw yuav ua ntej pom zoo Lúa.",
   "Sau khi mua qua gian hàng hoặc liên kết của Admin, trở lại Mua sắm nhận Lúa và bấm “Đã mua? Báo đơn” để nhập ID đơn TikTok. Không cần chọn sản phẩm; Admin sẽ kiểm tra nguồn mua trước khi xét Lúa.": "Tom qab yuav hauv Admin lub khw lossis ntawm nws txoj link, rov mus rau Mua sắm nhận Lúa ces nias “Đã mua? Báo đơn” sau TikTok tus lej xaj. Tsis tas xaiv yam khoom; Admin mam kuaj qhov chaw yuav.",
