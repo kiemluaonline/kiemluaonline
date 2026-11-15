@@ -1005,3 +1005,162 @@ html[lang="hmn"] .language-legal-notice{display:block}
 @media(prefers-reduced-motion:reduce){
  .auth-page-login::before,.auth-page-login::after{animation:none!important;transform:none!important;}
 }
+
+
+/* WELCOME-EMERALD-GOLD-WOW-20261115: CSS-only landing page effects. */
+/* Trạm Có Lúa: xanh lá lúa và vàng óng; không thêm ảnh, JS hoặc thao tác dữ liệu. */
+.welcome-site .welcome-hero{
+ isolation:isolate;
+ background:
+  radial-gradient(ellipse 52% 60% at 101% 23%,rgba(88,210,139,.32),transparent 75%),
+  radial-gradient(ellipse 55% 49% at -5% 90%,rgba(247,201,97,.25),transparent 77%),
+  radial-gradient(ellipse 42% 37% at 58% -5%,rgba(250,221,135,.17),transparent 80%),
+  linear-gradient(127deg,#fbfcf6 3%,#f0f9ef 53%,#ebf6e6 100%);
+}
+.welcome-site .welcome-hero::before,
+.welcome-site .welcome-hero::after{
+ content:"";position:absolute;inset:0;z-index:0;
+ pointer-events:none;
+}
+.welcome-site .welcome-hero::before{
+ background:
+  radial-gradient(ellipse 30% 43% at 0% 40%,rgba(63,198,132,.22),transparent 76%),
+  radial-gradient(ellipse 30% 40% at 99% 15%,rgba(244,194,71,.27),transparent 75%),
+  radial-gradient(ellipse 32% 42% at 95% 87%,rgba(54,191,119,.20),transparent 80%);
+ animation:tl-welcome-ambient 13s ease-in-out infinite alternate;
+}
+.welcome-site .welcome-hero::after{
+ background-image:
+  radial-gradient(circle,rgba(189,140,35,.52) 1.1px,transparent 2.2px),
+  radial-gradient(circle,rgba(29,151,97,.38) 1px,transparent 2px),
+  radial-gradient(circle,rgba(243,196,86,.52) 1.4px,transparent 2.6px);
+ background-size:171px 211px,231px 191px,307px 283px;
+ background-position:19px 51px,103px 138px,210px 86px;
+ opacity:.44;
+ animation:tl-welcome-stars 12s ease-in-out infinite alternate;
+}
+.welcome-site .welcome-hero-grid{position:relative;z-index:1;}
+.welcome-site .welcome-wave{z-index:1;}
+.welcome-site .welcome-pill{
+ background:linear-gradient(105deg,rgba(255,255,255,.96),rgba(255,251,232,.92));
+ border-color:#e3dfb6;
+ box-shadow:0 9px 26px rgba(39,117,69,.10),inset 0 0 0 1px rgba(255,255,255,.6);
+}
+.welcome-site .welcome-pill-dot{
+ background:#33ac73;box-shadow:0 0 0 5px rgba(120,215,139,.19),0 0 13px rgba(54,167,97,.32);
+}
+.welcome-site .welcome-hero h1{
+ text-shadow:0 8px 28px rgba(29,100,63,.055);
+}
+.welcome-site .welcome-hero h1 span{
+ color:#157f56;
+ background:linear-gradient(105deg,#126d4b 3%,#239d6e 48%,#b48426 94%);
+ -webkit-background-clip:text;background-clip:text;
+ -webkit-text-fill-color:transparent;
+ text-shadow:none;
+}
+.welcome-site .welcome-hero-actions .welcome-btn-primary,
+.welcome-site .welcome-nav-signup{
+ background:linear-gradient(112deg,#156747,#1e8b61 68%,#26976a);
+ border-color:#23855f;color:#fff!important;
+ box-shadow:0 9px 23px rgba(20,111,73,.23),0 0 0 1px rgba(249,217,134,.2);
+ position:relative;overflow:hidden;isolation:isolate;
+}
+.welcome-site .welcome-hero-actions .welcome-btn-primary::after{
+ content:"";position:absolute;top:-100%;bottom:-100%;left:-80%;width:42%;
+ transform:translateX(-120%) rotate(24deg);
+ background:linear-gradient(90deg,transparent,rgba(255,236,162,.35),transparent);
+ pointer-events:none;
+ animation:tl-welcome-button-glint 8s ease-in-out infinite;
+}
+.welcome-site .welcome-hero-actions .welcome-btn-outline{
+ border-color:#d9d9ad;
+ box-shadow:0 6px 22px rgba(76,100,53,.08);
+ background:rgba(255,255,255,.94);
+}
+.welcome-site .welcome-art-main{
+ background:linear-gradient(148deg,#fff 40%,#fdfdf5);
+ border-color:#dfdfbe;
+ box-shadow:0 26px 66px rgba(23,82,48,.19),0 0 0 1px rgba(239,198,91,.22);
+ animation:tl-welcome-card-float 8s ease-in-out infinite;
+ will-change:transform;
+}
+.welcome-site .welcome-art-main::before{
+ content:"";position:absolute;inset:7px;border:1px solid rgba(226,191,99,.15);
+ border-radius:20px;pointer-events:none;
+}
+.welcome-site .welcome-orb-one{
+ background:radial-gradient(circle at 32% 25%,#e6f6d4 2%,#a3deb8 57%,#8ccaa7 100%);
+ box-shadow:inset -23px -18px 52px rgba(34,114,74,.10),0 23px 55px rgba(37,123,75,.12);
+ animation:tl-welcome-orb-float 11s ease-in-out infinite alternate;
+}
+.welcome-site .welcome-orb-two{
+ background:radial-gradient(circle at 35% 30%,#fff2bf,#f1cf77 70%,#deb05a);
+ animation:tl-welcome-orb-float 9s ease-in-out infinite alternate-reverse;
+}
+.welcome-site .welcome-art-sprig{
+ color:#ddb15a;text-shadow:0 3px 19px rgba(215,156,43,.25);
+ animation:tl-welcome-sprig 9s ease-in-out infinite;
+}
+.welcome-site .welcome-art-check{background:#e6f4e7;color:#268d58;}
+.welcome-site .welcome-art-icon{background:linear-gradient(135deg,#e7f5e8,#f8f3df);}
+.welcome-site .welcome-art-task{border-bottom-color:#edf1e3;}
+.welcome-site .welcome-float-card{
+ border-color:#eddfb4;
+ box-shadow:0 16px 40px rgba(54,95,42,.14),0 0 23px rgba(230,191,82,.13);
+}
+.welcome-site .welcome-hero-copy{animation:tl-welcome-enter .7s cubic-bezier(.2,.75,.2,1) both;}
+.welcome-site .welcome-hero-art{animation:tl-welcome-enter .8s cubic-bezier(.2,.75,.2,1) .16s both;}
+@keyframes tl-welcome-ambient{
+ from{opacity:.66;transform:translate3d(-1%,0,0) scale(1);}
+ to{opacity:1;transform:translate3d(1%,-1%,0) scale(1.035);}
+}
+@keyframes tl-welcome-stars{
+ from{opacity:.25;transform:translate3d(0,0,0);}
+ to{opacity:.58;transform:translate3d(0,-9px,0);}
+}
+@keyframes tl-welcome-button-glint{
+ 0%,71%,100%{transform:translateX(-145%) rotate(24deg);}
+ 87%{transform:translateX(530%) rotate(24deg);}
+}
+@keyframes tl-welcome-card-float{
+ 0%,100%{transform:translate3d(0,0,0) rotate(-2deg);}
+ 50%{transform:translate3d(0,-7px,0) rotate(-1.3deg);}
+}
+@keyframes tl-welcome-orb-float{
+ from{transform:translate3d(0,0,0) scale(1);}
+ to{transform:translate3d(0,-9px,0) scale(1.025);}
+}
+@keyframes tl-welcome-sprig{
+ 0%,100%{transform:rotate(-12deg);}
+ 50%{transform:rotate(2deg);}
+}
+@keyframes tl-welcome-enter{
+ from{opacity:0;transform:translate3d(0,15px,0);}
+ to{opacity:1;transform:translate3d(0,0,0);}
+}
+@media(max-width:730px){
+ .welcome-site .welcome-hero::before{
+  background:
+   radial-gradient(ellipse 50% 23% at 1% 17%,rgba(48,184,118,.28),transparent 81%),
+   radial-gradient(ellipse 55% 26% at 100% 46%,rgba(243,195,76,.24),transparent 81%),
+   radial-gradient(ellipse 48% 25% at 0% 86%,rgba(67,189,120,.22),transparent 81%);
+ }
+ .welcome-site .welcome-hero::after{opacity:.36;}
+ .welcome-site .welcome-art-main::before{inset:5px;border-radius:17px;}
+ .welcome-site .welcome-hero h1 span{background-image:linear-gradient(100deg,#137e58,#208f5a 52%,#b18a2e);}
+}
+@media(prefers-reduced-motion:reduce){
+ .welcome-site .welcome-hero::before,
+ .welcome-site .welcome-hero::after,
+ .welcome-site .welcome-hero-copy,
+ .welcome-site .welcome-hero-art,
+ .welcome-site .welcome-hero-actions .welcome-btn-primary::after,
+ .welcome-site .welcome-art-main,
+ .welcome-site .welcome-orb-one,
+ .welcome-site .welcome-orb-two,
+ .welcome-site .welcome-art-sprig{
+  animation:none!important;will-change:auto!important;
+ }
+ .welcome-site .welcome-art-main{transform:rotate(-2deg);}
+}
