@@ -240,12 +240,12 @@ function googleAuthPanel(active){
  if(active==='register')return '<div class="oauth-separator"><span>HOẶC</span></div>'+
   '<button class="google-auth-btn" type="button" data-action="google-register">'+
   '<span class="google-g" aria-hidden="true">G</span>Đăng ký với Google</button>'+
-  '<p class="note">Đăng ký bằng Google sẽ dùng tên hiển thị từ tài khoản Google. Hãy tích đồng ý điều khoản trước khi tiếp tục.</p>';
+  '<p class="note">Đăng ký với Google không cần tích ô điều khoản. Tài khoản mới sẽ được tạo sau khi Google xác minh thành công.</p>';
  return '<div class="oauth-separator">hoặc</div>'+
   '<button class="google-auth-btn" type="button" data-action="google-login">'+
   '<span class="google-g" aria-hidden="true">G</span>'+
   'Tiếp tục với Google</button>'+
-  '<p class="note">Gmail mới sẽ được hướng dẫn đồng ý điều khoản để tạo tài khoản thành viên; Gmail đã liên kết sẽ đăng nhập ngay.</p>';
+  '<p class="note">Gmail mới sẽ tự tạo tài khoản sau khi Google xác minh; Gmail đã liên kết đăng nhập ngay. Không cần tích điều khoản.</p>';
 }
 function googleProfilePanel(){
  const connected=Boolean(state.me.google_linked);
@@ -269,12 +269,9 @@ function renderAuth(){
     <div class="auth-logo-line"><img src="/logo.svg" alt="" width="56" height="56"><div><strong>TRẠM CÓ LÚA</strong><span>ĐĂNG KÝ BẰNG GOOGLE</span></div></div>
     <span class="auth-form-kicker"><i></i> THÀNH VIÊN MỚI</span>
     <h2>Hoàn tất đăng ký Google</h2>
-    <p class="auth-intro">Email <strong>${esc(state.googlePending.email)}</strong> chưa có tài khoản. Bạn không cần tạo mật khẩu, chỉ cần đồng ý điều khoản để tiếp tục.</p>
-    <form data-form="google-complete"><div class="auth-legal"><label><input type="checkbox" name="accept_terms" value="yes" required>
-     Tôi đồng ý <a href="/terms.html" target="_blank" rel="noopener">Điều khoản</a> và
-     <a href="/privacy.html" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.</label></div>
-     <button class="auth-submit" type="submit">Đồng ý và tạo tài khoản</button>
-    </form>
+    <p class="auth-intro">Email <strong>${esc(state.googlePending.email)}</strong> đã được Google xác minh. Đây là phiên đăng nhập Google cũ, bạn chỉ cần tiếp tục để hoàn tất tạo tài khoản, không cần mật khẩu hoặc tích ô điều khoản.</p>
+    <p class="note">Bạn có thể đọc <a href="/terms.html" target="_blank" rel="noopener">Điều khoản</a> và <a href="/privacy.html" target="_blank" rel="noopener">Chính sách quyền riêng tư</a>.</p>
+    <form data-form="google-complete"><button class="auth-submit" type="submit">Tiếp tục với Google</button></form>
     <button class="google-auth-btn" type="button" data-action="google-cancel" style="margin-top:13px">Hủy và trở lại</button>
    </section></div>`;
   return;
@@ -1381,11 +1378,9 @@ app.addEventListener('click',async e=>{
  if(!['login','register','link'].includes(intent))throw new Error('Thao tác Google không hợp lệ.');
  const body={intent};
  if(intent==='register'){
+  // Google là một cách đăng ký độc lập: không dùng checkbox của biểu mẫu email.
   const f=app.querySelector('form[data-form="register"]');
-  if(!f?.querySelector('[name="accept_terms"]')?.checked)
-   throw new Error('Bạn cần tích đồng ý điều khoản trước khi đăng ký Google.');
-  body.accept_terms='yes';
-  body.referral_code=f.querySelector('[name="referral_code"]')?.value||'';
+  body.referral_code=f?.querySelector('[name="referral_code"]')?.value||'';
  }
  const response=await api('/api/auth/google/start','POST',body);
  location.assign(response.url);return;
