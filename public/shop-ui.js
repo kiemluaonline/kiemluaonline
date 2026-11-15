@@ -91,6 +91,14 @@ export async function shopPage(ctx){
   if(fresh.length)await api('/api/shop/requests/read','POST',{}).catch(()=>{});
   const contact=(which)=>!!data.contacts[which];
   const showcaseURL=data.showcase_url||data.contacts?.showcase_url||'';
+  const guideImage=(type,title)=>{
+    if(!data.guide_images?.[type])return '';
+    const src='/api/shop/guide-images/'+type;
+    return `<details class="shop-guide-image-details"><summary>📷 Xem ảnh hướng dẫn: ${title}</summary>
+      <a href="${src}" target="_blank" rel="noopener noreferrer" title="Mở ảnh lớn để phóng to">
+        <img src="${src}" alt="${title}, ảnh hướng dẫn từng bước" loading="lazy" decoding="async">
+      </a><p class="shop-guide-image-tip">Chạm vào ảnh để xem lớn và phóng to trên điện thoại.</p></details>`;
+  };
   // Báo đơn chỉ render một lần: nằm trong thẻ trang trưng bày nếu đã có link,
   // và vẫn hiện riêng nếu Admin chưa thiết lập link.
   const reportSection=`<section class="shop-order-entry shop-report-section" id="shop-report-order" aria-label="Báo đơn hàng sau khi mua">
@@ -121,6 +129,7 @@ export async function shopPage(ctx){
         <div class="shop-buy-way-symbol" aria-hidden="true">🛍️</div>
         <h3>Cách 1: Mua tại trang trưng bày TikTok Shop</h3>
         <p>Bấm “Vào trang trưng bày” của Admin ngay trên website, chọn sản phẩm bạn thích và đặt mua trực tiếp trên TikTok Shop.</p>
+        ${guideImage('showcase','Cách 1: Mua qua trang trưng bày TikTok Shop của Admin')}
         ${showcaseURL?'<a href="#shop-showcase" class="shop-buy-way-link">Đến trang trưng bày ↓</a>':'<span class="shop-buy-way-unavailable">Trang trưng bày đang được cập nhật</span>'}
       </article>
       <article class="shop-buy-way">
@@ -128,6 +137,7 @@ export async function shopPage(ctx){
         <div class="shop-buy-way-symbol" aria-hidden="true">🌾</div>
         <h3>Cách 2: Mua từ gian hàng trên website</h3>
         <p>Vào “Gian hàng của Trạm” bên dưới, chọn món muốn mua rồi bấm “Xem &amp; mua ngay – Tích Lúa” để mở đúng link TikTok Shop và đặt hàng.</p>
+        ${guideImage('catalog','Cách 2: Mua sản phẩm đã có trên gian hàng website')}
         <a href="#shop-catalog" class="shop-buy-way-link">Xem sản phẩm trên website ↓</a>
       </article>
     </div>
@@ -179,7 +189,8 @@ export async function shopPage(ctx){
        <button type="button" class="shop-contact shop-zalo" data-action="shop-start-request" data-channel="zalo" ${contact('zalo')?'':'disabled'}><span>💬</span><span>Gửi qua Zalo<small>${contact('zalo')?'Gửi ảnh hoặc link':'Chưa thiết lập'}</small></span><b>↗</b></button>
        <button type="button" class="shop-contact shop-telegram" data-action="shop-start-request" data-channel="telegram" ${contact('telegram')?'':'disabled'}><span>✈️</span><span>Gửi qua Telegram<small>${contact('telegram')?'Gửi ảnh hoặc link':'Chưa thiết lập'}</small></span><b>↗</b></button>
       </div>
-      <div class="shop-request-privacy">🔒 Không tải ảnh lên Trạm Có Lúa. Hệ thống chỉ lưu mã yêu cầu và mô tả, giúp giữ website gọn nhẹ.</div>
+      ${guideImage('request','Gửi yêu cầu: Gửi link hoặc ảnh sản phẩm qua Zalo/Telegram')}
+      <div class="shop-request-privacy">🔒 Không tải ảnh sản phẩm khách gửi qua Zalo/Telegram lên website. Hệ thống chỉ lưu mã yêu cầu và mô tả.</div>
     </div>
    </section>
    <section class="shop-section shop-history" id="shop-my-requests">
@@ -238,6 +249,28 @@ export async function adminShopPage(ctx){
      </div>
      <p class="note">Để trống rồi lưu nếu muốn ẩn nút bên phía khách. Chỉ lưu link TikTok HTTPS; không thay đổi danh sách sản phẩm hoặc lịch sử đơn hàng.</p>
    </form>
+   <section class="card shop-guide-admin" aria-label="Quản lý 3 ảnh hướng dẫn">
+     <h3>📷 Ảnh hướng dẫn khách mua hàng</h3>
+     <p class="note">Chọn 3 ảnh bạn đã duyệt từ Thư viện iPhone. Khách sẽ thấy ảnh Cách 1 và Cách 2 trong hướng dẫn mua hàng; ảnh Zalo/Telegram sẽ nằm ngay phần “Không thấy món bạn muốn?”.</p>
+     <p class="note">Lưu ý quyền riêng tư: hãy dùng ID đơn hàng minh họa, không đăng ảnh chứa mã đơn hàng thật của khách.</p>
+     <div class="shop-guide-admin-grid">${[
+       ['showcase','Cách 1 · Mua qua trang trưng bày'],
+       ['catalog','Cách 2 · Mua qua gian hàng website'],
+       ['request','Gửi link hoặc ảnh qua Zalo/Telegram']
+     ].map(([type,title])=>`<form data-form="shop-guide-image" class="shop-guide-upload">
+       <input type="hidden" name="guide_type" value="${type}">
+       <h4>${title}</h4>
+       <div class="shop-product-photo-field">
+         <label for="shop-guide-input-${type}">Chọn ảnh hướng dẫn</label>
+         <input id="shop-guide-input-${type}" type="file" accept="image/*" name="shop-guide-photo" data-shop-image-input>
+         <div class="shop-photo-preview" data-shop-photo-preview>${d.guide_images?.[type]?`<img src="/api/shop/guide-images/${type}" alt="Ảnh hướng dẫn đã lưu" loading="lazy">`:'<span>Chưa đăng ảnh hướng dẫn.</span>'}</div>
+       </div>
+       <div class="shop-admin-buttons"><button class="btn" type="submit">💾 Lưu ảnh hướng dẫn</button>
+        ${d.guide_images?.[type]?`<button class="btn alt" type="button" data-action="shop-guide-image-remove" data-guide-type="${type}">Xóa ảnh</button>`:''}
+       </div>
+     </form>`).join('')}</div>
+     <p class="note">Ảnh được tự nén dưới 160 KB trước khi lưu vào D1, không làm ảnh hưởng sản phẩm, Lúa hoặc đơn hàng.</p>
+   </section>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Danh sách sản phẩm</h2><p>Bật/tắt hoặc sửa sản phẩm mà không ảnh hưởng nhiệm vụ cũ.</p></div></div>
    ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
    </section>
@@ -275,6 +308,12 @@ export async function handleShopAction(action,el,ctx){
   if(action==='shop-filter'){state.shopCategory=el.dataset.category||'all';await navigate('shop');return true;}
   if(action==='shop-edit-product'){state.shopEdit=el.dataset.id;await navigate('admin-shop');document.getElementById('shop-product-form')?.scrollIntoView({behavior:'smooth'});return true;}
   if(action==='shop-reset-product'){state.shopEdit=null;await navigate('admin-shop');return true;}
+  if(action==='shop-guide-image-remove'){
+   const type=el.dataset.guideType;
+   if(!['showcase','catalog','request'].includes(type)||!askShopConfirm('Xóa ảnh hướng dẫn này? Nội dung hướng dẫn chữ vẫn giữ nguyên.'))return true;
+   await api('/api/admin/shop/guide-images/'+type,'PUT',{image_data:''});
+   toast('Đã xóa ảnh hướng dẫn.');await navigate('admin-shop');return true;
+  }
   if(action==='shop-remove-image'){
    const pid=el.dataset.id;
    if(!pid||!askShopConfirm('Xóa ảnh sản phẩm hiện tại? Sản phẩm và đơn hàng vẫn được giữ nguyên.'))return true;
@@ -324,6 +363,15 @@ export async function handleShopAction(action,el,ctx){
 
 export async function handleShopSubmit(kind,b,ctx){
   const {api,toast,navigate,state}=ctx;
+  if(kind==='shop-guide-image'){
+    const type=b.guide_type;
+    if(!['showcase','catalog','request'].includes(type))throw new Error('Loại ảnh hướng dẫn không hợp lệ.');
+    const file=b['shop-guide-photo'];
+    if(!file?.size)throw new Error('Bạn cần chọn một ảnh hướng dẫn trước khi lưu.');
+    const imageData=await shopPhotoData(file);
+    await api('/api/admin/shop/guide-images/'+type,'PUT',{image_data:imageData});
+    toast('Đã lưu ảnh hướng dẫn cho khách.');await navigate('admin-shop');return true;
+  }
   if(kind==='shop-product'){
     const raw=document.getElementById('shop-product-form');
     const title=raw?.querySelector('[name="shop-title"]')?.value||'';
