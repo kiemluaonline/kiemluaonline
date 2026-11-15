@@ -192,6 +192,24 @@ assert.match(displayedCard,/loading="lazy"/,'Do not eagerly load all product ima
 assert.doesNotMatch(displayedCard,/shop-art-icon/,'Do not duplicate emoji when a product has a photo.');
 const updatedAdmin=(await call('/api/admin/shop','GET',undefined,'admin')).data.products;
 assert.equal(updatedAdmin.find(x=>x.id===done.product_id).image_url,imagePath,'Admin can preview saved image.');
+
+const adminWithPhoto=await adminShopPage({
+ api:async()=>({products:updatedAdmin,requests:[],contacts:{zalo:'',telegram:''}}),
+ esc:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
+ field:()=>'',select:()=>'',heading:()=>'',state:{shopEdit:null}
+});
+assert.match(adminWithPhoto,/class="shop-admin-product-icon"><img src="\/api\/shop\/images\//,
+ 'Saved image should appear as a thumbnail only in the Admin product list.');
+const thumbCSS=readFileSync(new URL('../public/shop.css',import.meta.url),'utf8');
+assert.match(thumbCSS,/\.shop-admin-product-icon\s*\{[^}]*display:flex;[^}]*flex:0 0 56px;[^}]*width:56px;height:56px;[^}]*overflow:hidden;/,
+ 'iPhone thumbnail container must cap intrinsic image dimensions.');
+assert.match(thumbCSS,/\.shop-admin-product-icon img\s*\{[^}]*max-width:100%;max-height:100%;[^}]*object-fit:contain;/,
+ 'Admin thumbnail should contain image with explicit maximum dimensions.');
+assert.match(thumbCSS,/\.shop-admin-product\s*\{[^}]*width:100%;min-width:0;max-width:100%;[^}]*overflow:hidden;/,
+ 'Product list row must never stretch the viewport horizontally.');
+assert.match(thumbCSS,/@media\(max-width:730px\)\s*\{\s*\.shop-admin-layout,\.shop-admin-list,\.shop-admin-requests\s*\{\s*grid-template-columns:minmax\(0,1fr\)/,
+ 'Admin shop must remain a single column on narrow phone screens.');
+
 const imageRemoval=await call('/api/admin/shop/products/'+done.product_id+'/image','PUT',{image_data:''},'admin');
 assert.equal(imageRemoval.status,200);
 assert.equal((await call('/api/shop')).data.products.find(x=>x.id===done.product_id).image_url,'');
