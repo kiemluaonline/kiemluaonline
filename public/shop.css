@@ -214,15 +214,3 @@
  .shop-report-open{width:100%}
 }
 
-/* Chỉ thử nhận diện link TikTok Shop; không đổi cách lưu sản phẩm. */
-.shop-preview-test{padding:12px 0 4px;display:flex;flex-direction:column;gap:8px;align-items:stretch}
-.shop-preview-test>.btn{align-self:flex-start;max-width:100%;white-space:normal}
-.shop-preview-test>.note{font-size:11px;line-height:1.6}
-.shop-preview-result{width:100%;max-width:100%;min-width:0;box-sizing:border-box;border:1px solid #d0e5d7;background:#f5fbf6;padding:12px;border-radius:12px;color:#22583e;line-height:1.6;overflow-wrap:anywhere}
-.shop-preview-result[hidden]{display:none!important}
-.shop-preview-data{display:flex;gap:13px;align-items:flex-start;flex-wrap:wrap}
-.shop-preview-data img{width:110px;height:110px;max-width:35%;object-fit:cover;border-radius:10px;background:#e8f0ea}
-.shop-preview-data>div:last-child{flex:1;min-width:170px}
-.shop-preview-data strong{display:block;font-size:13px;line-height:1.5}
-.shop-preview-data p,.shop-preview-data small{display:block;font-size:11px;color:#62796b;margin:5px 0}
-.shop-preview-no-image{padding:15px;border-radius:10px;background:#e5ece5;font-size:12px}
