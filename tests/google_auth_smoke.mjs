@@ -80,7 +80,8 @@ assert.equal(setup.status,201,JSON.stringify(setup));
  };
  async function googleFlow(intent,email,sub,existingCookie='',ip='192.0.2.150'){
   const device='b1111111-2222-4333-8444-555555555555';
-  const startGoogle=await call('/api/auth/google/start','POST',{intent,...(intent==='register'?{accept_terms:'yes'}:{})},existingCookie,ip,device);
+  // Google đăng nhập/đăng ký không yêu cầu checkbox; email/password vẫn bắt buộc.
+  const startGoogle=await call('/api/auth/google/start','POST',{intent},existingCookie,ip,device);
   assert.equal(startGoogle.status,200,JSON.stringify(startGoogle));
   const googleUrl=new URL(startGoogle.data.url);
   assert.equal(googleUrl.hostname,'accounts.google.com');
@@ -120,48 +121,68 @@ assert.equal(setup.status,201,JSON.stringify(setup));
  assert.equal(googleMe.status,200,JSON.stringify(googleMe));
  assert.equal(googleMe.data.user.email,'google.member@gmail.com');
  assert.equal(googleMe.data.google_linked,true);
+ assert.equal(sqlite.prepare("SELECT terms_accepted_at FROM users WHERE email=?").get('google.member@gmail.com').terms_accepted_at,null,
+  'Không ghi là đã tích điều khoản khi đăng ký Google.');
  const reLogin=await googleFlow('login','google.member@gmail.com','google-id-123456789','','192.0.2.150');
  assert.equal(reLogin.response.status,303);
  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM users WHERE email=?').get('google.member@gmail.com').n,1);
- // Gmail hoàn toàn mới: một lần chọn Google -> đồng ý điều khoản -> tạo thành viên thật.
+ // Google hoàn toàn mới: xác minh một lần là tạo tài khoản và đăng nhập ngay.
  const firstVisit=await googleFlow('login','new.visitor@gmail.com','google-new-visitor-2026','','192.0.2.160');
  assert.equal(firstVisit.response.status,303);
- assert.equal(firstVisit.redirect,'/?google_signup=1');
- const pendingCookie=firstVisit.cookies.find(c=>c.startsWith('tl_google_pending='));
- assert.ok(pendingCookie,'Phiên chờ đăng ký phải được lưu trong HttpOnly cookie.');
- const shown=await call('/api/auth/google/pending','GET',undefined,pendingCookie.split(';')[0],'192.0.2.160');
- assert.equal(shown.status,200);
- assert.equal(shown.data.pending,true);
- assert.equal(shown.data.email,'new.visitor@gmail.com');
- assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM users WHERE email=?').get('new.visitor@gmail.com').n,0,'Chưa chấp nhận điều khoản thì chưa tạo tài khoản.');
- const noTerms=await call('/api/auth/google/complete','POST',{accept_terms:'no'},pendingCookie.split(';')[0],'192.0.2.160');
- assert.equal(noTerms.status,400);
- const confirm=await worker.fetch(new Request(origin+'/api/auth/google/complete',{
-  method:'POST',headers:{'Content-Type':'application/json','Origin':origin,'X-Tram-Lua':'1',
-    'CF-Connecting-IP':'192.0.2.160','Cookie':pendingCookie.split(';')[0],
-    'X-TL-Device':'b1111111-2222-4333-8444-555555555555'},
-  body:JSON.stringify({accept_terms:'yes'})
- }),env);
- assert.equal(confirm.status,200);
- const newSession=confirm.headers.getSetCookie().find(x=>x.startsWith('kl_session='));
- assert.ok(newSession,'Tạo thành viên qua Google xong phải có cookie đăng nhập.');
+ assert.equal(firstVisit.redirect,'/','Google lần đầu không chuyển sang bước tích điều khoản.');
+ const newSession=firstVisit.cookies.find(x=>x.startsWith('kl_session='));
+ assert.ok(newSession,'Google lần đầu có phiên đăng nhập ngay.');
+ assert.equal(firstVisit.cookies.some(c=>c.startsWith('tl_google_pending=')&&!c.includes('Max-Age=0')),false,
+  'Không tạo phiên chờ Google mới.');
  const newMe=await call('/api/me','GET',undefined,newSession.split(';')[0],'192.0.2.160');
  assert.equal(newMe.data.user.role,'member');
  assert.equal(newMe.data.user.email,'new.visitor@gmail.com');
  assert.equal(newMe.data.google_linked,true);
- const usedPending=await call('/api/auth/google/pending','GET',undefined,pendingCookie.split(';')[0],'192.0.2.160');
- assert.equal(usedPending.data.pending,false,'Phiên đăng ký chỉ được sử dụng một lần.');
+ assert.equal(sqlite.prepare("SELECT terms_accepted_at FROM users WHERE email=?").get('new.visitor@gmail.com').terms_accepted_at,null);
  const reLoginNew=await googleFlow('login','new.visitor@gmail.com','google-new-visitor-2026','','192.0.2.160');
  assert.equal(reLoginNew.redirect,'/','Google đã đăng ký phải đăng nhập thẳng, không tạo thêm tài khoản.');
  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM users WHERE email=?').get('new.visitor@gmail.com').n,1);
- const cancelled=await googleFlow('login','cancel.me@gmail.com','google-cancel-2026','','192.0.2.161');
- const cancelCookie=cancelled.cookies.find(c=>c.startsWith('tl_google_pending=')).split(';')[0];
+ const noPending=await call('/api/auth/google/pending','GET',undefined,newSession.split(';')[0],'192.0.2.160');
+ assert.equal(noPending.data.pending,false);
+
+ // Tương thích những phiên chờ cũ trước cập nhật: hoàn tất được không cần checkbox.
+ const legacyPendingToken='f'.repeat(64);
+ const legacyPendingCookie='tl_google_pending='+legacyPendingToken;
+ sqlite.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run('google_signup_pending:'+legacyPendingToken,
+  JSON.stringify({identity:{sub:'legacy-google-sub-2026',email:'pending.legacy@gmail.com',name:'Legacy Google'},
+   expires:Date.now()+600000}));
+ const priorPending=await call('/api/auth/google/pending','GET',undefined,legacyPendingCookie,'192.0.2.166');
+ assert.equal(priorPending.data.pending,true);
+ const completeLegacy=await worker.fetch(new Request(origin+'/api/auth/google/complete',{
+  method:'POST',headers:{'Content-Type':'application/json','Origin':origin,'X-Tram-Lua':'1',
+   'CF-Connecting-IP':'192.0.2.166','Cookie':legacyPendingCookie},
+  body:JSON.stringify({})
+ }),env);
+ assert.equal(completeLegacy.status,200,'Phiên Google chờ cũ hoàn tất không checkbox.');
+ const legacyCookie=completeLegacy.headers.getSetCookie().find(c=>c.startsWith('kl_session='));
+ assert.ok(legacyCookie);
+ assert.equal(sqlite.prepare("SELECT terms_accepted_at FROM users WHERE email='pending.legacy@gmail.com'").get().terms_accepted_at,null);
+ const usedPending=await call('/api/auth/google/pending','GET',undefined,legacyPendingCookie,'192.0.2.166');
+ assert.equal(usedPending.data.pending,false,'Phiên đăng ký Google cũ chỉ được dùng một lần.');
+ const replay=await call('/api/auth/google/complete','POST',{},legacyPendingCookie,'192.0.2.166');
+ assert.equal(replay.status,401);
+
+ const cancelledToken='e'.repeat(64),cancelCookie='tl_google_pending='+cancelledToken;
+ sqlite.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run('google_signup_pending:'+cancelledToken,
+  JSON.stringify({identity:{sub:'google-cancel-2026',email:'cancel.me@gmail.com',name:'Cancel'},
+   expires:Date.now()+600000}));
  const cancelResult=await call('/api/auth/google/cancel','POST',{},cancelCookie,'192.0.2.161');
  assert.equal(cancelResult.status,200);
  const cancelledPending=await call('/api/auth/google/pending','GET',undefined,cancelCookie,'192.0.2.161');
  assert.equal(cancelledPending.data.pending,false);
- assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM users WHERE email=?').get('cancel.me@gmail.com').n,0);
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM users WHERE email='cancel.me@gmail.com'").get().n,0);
 
+ // Người đăng ký email/mật khẩu vẫn phải tự tích đồng ý điều khoản.
+ const emailWithoutTerms=await call('/api/auth/register','POST',{
+  name:'Email Không Tick',email:'notick@example.com',password:'test-password-2026'
+ },'','192.0.2.164');
+ assert.equal(emailWithoutTerms.status,400);
+ assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM users WHERE email='notick@example.com'").get().n,0);
  const noAutoMerge=await googleFlow('register','firstlast@gmail.com','google-id-987654321','','192.0.2.151');
  assert.equal(noAutoMerge.redirect,'/?google_error=email_exists');
  const legacyLink=await googleFlow('link','firstlast@gmail.com','google-id-987654321',gmail1.cookie,'192.0.2.151');
