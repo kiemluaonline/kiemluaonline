@@ -33,6 +33,8 @@ export function normalizeShopShowcaseURL(raw) {
 // Ảnh sản phẩm được nén thành JPEG nhỏ và lưu trong settings của D1.
 // Không cần migration hay R2; chỉ tải ảnh khi trình duyệt thực sự cần.
 const SHOP_IMAGE_PREFIX='shop_product_image:';
+const SHOP_GUIDE_IMAGE_PREFIX='shop_guide_image:';
+const SHOP_GUIDES=['showcase','catalog','request'];
 const SHOP_IMAGE_MAX_BYTES=160000;
 function shopImageBase64(raw,fail){
  const value=String(raw||'');
@@ -81,6 +83,24 @@ export async function shopAPI(req, env, H) {
       showcase_url:normalizeShopShowcaseURL(values.shop_showcase_url)||''
     };
   };
+  const guideImageMatch=path.match(/^\/api\/shop\/guide-images\/(showcase|catalog|request)$/);
+  if(guideImageMatch&&method==='GET'){
+    await auth(req,env);
+    const row=await db.prepare('SELECT value FROM settings WHERE key=?')
+      .bind(SHOP_GUIDE_IMAGE_PREFIX+guideImageMatch[1]).first();
+    if(!row?.value)fail(404,'Ảnh hướng dẫn chưa được đăng.');
+    const bytes=Uint8Array.from(atob(row.value),x=>x.charCodeAt(0));
+    return new Response(bytes,{headers:{
+      'Content-Type':'image/jpeg','X-Content-Type-Options':'nosniff',
+      'Cache-Control':'private, no-store',
+      'Content-Disposition':'inline; filename="tram-co-lua-huong-dan.jpg"'
+    }});
+  }
+  const guideImages=async()=>{
+    const rows=await db.prepare("SELECT key FROM settings WHERE key IN ('shop_guide_image:showcase','shop_guide_image:catalog','shop_guide_image:request')").all();
+    const found=new Set(rows.results.map(x=>x.key));
+    return Object.fromEntries(SHOP_GUIDES.map(type=>[type,found.has(SHOP_GUIDE_IMAGE_PREFIX+type)]));
+  };
   const imageMatch=path.match(/^\/api\/shop\/images\/([0-9a-f-]{36})$/i);
   if(imageMatch && method==='GET'){
     const visitor=await auth(req,env);
@@ -100,12 +120,12 @@ export async function shopAPI(req, env, H) {
   }
   if (path === '/api/shop' && method === 'GET') {
     const user = await auth(req,env);
-    const [products, requests, contacts] = await Promise.all([
+    const [products, requests, contacts, guides] = await Promise.all([
       db.prepare(`SELECT id,title,description,link,category,created_at,${productImageColumn} FROM shop_products WHERE is_active=1 ORDER BY created_at DESC LIMIT 100`).all(),
       db.prepare("SELECT r.id,r.code,r.note,r.channel,r.status,r.product_id,r.created_at,r.updated_at,r.seen_at,p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link FROM shop_requests r LEFT JOIN shop_products p ON p.id=r.product_id WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 60").bind(user.id).all(),
-      shopContacts()
+      shopContacts(),guideImages()
     ]);
-    return json({products:products.results,requests:requests.results,contacts,showcase_url:contacts.showcase_url});
+    return json({products:products.results,requests:requests.results,contacts,showcase_url:contacts.showcase_url,guide_images:guides});
   }
   if (path === '/api/shop/alerts' && method === 'GET') {
     const user = await auth(req,env);
@@ -133,12 +153,25 @@ export async function shopAPI(req, env, H) {
   if (!path.startsWith('/api/admin/shop')) return null;
   const admin = await auth(req,env,'admin');
   if (path === '/api/admin/shop' && method === 'GET') {
-    const [products, requests, contacts] = await Promise.all([
+    const [products, requests, contacts, guides] = await Promise.all([
       db.prepare(`SELECT id,title,description,link,category,is_active,created_at,${productImageColumn} FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200`).all(),
       db.prepare("SELECT r.id,r.code,r.channel,r.note,r.status,r.product_id,r.created_at,r.updated_at,u.name,u.email,p.title AS product_title FROM shop_requests r JOIN users u ON u.id=r.user_id LEFT JOIN shop_products p ON p.id=r.product_id ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").all(),
-      shopContacts()
+      shopContacts(),guideImages()
     ]);
-    return json({products:products.results,requests:requests.results,contacts,showcase_url:contacts.showcase_url});
+    return json({products:products.results,requests:requests.results,contacts,showcase_url:contacts.showcase_url,guide_images:guides});
+  }
+  const guideEdit=path.match(/^\/api\/admin\/shop\/guide-images\/(showcase|catalog|request)$/);
+  if(guideEdit&&method==='PUT'){
+    const body=await readBody(req,230000);
+    const value=String(body.image_data||'');
+    if(value){
+      const jpeg=shopImageBase64(value,fail);
+      await db.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        .bind(SHOP_GUIDE_IMAGE_PREFIX+guideEdit[1],jpeg).run();
+    }else{
+      await db.prepare("DELETE FROM settings WHERE key=?").bind(SHOP_GUIDE_IMAGE_PREFIX+guideEdit[1]).run();
+    }
+    return json({ok:true,image_url:value?'/api/shop/guide-images/'+guideEdit[1]:''});
   }
   if(path === '/api/admin/shop/showcase' && method === 'PUT'){
     const body=await readBody(req);
