@@ -32,6 +32,15 @@ export async function shopPage(ctx){
   if(fresh.length)await api('/api/shop/requests/read','POST',{}).catch(()=>{});
   const contact=(which)=>!!data.contacts[which];
   const showcaseURL=data.showcase_url||data.contacts?.showcase_url||'';
+  // Báo đơn chỉ render một lần: nằm trong thẻ trang trưng bày nếu đã có link,
+  // và vẫn hiện riêng nếu Admin chưa thiết lập link.
+  const reportSection=`<section class="shop-order-entry shop-report-section" id="shop-report-order" aria-label="Báo đơn hàng sau khi mua">
+    <div class="shop-report-heading"><div><strong>📦 Đã mua hàng? Báo đơn tại đây</strong>
+      <span>Sau khi mua qua trang trưng bày của Admin hoặc link sản phẩm do Trạm giới thiệu, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.</span></div>
+      <button type="button" class="btn alt sm shop-report-history" data-go="shop-orders">Lịch sử đơn hàng</button>
+    </div>
+    <button type="button" class="btn shop-report-open" data-action="shop-report-order">📦 Đã mua? Báo đơn</button>
+   </section>`;
   return `<div class="shop-page">
    <section class="shop-hero">
     <div class="shop-hero-copy"><div class="shop-kicker"><span class="shop-kicker-dot"></span> MUA SẮM THÔNG MINH • TÍCH LÚA</div>
@@ -48,6 +57,7 @@ export async function shopPage(ctx){
       <p>Nhấn để xem các sản phẩm Admin đã trưng bày. Chọn mua qua đúng liên kết, sau đó gửi mã đơn để được kiểm tra điều kiện nhận Lúa.</p>
     </div>
     <a class="shop-showcase-link" href="${esc(showcaseURL)}" target="_blank" rel="noopener noreferrer sponsored">🛍️ Vào trang trưng bày <span aria-hidden="true">↗</span></a>
+    ${reportSection}
    </section>`:''}
    <div class="shop-trust-strip"><span>✓ Tự chọn sản phẩm</span><span>✓ Không cần tải ảnh lên web</span><span>✓ Thưởng sau xác minh</span></div>
    <aside class="shop-origin-policy" aria-label="Quy định mua đúng trang trưng bày" role="note">
@@ -63,13 +73,7 @@ export async function shopPage(ctx){
     <div class="shop-chips" role="group" aria-label="Danh mục sản phẩm">${categories.map(c=>`<button type="button" data-action="shop-filter" data-category="${c[0]}" class="${activeCategory===c[0]?'active':''}">${c[2]} ${c[1]}</button>`).join('')}</div>
     ${visible.length?`<div class="shop-products">${visible.map(p=>shopCard(p,esc)).join('')}</div>`:`<div class="shop-empty"><span>🛒</span><strong>${data.products.length?'Chưa có sản phẩm trong danh mục này':'Gian hàng đang được cập nhật'}</strong><p>Chưa thấy món bạn muốn? Gửi yêu cầu bên dưới để Admin hỗ trợ tìm sản phẩm.</p><a href="#shop-request">Yêu cầu sản phẩm ↘</a></div>`}
    </section>
-   <section class="shop-order-entry shop-report-section" id="shop-report-order" aria-label="Báo đơn hàng sau khi mua">
-    <div class="shop-report-heading"><div><strong>📦 Đã mua hàng? Báo đơn tại đây</strong>
-      <span>Sau khi mua qua trang trưng bày của Admin, chỉ cần gửi mã đơn TikTok. Không cần chọn sản phẩm; Admin sẽ đối chiếu nguồn mua trước khi xét Lúa.</span></div>
-      <button type="button" class="btn alt sm shop-report-history" data-go="shop-orders">Lịch sử đơn hàng</button>
-    </div>
-    <button type="button" class="btn shop-report-open" data-action="shop-report-order">📦 Đã mua? Báo đơn</button>
-   </section>
+   ${showcaseURL?'':reportSection}
    <section class="shop-request-section" id="shop-request">
     <div class="shop-request-art"><div class="shop-request-art-icon">💬</div><span>Ảnh & link gửi qua ứng dụng nhắn tin</span><div class="shop-request-spark">✧</div></div>
     <div class="shop-request-content"><div class="shop-section-eyebrow">DÀNH RIÊNG CHO BẠN</div><h2>Không thấy món bạn muốn?</h2>
@@ -88,7 +92,7 @@ export async function shopPage(ctx){
     ${data.requests.length?`<div class="shop-requests">${data.requests.map(r=>`<article class="shop-request-item"><div class="shop-request-icon">${r.status==='ready'?'🎉':r.status==='rejected'?'✕':'⌛'}</div>
     <div class="shop-request-info"><div class="shop-request-top"><strong>${esc(r.code)}</strong><span class="shop-state shop-state-${esc(r.status)}">${r.status==='ready'?'Đã có sản phẩm':r.status==='rejected'?'Không tìm thấy':'Đang tìm sản phẩm'}</span></div>
     <p>${esc(r.note)}</p><small>Gửi qua ${r.channel==='zalo'?'Zalo':'Telegram'}</small>
-    ${r.status==='ready'&&r.product_link?`<div class="shop-request-ready"><strong>${esc(r.product_title||'Sản phẩm đã tìm thấy')}</strong><a href="${esc(r.product_link)}" target="_blank" rel="noopener noreferrer sponsored">Xem & mua ngay ↗</a><a class="shop-report-text-link" href="#shop-report-order">Đã mua? Báo đơn ở mục riêng ↓</a></div>`:''}</div></article>`).join('')}</div>`:`<div class="shop-empty shop-empty-compact"><span>📦</span><strong>Bạn chưa gửi yêu cầu nào</strong><p>Gửi ảnh hoặc link qua Zalo, Telegram để bắt đầu nhé.</p></div>`}
+    ${r.status==='ready'&&r.product_link?`<div class="shop-request-ready"><strong>${esc(r.product_title||'Sản phẩm đã tìm thấy')}</strong><a href="${esc(r.product_link)}" target="_blank" rel="noopener noreferrer sponsored">Xem & mua ngay ↗</a><a class="shop-report-text-link" href="#shop-report-order">Đã mua? Báo đơn →</a></div>`:''}</div></article>`).join('')}</div>`:`<div class="shop-empty shop-empty-compact"><span>📦</span><strong>Bạn chưa gửi yêu cầu nào</strong><p>Gửi ảnh hoặc link qua Zalo, Telegram để bắt đầu nhé.</p></div>`}
    </section>
    <section class="shop-guide"><h3>Hành trình nhận Lúa</h3><div><span><b>01</b>Chọn và mua hàng</span><span><b>02</b>Chờ xác minh đơn</span><span><b>03</b>Tạm duyệt – Chờ giải quyết</span><span><b>04</b>Đủ điều kiện mới cộng Lúa</span></div><p>Chỉ mua qua trang trưng bày hoặc liên kết sản phẩm do Admin giới thiệu mới đủ điều kiện xét Lúa. Mua ngoài rồi gửi ID không được tính. Đơn mua cần được Admin xác minh; nhấp liên kết hoặc đặt hàng chưa tự động phát sinh thưởng.</p></section>
    </div>`;
