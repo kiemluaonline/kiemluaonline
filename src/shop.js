@@ -1,4 +1,3 @@
-import { previewTikTokProduct } from './shop-preview.js';
 // Giới hạn miền Zalo thật; chấp nhận cả link hồ sơ và link QR chia sẻ trên iPhone.
 export function normalizeZaloContact(raw) {
   const value=String(raw||'').trim();
@@ -76,12 +75,6 @@ export async function shopAPI(req, env, H) {
   }
   if (!path.startsWith('/api/admin/shop')) return null;
   const admin = await auth(req,env,'admin');
-  // Tính năng thử nghiệm: đọc thử metadata mà TikTok công khai. Chỉ Admin, không ghi D1.
-  if(path === '/api/admin/shop/product-preview' && method === 'POST'){
-    const b=await readBody(req),link=str(b.link,1050);
-    if(!link||link.length>1000)fail(400,'Dán link TikTok Shop hợp lệ trước khi thử.');
-    return json(await previewTikTokProduct(link));
-  }
   if (path === '/api/admin/shop' && method === 'GET') {
     const [products, requests, contacts] = await Promise.all([
       db.prepare("SELECT id,title,description,link,category,is_active,created_at FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200").all(),
