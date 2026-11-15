@@ -71,6 +71,38 @@ const form=await adminShopPage({
 assert.match(form,/data-form="shop-fulfill"/);
 assert.match(form,/Thêm sản phẩm & thông báo khách/);
 assert.match(form,/name="request_id"/);
+assert.match(form,/data-form="shop-showcase"/,'Admin should have a dedicated showcase link form.');
+assert.match(form,/shop-showcase-url/,'Admin link input must be present.');
+const showroom='https://www.tiktok.com/@tramcolua/shop?tab=products';
+const invalidShowcase=await call('/api/admin/shop/showcase','PUT',{url:'https://tiktok.com.evil.example/shop'},'admin');
+assert.equal(invalidShowcase.status,400,'Do not allow fake TikTok domains.');
+assert.equal((await call('/api/admin/shop/showcase','PUT',{url:showroom})).status,403,
+ 'Members must not edit the showcase URL.');
+const savedShowcase=await call('/api/admin/shop/showcase','PUT',{url:showroom},'admin');
+assert.equal(savedShowcase.status,200);
+assert.equal(savedShowcase.data.showcase_url,showroom);
+assert.equal(sql.prepare("SELECT value FROM settings WHERE key='shop_showcase_url'").get().value,showroom);
+const readStorefront=(await call('/api/shop')).data;
+assert.equal(readStorefront.showcase_url,showroom,'Members should receive the Admin storefront URL.');
+assert.equal((await call('/api/admin/shop','GET',undefined,'admin')).data.showcase_url,showroom);
+const showcasePage=await shopPage({
+ api:async()=>readStorefront,esc:x=>String(x),state:{shopCategory:'all'}
+});
+assert.match(showcasePage,/href="https:\/\/www\.tiktok\.com\/@tramcolua\/shop\?tab=products"/);
+assert.match(showcasePage,/Vào trang trưng bày/);
+assert.match(showcasePage,/rel="noopener noreferrer sponsored"/);
+assert.doesNotMatch(showcasePage,/hoa hồng|tiếp thị liên kết|Affiliate/i);
+const hiddenShowcase=await call('/api/admin/shop/showcase','PUT',{url:''},'admin');
+assert.equal(hiddenShowcase.status,200);
+assert.equal((await call('/api/shop')).data.showcase_url,'');
+const hiddenPage=await shopPage({
+ api:async()=>({products:[],requests:[],contacts:{zalo:'',telegram:''},showcase_url:''}),
+ esc:x=>String(x),state:{shopCategory:'all'}
+});
+assert.doesNotMatch(hiddenPage,/class="shop-showcase-entry"/);
+await call('/api/admin/shop/showcase','PUT',{url:showroom},'admin');
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,
+ 'Setting a storefront must not affect Lúa or rewards.');
 const created=await call('/api/admin/shop/requests/'+req1,'POST',payload,'admin');
 assert.equal(created.status,200);
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM shop_products').get().n,1);
