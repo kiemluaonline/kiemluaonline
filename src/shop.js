@@ -30,6 +30,27 @@ export function normalizeShopShowcaseURL(raw) {
   return u.href;
 }
 
+// Ảnh sản phẩm được nén thành JPEG nhỏ và lưu trong settings của D1.
+// Không cần migration hay R2; chỉ tải ảnh khi trình duyệt thực sự cần.
+const SHOP_IMAGE_PREFIX='shop_product_image:';
+const SHOP_IMAGE_MAX_BYTES=160000;
+function shopImageBase64(raw,fail){
+ const value=String(raw||'');
+ const match=/^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+ if(!match||match[1].length>215000)
+   fail(400,'Ảnh sản phẩm cần là JPEG đã nén, tối đa 160 KB.');
+ let binary;
+ try{binary=atob(match[1]);}
+ catch{fail(400,'Ảnh sản phẩm không hợp lệ.');}
+ if(binary.length<1000||binary.length>SHOP_IMAGE_MAX_BYTES||
+   binary.charCodeAt(0)!==255||binary.charCodeAt(1)!==216||binary.charCodeAt(2)!==255||
+   binary.charCodeAt(binary.length-2)!==255||binary.charCodeAt(binary.length-1)!==217)
+   fail(400,'Ảnh JPEG không hợp lệ hoặc vượt 160 KB.');
+ return match[1];
+}
+const productImageColumn=`CASE WHEN EXISTS(SELECT 1 FROM settings si WHERE si.key='shop_product_image:'||shop_products.id)
+ THEN '/api/shop/images/'||shop_products.id ELSE '' END AS image_url`;
+
 export async function shopAPI(req, env, H) {
   const {auth, readBody, fail, json, id, str} = H;
   const path = new URL(req.url).pathname;
@@ -60,10 +81,27 @@ export async function shopAPI(req, env, H) {
       showcase_url:normalizeShopShowcaseURL(values.shop_showcase_url)||''
     };
   };
+  const imageMatch=path.match(/^\/api\/shop\/images\/([0-9a-f-]{36})$/i);
+  if(imageMatch && method==='GET'){
+    const visitor=await auth(req,env);
+    const product=await db.prepare('SELECT is_active FROM shop_products WHERE id=?').bind(imageMatch[1]).first();
+    if(!product||(!product.is_active&&visitor.role!=='admin'))
+      fail(404,'Không tìm thấy ảnh sản phẩm.');
+    const row=await db.prepare('SELECT value FROM settings WHERE key=?')
+      .bind(SHOP_IMAGE_PREFIX+imageMatch[1]).first();
+    if(!row?.value)fail(404,'Sản phẩm chưa có ảnh.');
+    const binary=atob(row.value);
+    const bytes=Uint8Array.from(binary,x=>x.charCodeAt(0));
+    return new Response(bytes,{headers:{
+      'Content-Type':'image/jpeg','X-Content-Type-Options':'nosniff',
+      'Cache-Control':'private, no-store',
+      'Content-Disposition':'inline; filename="tram-lua-product.jpg"'
+    }});
+  }
   if (path === '/api/shop' && method === 'GET') {
     const user = await auth(req,env);
     const [products, requests, contacts] = await Promise.all([
-      db.prepare("SELECT id,title,description,link,category,created_at FROM shop_products WHERE is_active=1 ORDER BY created_at DESC LIMIT 100").all(),
+      db.prepare("SELECT id,title,description,link,category,created_at,${productImageColumn} FROM shop_products WHERE is_active=1 ORDER BY created_at DESC LIMIT 100").all(),
       db.prepare("SELECT r.id,r.code,r.note,r.channel,r.status,r.product_id,r.created_at,r.updated_at,r.seen_at,p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link FROM shop_requests r LEFT JOIN shop_products p ON p.id=r.product_id WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 60").bind(user.id).all(),
       shopContacts()
     ]);
@@ -96,7 +134,7 @@ export async function shopAPI(req, env, H) {
   const admin = await auth(req,env,'admin');
   if (path === '/api/admin/shop' && method === 'GET') {
     const [products, requests, contacts] = await Promise.all([
-      db.prepare("SELECT id,title,description,link,category,is_active,created_at FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200").all(),
+      db.prepare("SELECT id,title,description,link,category,is_active,created_at,${productImageColumn} FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200").all(),
       db.prepare("SELECT r.id,r.code,r.channel,r.note,r.status,r.product_id,r.created_at,r.updated_at,u.name,u.email,p.title AS product_title FROM shop_requests r JOIN users u ON u.id=r.user_id LEFT JOIN shop_products p ON p.id=r.product_id ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").all(),
       shopContacts()
     ]);
@@ -133,6 +171,21 @@ export async function shopAPI(req, env, H) {
       db.prepare("INSERT INTO settings(key,value) VALUES('shop_contact_telegram',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(telegram)
     ]);
     return json({ok:true,contacts:{zalo,telegram}});
+  }
+  const imageEdit=path.match(/^\/api\/admin\/shop\/products\/([0-9a-f-]{36})\/image$/i);
+  if(imageEdit && method==='PUT'){
+    const product=await db.prepare('SELECT id FROM shop_products WHERE id=?').bind(imageEdit[1]).first();
+    if(!product)fail(404,'Không tìm thấy sản phẩm để lưu ảnh.');
+    const body=await readBody(req,230000);
+    const raw=String(body.image_data||'');
+    if(raw){
+      const base64=shopImageBase64(raw,fail);
+      await db.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        .bind(SHOP_IMAGE_PREFIX+imageEdit[1],base64).run();
+      return json({ok:true,image_url:'/api/shop/images/'+imageEdit[1]});
+    }
+    await db.prepare('DELETE FROM settings WHERE key=?').bind(SHOP_IMAGE_PREFIX+imageEdit[1]).run();
+    return json({ok:true,image_url:''});
   }
   if (path === '/api/admin/shop/products' && method === 'POST') {
     const data = validateProduct(await readBody(req)), productId=id();
