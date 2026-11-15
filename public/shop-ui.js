@@ -101,6 +101,11 @@ export async function adminShopPage(ctx){
      <div class="field"><label for="shop-description">Giới thiệu sản phẩm (không bắt buộc)</label><textarea id="shop-description" name="description" maxlength="330" placeholder="Mô tả ngắn, rõ ràng...">${esc(edit.description||'')}</textarea></div>
      ${select('category','Danh mục',categories.map(x=>[x[0],x[1]]),edit.category||'beauty')}
      ${field('shop-product-link','Link sản phẩm TikTok Shop',edit.link||'','required type="url" placeholder="https://vt.tiktok.com/..."')}
+     <div class="shop-preview-test">
+       <button class="btn alt sm" type="button" data-action="shop-preview-link">🔍 Thử tự lấy tên và ảnh</button>
+       <p class="note">Thử nghiệm: chỉ xem trước. Không tự đăng sản phẩm hoặc đổi link Affiliate. Nếu TikTok chặn, bạn vẫn nhập thông tin thủ công.</p>
+       <div class="shop-preview-result" id="shop-preview-result" role="status" aria-live="polite" hidden></div>
+     </div>
      ${select('is_active','Hiển thị sản phẩm',[['1','Hiển thị công khai'],['0','Lưu nháp / Tạm ẩn']],String(edit.is_active??1))}
      <div class="shop-admin-buttons"><button class="btn" type="submit">💾 ${edit.id?'Lưu thay đổi':'Thêm sản phẩm'}</button>${edit.id?'<button type="button" class="btn alt" data-action="shop-reset-product">Thêm mới</button>':''}</div>
     </form>
@@ -143,6 +148,31 @@ export async function handleShopAction(action,el,ctx){
   if(action==='shop-filter'){state.shopCategory=el.dataset.category||'all';await navigate('shop');return true;}
   if(action==='shop-edit-product'){state.shopEdit=el.dataset.id;await navigate('admin-shop');document.getElementById('shop-product-form')?.scrollIntoView({behavior:'smooth'});return true;}
   if(action==='shop-reset-product'){state.shopEdit=null;await navigate('admin-shop');return true;}
+  if(action==='shop-preview-link'){
+    const form=el.closest('form[data-form="shop-product"]');
+    const link=form?.querySelector('[name="shop-product-link"]')?.value?.trim()||'';
+    const box=form?.querySelector('#shop-preview-result');
+    if(!link){toast('Hãy dán link TikTok Shop Affiliate trước.',true);return true;}
+    if(!box)return true;
+    el.disabled=true;
+    box.hidden=false;
+    box.textContent='Đang thử lấy tên và ảnh từ TikTok...';
+    try{
+      const preview=await api('/api/admin/shop/product-preview','POST',{link});
+      if(!el.isConnected)return true;
+      if(!preview.ok){box.textContent='⚠️ '+(preview.message||'Không lấy được tên và ảnh. Bạn hãy thêm thủ công.');return true;}
+      const title=form.querySelector('[name="shop-title"]');
+      if(title&&!title.value.trim())title.value=preview.title;
+      box.innerHTML=`<div class="shop-preview-data">
+        ${preview.image_url?`<img src="${esc(preview.image_url)}" alt="Ảnh TikTok tự nhận diện – cần Admin kiểm tra" loading="lazy" referrerpolicy="no-referrer">`:'<div class="shop-preview-no-image">Chưa lấy được ảnh</div>'}
+        <div><strong>${esc(preview.title)}</strong><p>${esc(preview.message)}</p>
+          <small>Đây chỉ là xem trước; ảnh chưa được lưu hoặc công khai.</small></div>
+      </div>`;
+    }catch(error){
+      if(el.isConnected)box.textContent='⚠️ '+(error.message||'TikTok không cung cấp dữ liệu. Bạn có thể thêm sản phẩm thủ công.');
+    }finally{if(el.isConnected)el.disabled=false;}
+    return true;
+  }
   if(action==='shop-start-request'){
     el.disabled=true;
     try{
