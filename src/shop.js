@@ -101,7 +101,7 @@ export async function shopAPI(req, env, H) {
   if (path === '/api/shop' && method === 'GET') {
     const user = await auth(req,env);
     const [products, requests, contacts] = await Promise.all([
-      db.prepare("SELECT id,title,description,link,category,created_at,${productImageColumn} FROM shop_products WHERE is_active=1 ORDER BY created_at DESC LIMIT 100").all(),
+      db.prepare(`SELECT id,title,description,link,category,created_at,${productImageColumn} FROM shop_products WHERE is_active=1 ORDER BY created_at DESC LIMIT 100`).all(),
       db.prepare("SELECT r.id,r.code,r.note,r.channel,r.status,r.product_id,r.created_at,r.updated_at,r.seen_at,p.title AS product_title,CASE WHEN p.is_active=1 THEN p.link ELSE NULL END AS product_link FROM shop_requests r LEFT JOIN shop_products p ON p.id=r.product_id WHERE r.user_id=? ORDER BY r.created_at DESC LIMIT 60").bind(user.id).all(),
       shopContacts()
     ]);
@@ -134,7 +134,7 @@ export async function shopAPI(req, env, H) {
   const admin = await auth(req,env,'admin');
   if (path === '/api/admin/shop' && method === 'GET') {
     const [products, requests, contacts] = await Promise.all([
-      db.prepare("SELECT id,title,description,link,category,is_active,created_at,${productImageColumn} FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200").all(),
+      db.prepare(`SELECT id,title,description,link,category,is_active,created_at,${productImageColumn} FROM shop_products WHERE id!='shop-order-unassigned' ORDER BY created_at DESC LIMIT 200`).all(),
       db.prepare("SELECT r.id,r.code,r.channel,r.note,r.status,r.product_id,r.created_at,r.updated_at,u.name,u.email,p.title AS product_title FROM shop_requests r JOIN users u ON u.id=r.user_id LEFT JOIN shop_products p ON p.id=r.product_id ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC LIMIT 200").all(),
       shopContacts()
     ]);
