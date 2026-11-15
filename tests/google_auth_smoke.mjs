@@ -33,6 +33,19 @@ async function call(path,method='GET',body, cookie='',ip='192.0.2.15',device='11
 // Xác nhận database có Admin thật trước khi thử Google OAuth.
 const setup=await call('/api/setup','POST',{setup_key:env.SETUP_KEY,email:'admin@gmail.test',name:'Admin',password:'A-secure-password-2026'});
 assert.equal(setup.status,201,JSON.stringify(setup));
+
+const appSource=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const googlePendingUI=appSource.slice(appSource.indexOf('if(state.googlePending){'),
+ appSource.indexOf(' const mode=state.authMode;',appSource.indexOf('if(state.googlePending){')));
+assert.doesNotMatch(googlePendingUI,/type="checkbox"/,'Google first-time completion must not show terms checkbox');
+assert.match(googlePendingUI,/data-form="google-complete"/,'Legacy Google pending sessions still have Continue action');
+const googleClickHandler=appSource.slice(appSource.indexOf("if(act.startsWith('google-'))"),
+ appSource.indexOf("if(act==='toggle-menu')",appSource.indexOf("if(act.startsWith('google-'))")));
+assert.doesNotMatch(googleClickHandler,/\[name="accept_terms"\]/,'Google signup click must not read email terms checkbox');
+assert.doesNotMatch(googleClickHandler,/body\.accept_terms/,'Google signup must not fake email consent');
+const emailRegistrationUI=appSource.slice(appSource.indexOf("active==='register'?\`<form"),appSource.indexOf("data-form=\\"login\\"",appSource.indexOf("active==='register'?\`<form")));
+assert.match(emailRegistrationUI,/type="checkbox" name="accept_terms" value="yes" required/,'Email/password registration still requires explicit checkbox');
+
  // Chống email tạm thời, biến thể Gmail và đăng ký trùng.
  const badMail=await call('/api/auth/register','POST',{name:'Thành viên thử',email:'try@yopmail.com',password:'test-password-2026',accept_terms:'yes'},'','192.0.2.101');
  assert.equal(badMail.status,400,JSON.stringify(badMail));
