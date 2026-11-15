@@ -178,6 +178,16 @@ assert.equal(displayedPhoto.image_url,imagePath,'Member list should use image UR
 assert.ok(!JSON.stringify((await call('/api/shop')).data).includes(encodedPhoto),'Do not download image bytes in API listing.');
 const displayedCard=shopCard(displayedPhoto,x=>String(x));
 assert.match(displayedCard,/class="shop-product-photo"/,'Real product photo must replace decorative emoji.');
+assert.match(displayedCard,/shop-has-photo/,'Product photos should have a separate uncropped frame.');
+const responsiveStyles=readFileSync(new URL('../public/shop.css',import.meta.url),'utf8');
+assert.match(responsiveStyles,/\.shop-product-art\.shop-has-photo\s*\{[^}]*aspect-ratio:1\/1/,
+ 'Actual product photos must use an aspect-ratio instead of fixed crop height.');
+assert.match(responsiveStyles,/\.shop-product-art \.shop-product-photo\s*\{[^}]*object-fit:contain/,
+ 'Image must fit completely inside the frame, not be cropped.');
+assert.doesNotMatch(responsiveStyles,/\.shop-product-art \.shop-product-photo\s*\{[^}]*object-fit:cover/,
+ 'Product photos must never use cover cropping.');
+assert.match(responsiveStyles,/@media\(max-width:570px\)\s*\{\s*\.shop-product-art\.shop-has-photo[^}]*\}\s*\.shop-product-art \.shop-product-photo\{object-fit:contain/,
+ 'Mobile layout should also show whole photo.');
 assert.match(displayedCard,/loading="lazy"/,'Do not eagerly load all product images.');
 assert.doesNotMatch(displayedCard,/shop-art-icon/,'Do not duplicate emoji when a product has a photo.');
 const updatedAdmin=(await call('/api/admin/shop','GET',undefined,'admin')).data.products;
