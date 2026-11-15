@@ -90,6 +90,14 @@ const showcasePage=await shopPage({
 });
 assert.match(showcasePage,/href="https:\/\/www\.tiktok\.com\/@tramcolua\/shop\?tab=products"/);
 assert.match(showcasePage,/Vào trang trưng bày/);
+assert.match(showcasePage,/data-action="shop-report-order"(?![^>]*disabled)/,
+ 'Báo đơn phải là nút có thể bấm.');
+const shopStyles=readFileSync(new URL('../public/shop.css',import.meta.url),'utf8');
+assert.match(shopStyles,/\.shop-showcase-entry \.shop-report-open\.btn:not\(:disabled\)\s*\{[^}]*color:#fff!important;/,
+ 'Nút báo đơn phải có chữ trắng nổi bật.');
+assert.match(shopStyles,/\.shop-showcase-entry \.shop-report-open\.btn:not\(:disabled\)\s*\{[^}]*background:linear-gradient\(120deg,#125f42,/,
+ 'Nút báo đơn phải có nền xanh rõ ràng.');
+
 assert.match(showcasePage,/rel="noopener noreferrer sponsored"/);
 assert.match(showcasePage,/class="shop-showcase-entry"[\s\S]*?class="shop-order-entry shop-report-section"/,
  'When a showcase URL exists, order reporting must be inside the same showcase card.');
