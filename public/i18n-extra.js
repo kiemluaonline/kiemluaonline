@@ -1,5 +1,16 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "GIAN HÀNG CHÍNH THỨC CỦA ADMIN": "ADMIN LUB KHW MUA KHOOM",
+  "Khám phá trang trưng bày TikTok Shop": "Saib Admin nplooj nthuav khoom TikTok Shop",
+  "Nhấn để xem các sản phẩm Admin đã trưng bày. Chọn mua qua đúng liên kết, sau đó gửi mã đơn để được kiểm tra điều kiện nhận Lúa.": "Nias saib cov khoom Admin tso rau hauv TikTok Shop. Yuav raws txoj link raug, ces xa tus lej xaj kom kuaj seb puas tsim nyog tau Lúa.",
+  "🛍️ Vào trang trưng bày": "🛍️ Qhib nplooj nthuav khoom",
+  "🛍️ Trang trưng bày TikTok Shop của Admin": "🛍️ Admin nplooj nthuav khoom TikTok Shop",
+  "Dán link trang trưng bày mà bạn đã sao chép từ TikTok Shop. Khách sẽ thấy nút vào gian hàng ngay đầu mục “Mua sắm nhận Lúa”.": "Muab txoj link nplooj nthuav khoom los ntawm TikTok Shop tso rau ntawm no. Cov qhua yuav pom lub pob qhib khw nyob saum nplooj yuav khoom.",
+  "Link trang trưng bày TikTok Shop": "Link nplooj nthuav khoom TikTok Shop",
+  "💾 Lưu link trang trưng bày": "💾 Khaws link nplooj nthuav khoom",
+  "Kiểm tra link ↗": "Kuaj link ↗",
+  "Để trống rồi lưu nếu muốn ẩn nút bên phía khách. Chỉ lưu link TikTok HTTPS; không thay đổi danh sách sản phẩm hoặc lịch sử đơn hàng.": "Cia khoob thiab khaws cia yog xav zais lub pob ntawm cov qhua. Tsuas siv TikTok HTTPS link xwb; daim ntawv khoom thiab keeb kwm xaj tsis hloov.",
+  "Đã lưu link trang trưng bày TikTok Shop.": "Twb khaws TikTok Shop nplooj nthuav khoom link lawm.",
   "Mua sắm nhận Lúa": "Mus yuav khoom tau Lúa",
   "Đơn hàng & Lúa": "Cov khoom xaj & Lúa",
   "Quản lý mua sắm": "Tswj kev yuav khoom",
