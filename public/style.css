@@ -693,3 +693,219 @@ html[lang="hmn"] .language-legal-notice{display:block}
 .global-payment-wrap:not([hidden]){margin:0 0 18px}
 .global-payment-wrap>.task-payment{margin:0}
 @media(max-width:570px){.global-payment-wrap:not([hidden]){margin-bottom:15px}}
+
+
+/* TRAM-LUA-VISUAL-REFRESH-20261115: lightweight decorative layer, no assets or data mutations. */
+:root{
+ --tl-glow:#c9efd7;
+ --tl-emerald:#176b51;
+ --tl-gold:#eac67a;
+ --tl-soft-shadow:0 10px 30px rgba(16,74,48,.075),0 2px 7px rgba(16,74,48,.035);
+}
+
+/* Tinh chỉnh nền và thẻ theo tông xanh ngọc + kem sáng, không thêm hình ảnh. */
+.layout .main-area{
+ background:
+  radial-gradient(ellipse 420px 360px at 97% 7%,rgba(169,224,190,.17),transparent 73%),
+  radial-gradient(ellipse 370px 320px at 4% 46%,rgba(242,215,148,.11),transparent 75%),
+  linear-gradient(165deg,#f8fbf8 0%,#f2f8f4 55%,#f9faf6 100%);
+}
+.topbar{
+ background:linear-gradient(112deg,rgba(255,255,255,.99),rgba(246,252,248,.98));
+ box-shadow:0 4px 20px rgba(21,73,52,.045);
+}
+.content .card:not(.task-payment),
+.content .sorder-summary-card,
+.content .sorder-card,
+.content .saved-payout-item{
+ border-color:#dbeadf;
+ box-shadow:var(--tl-soft-shadow);
+}
+#viewContent .page-head,
+#viewContent > .card,
+#viewContent > .grid,
+#viewContent > .section,
+#viewContent > .info-split,
+#viewContent > .task-dashboard,
+#viewContent > .shop-page,
+#viewContent > .sorder-page{
+ animation:tl-rise-in .42s cubic-bezier(.2,.7,.2,1) both;
+}
+#viewContent .page-head h2{
+ color:#173f32;
+ letter-spacing:-.8px;
+ text-wrap:balance;
+}
+#viewContent .eyebrow,
+.welcome-eyebrow{letter-spacing:2px;}
+.content .metric{
+ color:#13583f;
+ font-variant-numeric:tabular-nums;
+}
+.content .metric-label{letter-spacing:.01em;}
+
+/* Các nút bấm có chiều sâu nhưng phản hồi nhanh, không làm đổi chức năng. */
+.btn:not(:disabled),
+.welcome-btn:not(:disabled),
+.shop-page .shop-cta-shop,
+.shop-page .shop-report-open,
+.menu-toggle,
+.header-icon-button,
+.header-avatar{
+ -webkit-tap-highlight-color:transparent;
+ transition:transform .18s ease,background-color .2s ease,box-shadow .22s ease,border-color .2s ease;
+}
+.btn:not(.alt):not(.danger):not(.gold):not(:disabled){
+ background:linear-gradient(135deg,#217c5c,#126147);
+ box-shadow:0 5px 13px rgba(18,101,71,.14);
+}
+.btn:not(.alt):not(.danger):not(.gold):not(:disabled):hover{
+ background:linear-gradient(135deg,#278c67,#0f563f);
+ box-shadow:0 9px 21px rgba(18,101,71,.2);
+}
+.btn:not(:disabled):active,
+.welcome-btn:not(:disabled):active,
+.shop-page .shop-cta-shop:active,
+.menu-toggle:active,
+.header-icon-button:active,
+.header-avatar:active{transform:scale(.975);}
+:where(button,a,input,select,textarea,summary):focus-visible{
+ outline:3px solid rgba(30,133,93,.5);
+ outline-offset:3px;
+}
+.field :is(input,textarea,select),
+.shop-page :is(input,textarea,select){
+ transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease;
+}
+.field :is(input,textarea,select):focus,
+.shop-page :is(input,textarea,select):focus{
+ border-color:#37966e;
+ box-shadow:0 0 0 4px rgba(35,148,102,.12);
+ background:#fff;
+}
+
+/* Số dư Lúa ấm áp và dễ nhận biết, không giả lập biến động số dư. */
+.balance-pill{
+ background:linear-gradient(110deg,#edf9ed,#e4f7e9 62%,#f5fae8);
+ border-color:#b8e2c7;
+ box-shadow:0 3px 12px rgba(33,124,73,.065);
+ position:relative;
+}
+.topbar .header-avatar{
+ box-shadow:0 4px 14px rgba(17,104,72,.17);
+}
+.header-icon-button{
+ box-shadow:0 3px 11px rgba(20,83,62,.07);
+}
+
+/* Menu và các bảng trạng thái mượt mà hơn trên máy tính và điện thoại. */
+.nav button{transition:color .18s ease,background-color .18s ease,transform .18s ease;}
+.nav button.active{
+ background:linear-gradient(105deg,#eaf7e8,#d8efdc);
+ box-shadow:inset 3px 0 #3ba36c;
+}
+.table-wrap{box-shadow:0 4px 17px rgba(22,71,47,.035);}
+.chip{border:1px solid rgba(44,132,82,.08);}
+.modal{box-shadow:0 25px 70px rgba(3,32,24,.24);}
+.modal-cover{animation:tl-curtain-in .18s ease both;}
+.modal-cover .modal{animation:tl-pop-in .25s cubic-bezier(.2,.8,.2,1) both;}
+
+/* Gian hàng và đơn hàng: nhất quán với các thẻ thành viên. */
+.shop-page .shop-product-card{
+ border-color:#dbe9df;
+ box-shadow:var(--tl-soft-shadow);
+}
+.shop-page .shop-report-section{
+ box-shadow:0 7px 24px rgba(23,92,50,.045);
+}
+.sorder-page .sorder-summary-lua{
+ background:linear-gradient(120deg,#eaf8de,#f7fbed);
+}
+.welcome-hero{
+ background:
+  radial-gradient(ellipse at 86% 17%,#d4edd5 0,transparent 40%),
+  radial-gradient(ellipse at 4% 93%,#fff0cc 0,transparent 45%),
+  linear-gradient(132deg,#fbfcf7,#f0f8ef 62%,#edf8ee);
+}
+.welcome-hero h1 span{
+ color:#238a5b;
+ text-shadow:0 8px 24px rgba(50,158,88,.09);
+}
+.welcome-pill{box-shadow:0 8px 26px rgba(21,93,50,.08);}
+.welcome-type-card,
+.welcome-step,
+.welcome-faq-list details{box-shadow:0 8px 24px rgba(25,87,54,.055);}
+.welcome-faq-list details[open]{
+ border-color:#b7dbbc;
+ box-shadow:0 10px 26px rgba(22,89,51,.075);
+}
+.welcome-faq-list details[open] summary span{
+ background:#dcf2de;
+ transition:transform .2s ease;
+}
+
+/* Hiệu ứng ngắn, nhẹ, chỉ animate transform/opacity để không lag iPhone. */
+@keyframes tl-rise-in{
+ from{opacity:0;transform:translate3d(0,10px,0);}
+ to{opacity:1;transform:translate3d(0,0,0);}
+}
+@keyframes tl-pop-in{
+ from{opacity:0;transform:translate3d(0,8px,0) scale(.985);}
+ to{opacity:1;transform:translate3d(0,0,0) scale(1);}
+}
+@keyframes tl-curtain-in{from{opacity:0;}to{opacity:1;}}
+@keyframes tl-soft-float{
+ 0%,100%{transform:translate3d(0,0,0) rotate(4deg);}
+ 50%{transform:translate3d(0,-8px,0) rotate(3deg);}
+}
+@keyframes tl-gentle-glow{
+ 0%,100%{box-shadow:0 3px 12px rgba(33,124,73,.065);}
+ 50%{box-shadow:0 4px 17px rgba(39,137,82,.16);}
+}
+.welcome-float-card{animation:tl-soft-float 6s ease-in-out infinite;}
+.balance-pill{animation:tl-gentle-glow 8s ease-in-out infinite;}
+
+@media(hover:hover) and (pointer:fine){
+ .content .card:not(.task-payment):not(.task-device-card),
+ .shop-page .shop-product-card,
+ .welcome-type-card,
+ .welcome-step{
+  transition:transform .23s ease,box-shadow .24s ease,border-color .24s ease;
+ }
+ .content .card:not(.task-payment):not(.task-device-card):hover,
+ .shop-page .shop-product-card:hover,
+ .welcome-type-card:hover,
+ .welcome-step:hover{
+  transform:translateY(-3px);
+  border-color:#c4e1c8;
+  box-shadow:0 17px 35px rgba(17,81,49,.12);
+ }
+ .nav button:not(:disabled):hover{transform:translateX(2px);}
+}
+
+/* Trên màn hình nhỏ ưu tiên dễ đọc, không đổi số cột đã chốt. */
+@media(max-width:730px){
+ .content .card:not(.task-payment){border-radius:20px;}
+ .welcome-hero h1{text-shadow:none;}
+ .topbar{box-shadow:0 3px 12px rgba(17,74,49,.045);}
+ #viewContent .page-head{animation-duration:.3s;}
+}
+@media(prefers-reduced-motion:reduce){
+ #viewContent .page-head,
+ #viewContent > .card,
+ #viewContent > .grid,
+ #viewContent > .section,
+ #viewContent > .info-split,
+ #viewContent > .task-dashboard,
+ #viewContent > .shop-page,
+ #viewContent > .sorder-page,
+ .welcome-float-card,.balance-pill,
+ .modal-cover,.modal-cover .modal{
+  animation:none!important;
+ }
+ .btn,.welcome-btn,.nav button,
+ .shop-page .shop-product-card,.welcome-type-card,.welcome-step,
+ .menu-toggle,.header-icon-button,.header-avatar{
+  transition:none!important;
+ }
+}
