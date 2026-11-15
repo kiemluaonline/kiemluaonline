@@ -66,7 +66,7 @@ const payload={status:'ready_new',title:'Áo xanh',link:'https://vt.tiktok.com/Z
 const form=await adminShopPage({
  api:async()=>({products:[],requests:[{id:req1,code:'SP-TEST1',name:'Khách A',email:'u1@example.com',note:'Mua áo xanh',channel:'zalo',status:'pending'}],contacts:{zalo:'',telegram:''}}),
  esc:x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
- field:()=>'',select:()=>'',heading:()=>'',state:{shopEdit:null}
+ field:(name,label)=>'<label>'+label+'</label><input name="'+name+'">',select:()=>'',heading:()=>'',state:{shopEdit:null}
 });
 assert.match(form,/data-form="shop-fulfill"/);
 assert.match(form,/Thêm sản phẩm & thông báo khách/);
