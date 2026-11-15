@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { shopAPI } from '../src/shop.js';
+import { parseTikTokProductPreview, previewTikTokProduct } from '../src/shop-preview.js';
 import { adminShopPage, shopCard, shopPage } from '../public/shop-ui.js';
 
 const sql=new DatabaseSync(':memory:');
@@ -131,5 +132,45 @@ const adminShop=await adminShopPage({
  state:{shopEdit:null}
 });
 assert.doesNotMatch(adminShop,/TikTok Shop Affiliate|Link TikTok Shop Affiliate/);
+
+assert.match(adminShop,/data-action="shop-preview-link"/,'Admin must have a preview button in the existing product editor');
+assert.match(adminShop,/id="shop-preview-result"/);
+const html='<!doctype html><head><meta property="og:image" content="https://p16.tiktokcdn.com/preview.jpg"><meta content="Dầu gội thảo mộc &amp; chăm sóc tóc | TikTok Shop" property="og:title"></head>';
+const meta=parseTikTokProductPreview(html);
+assert.equal(meta.title,'Dầu gội thảo mộc & chăm sóc tóc');
+assert.equal(meta.image_url,'https://p16.tiktokcdn.com/preview.jpg');
+assert.equal(parseTikTokProductPreview('<title>TikTok</title>').title,'','Generic TikTok login page is not a product');
+assert.equal(parseTikTokProductPreview('<meta property="og:title" content="Sản phẩm test"><meta property="og:image" content="http://127.0.0.1/secret">').image_url,null);
+const originalLink='https://vt.tiktok.com/ZS9fbQ5K1tms4-ayXLD/';
+const urls=[];
+const fetched=async(url,opts)=>{
+ urls.push(url);
+ if(url===originalLink)return new Response('',{status:302,headers:{location:'https://www.tiktok.com/view/product/123456'}});
+ return new Response(html,{status:200,headers:{'content-type':'text/html'}});
+};
+const result=await previewTikTokProduct(originalLink,fetched);
+assert.equal(result.ok,true);
+assert.equal(result.title,meta.title);
+assert.equal(result.image_url,meta.image_url);
+assert.deepEqual(urls,[originalLink,'https://www.tiktok.com/view/product/123456']);
+assert.equal((await previewTikTokProduct('http://127.0.0.1/private',fetched)).ok,false,'No SSRF to private IP');
+assert.equal((await previewTikTokProduct('https://tiktok.com.evil.example',fetched)).ok,false,'No lookalike host SSRF');
+assert.equal((await previewTikTokProduct(originalLink,async()=>new Response('',{
+ status:302,headers:{location:'https://evil.example/redirect'}
+}))).ok,false,'Reject redirects to untrusted hosts');
+const fetchBefore=globalThis.fetch;
+const productCountBefore=sql.prepare('SELECT COUNT(*) n FROM shop_products').get().n;
+try{
+ globalThis.fetch=async()=>new Response(html,{status:200,headers:{'content-type':'text/html'}});
+ const unauthPreview=await call('/api/admin/shop/product-preview','POST',{link:originalLink},'u1');
+ assert.equal(unauthPreview.status,403,'Only Admin can preview product metadata');
+ const preview=await call('/api/admin/shop/product-preview','POST',{link:originalLink},'admin');
+ assert.equal(preview.status,200);
+ assert.equal(preview.data.title,meta.title);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM shop_products').get().n,productCountBefore,
+  'Preview must not save any products or modify D1');
+}finally{globalThis.fetch=fetchBefore;}
+console.log('PASS: admin-only TikTok trial previews name/photo; blocked hosts, safe redirects and no D1 writes.');
+
 console.log('PASS: buyer-facing product cards and shopping page do not disclose affiliate arrangements.');
 console.log('PASS: direct product creation, one-time fulfillment, per-member notification, protected links and unchanged wallet.');
