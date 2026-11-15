@@ -158,8 +158,7 @@ assert.equal(sql.prepare('SELECT is_active FROM shop_products WHERE id=?').get(d
 const rawPhoto=Buffer.concat([Buffer.from([255,216,255,224]),Buffer.alloc(1190,99),Buffer.from([255,217])]);
 const encodedPhoto='data:image/jpeg;base64,'+rawPhoto.toString('base64');
 const imagePath='/api/shop/images/'+done.product_id;
-const notYet=await shopAPI(new Request('https://example.org'+imagePath,{
- headers:{'X-User':'u1'}}),env,H);
+const notYet=await call(imagePath,'GET');
 assert.equal(notYet.status,404,'Need image upload before the photo is shown.');
 const invalidImage=await call('/api/admin/shop/products/'+done.product_id+'/image','PUT',{image_data:'data:image/png;base64,AAAA'},'admin');
 assert.equal(invalidImage.status,400,'Only compressed JPEG is accepted.');
