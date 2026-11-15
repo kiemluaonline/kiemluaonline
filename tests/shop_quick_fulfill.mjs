@@ -76,6 +76,37 @@ assert.match(form,/shop-showcase-url/,'Admin link input must be present.');
 assert.match(form,/name="shop-product-photo"/,'Admin can select a photo for new or existing products.');
 assert.match(form,/name="shop-quick-photo"/,'Quick product fulfillment can include a photo.');
 assert.match(form,/data-shop-image-input/,'iPhone photo picker must be available.');
+assert.equal((form.match(/data-form="shop-guide-image"/g)||[]).length,3,'Admin should upload three approved tutorial images separately.');
+for(const type of ['showcase','catalog','request'])assert.match(form,new RegExp('value="'+type+'"'), 'Admin guide slot: '+type);
+const mockGuidePhoto=Buffer.concat([Buffer.from([255,216,255,224]),Buffer.alloc(1200,55),Buffer.from([255,217])]);
+const mockImage='data:image/jpeg;base64,'+mockGuidePhoto.toString('base64');
+const unauthorized=await call('/api/admin/shop/guide-images/showcase','PUT',{image_data:mockImage});
+assert.equal(unauthorized.status,403,'Members cannot change guide images.');
+const malformed=await call('/api/admin/shop/guide-images/showcase','PUT',{image_data:'data:image/png;base64,ABCD'},'admin');
+assert.equal(malformed.status,400);
+for(const type of ['showcase','catalog','request']){
+ const put=await call('/api/admin/shop/guide-images/'+type,'PUT',{image_data:mockImage},'admin');
+ assert.equal(put.status,200);
+ assert.equal(put.data.image_url,'/api/shop/guide-images/'+type);
+ const res=await shopAPI(new Request('https://example.org/api/shop/guide-images/'+type,{headers:{'X-User':'u1'}}),env,H);
+ assert.equal(res.status,200);
+ assert.equal(res.headers.get('Content-Type'),'image/jpeg');
+ assert.equal(Buffer.from(await res.arrayBuffer()).equals(mockGuidePhoto),true);
+}
+const guidesAvailable=(await call('/api/shop')).data;
+assert.deepEqual(guidesAvailable.guide_images,{showcase:true,catalog:true,request:true});
+assert.equal(JSON.stringify(guidesAvailable).includes(mockImage),false,'Guide payload must never be embedded in listing JSON.');
+const guidesPage=await shopPage({api:async()=>guidesAvailable,esc:x=>String(x),state:{shopCategory:'all'}});
+for(const type of ['showcase','catalog','request'])assert.match(guidesPage,new RegExp('src="/api/shop/guide-images/'+type+'"'));
+assert.match(guidesPage,/📷 Xem ảnh hướng dẫn/);
+assert.match(guidesPage,/Chạm vào ảnh để xem lớn/);
+assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM wallet_entries').get().n,0,'Saving tutorials must never touch wallets.');
+const eraseGuide=await call('/api/admin/shop/guide-images/request','PUT',{image_data:''},'admin');
+assert.equal(eraseGuide.status,200);
+assert.equal((await call('/api/shop')).data.guide_images.request,false);
+assert.equal((await call('/api/shop')).data.guide_images.showcase,true);
+assert.equal((await call('/api/shop')).data.guide_images.catalog,true);
+
 const showroom='https://www.tiktok.com/@tramcolua/shop?tab=products';
 const invalidShowcase=await call('/api/admin/shop/showcase','PUT',{url:'https://tiktok.com.evil.example/shop'},'admin');
 assert.equal(invalidShowcase.status,400,'Do not allow fake TikTok domains.');
