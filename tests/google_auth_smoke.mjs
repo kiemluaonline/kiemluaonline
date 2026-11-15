@@ -43,7 +43,9 @@ const googleClickHandler=appSource.slice(appSource.indexOf("if(act.startsWith('g
  appSource.indexOf("if(act==='toggle-menu')",appSource.indexOf("if(act.startsWith('google-'))")));
 assert.doesNotMatch(googleClickHandler,/\[name="accept_terms"\]/,'Google signup click must not read email terms checkbox');
 assert.doesNotMatch(googleClickHandler,/body\.accept_terms/,'Google signup must not fake email consent');
-const emailRegistrationUI=appSource.slice(appSource.indexOf("active==='register'?\`<form"),appSource.indexOf("data-form=\\"login\\"",appSource.indexOf("active==='register'?\`<form")));
+const emailRegistrationStart=appSource.indexOf("active==='register'?"+'`<form');
+assert.ok(emailRegistrationStart>0,'Email signup form remains available');
+const emailRegistrationUI=appSource.slice(emailRegistrationStart,appSource.indexOf('data-form="login"',emailRegistrationStart));
 assert.match(emailRegistrationUI,/type="checkbox" name="accept_terms" value="yes" required/,'Email/password registration still requires explicit checkbox');
 
  // Chống email tạm thời, biến thể Gmail và đăng ký trùng.
