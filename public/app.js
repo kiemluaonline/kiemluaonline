@@ -1,4 +1,4 @@
-import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261115-two-shopping-ways-v1';
+import { shopPage, adminShopPage, handleShopAction, handleShopSubmit, previewShopPhoto } from './shop-ui.js?v=20261115-product-images-v1';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261115-showcase-report-together-v1';
 import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261114-fees-v3';
 import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-withdraw-max-v1';
@@ -1295,6 +1295,9 @@ app.addEventListener('input',e=>{
  if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
 });
 app.addEventListener('change',e=>{
+ if(e.target.matches('input[data-shop-image-input]')){
+  previewShopPhoto(e.target).catch(err=>toast(err.message,true));
+ }
  if(e.target.matches('form[data-form="card-redeem"] [name="denomination_vnd"]'))updateCardPreview(e.target.closest('form'));
  if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
  if(e.target.matches('form[data-form="payout-account"] [name="payment_method"],form[data-form="payout-account"] [name="bank_name"]')){
