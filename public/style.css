@@ -909,3 +909,99 @@ html[lang="hmn"] .language-legal-notice{display:block}
   transition:none!important;
  }
 }
+
+
+/* AUTH-AMBIENT-EMERALD-GOLD-20261115: CSS-only decoration outside login/register form. */
+/* Trường ánh sáng xanh ngọc + vàng nằm SAU khung đăng nhập/đăng ký.
+   Không thêm ảnh, JS, API, canvas; không can thiệp vào ô nhập, nút hay dữ liệu. */
+.auth-page-login{
+ position:relative;
+ isolation:isolate;
+ background:
+  linear-gradient(rgba(88,206,156,.045) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(88,206,156,.045) 1px,transparent 1px),
+  radial-gradient(ellipse 65% 45% at 7% 19%,rgba(33,133,94,.28),transparent 78%),
+  radial-gradient(ellipse 64% 40% at 94% 79%,rgba(201,152,49,.18),transparent 76%),
+  linear-gradient(145deg,#071b1d 0%,#071b20 48%,#11261d 100%);
+ background-size:58px 58px,58px 58px,auto,auto,auto;
+}
+.auth-page-login::before,
+.auth-page-login::after{
+ content:"";
+ position:absolute;
+ inset:0;
+ pointer-events:none;
+ z-index:0;
+}
+.auth-page-login::before{
+ background:
+  radial-gradient(ellipse 42% 28% at 7% 28%,rgba(37,215,134,.31),transparent 75%),
+  radial-gradient(ellipse 39% 30% at 94% 20%,rgba(246,204,82,.22),transparent 80%),
+  radial-gradient(ellipse 36% 29% at 8% 83%,rgba(244,187,66,.19),transparent 78%),
+  radial-gradient(ellipse 39% 31% at 96% 76%,rgba(42,190,137,.25),transparent 80%);
+ animation:auth-ambient-breathe 14s ease-in-out infinite alternate;
+}
+.auth-page-login::after{
+ /* Hạt ánh sáng nhỏ như đom đóm, nền phía sau nội dung. */
+ background-image:
+  radial-gradient(circle,rgba(255,212,106,.78) 1.2px,transparent 2.3px),
+  radial-gradient(circle,rgba(94,241,169,.66) 1.1px,transparent 2.1px),
+  radial-gradient(circle,rgba(248,220,137,.58) .8px,transparent 1.8px);
+ background-size:131px 181px,199px 237px,167px 289px;
+ background-position:13px 38px,76px 121px,104px 39px;
+ opacity:.55;
+ animation:auth-ambient-sparkle 12s ease-in-out infinite alternate;
+}
+.auth-page-login > .auth-brand,
+.auth-page-login > .auth-card{position:relative;z-index:1;}
+.auth-page-login .auth-card{
+ border-color:rgba(72,189,145,.66);
+ box-shadow:
+  0 0 0 1px rgba(250,214,119,.13),
+  0 26px 85px rgba(0,0,0,.62),
+  0 0 32px rgba(47,199,129,.14),
+  0 0 65px rgba(229,183,73,.095);
+}
+.auth-page-login .auth-logo-line img{
+ filter:drop-shadow(0 3px 13px rgba(247,196,74,.21)) drop-shadow(0 5px 15px rgba(38,204,122,.19));
+}
+.auth-page-login .auth-form-kicker i{
+ background:#e5d076;
+ box-shadow:0 0 0 4px rgba(240,200,101,.09),0 0 13px rgba(242,211,113,.44);
+}
+.auth-page-login .auth-form-kicker{color:#87e0bb;}
+.auth-page-login .auth-submit{
+ background:linear-gradient(110deg,#209969 0%,#27b490 47%,#d4a94a 140%);
+ box-shadow:0 8px 23px rgba(18,138,84,.24);
+}
+.auth-page-login .auth-submit:not(:disabled):active{transform:scale(.99);}
+@keyframes auth-ambient-breathe{
+ 0%{opacity:.72;transform:translate3d(-1%,0,0) scale(1);}
+ 100%{opacity:1;transform:translate3d(1%,-1%,0) scale(1.04);}
+}
+@keyframes auth-ambient-sparkle{
+ 0%{opacity:.35;transform:translate3d(0,0,0);}
+ 100%{opacity:.7;transform:translate3d(0,-9px,0);}
+}
+@media(max-width:730px){
+ .auth-page-login{
+  padding:18px 15px 45px;
+  background-color:#081e1c;
+ }
+ .auth-page-login::before{
+  background:
+   radial-gradient(ellipse 27% 21% at 1% 17%,rgba(33,216,129,.44),transparent 85%),
+   radial-gradient(ellipse 30% 19% at 99% 12%,rgba(255,208,83,.4),transparent 88%),
+   radial-gradient(ellipse 29% 22% at 1% 60%,rgba(238,196,75,.34),transparent 85%),
+   radial-gradient(ellipse 30% 20% at 99% 84%,rgba(47,209,143,.40),transparent 85%);
+ }
+ .auth-page-login .auth-card{
+  border-color:rgba(68,192,144,.7);
+  box-shadow:0 0 0 1px rgba(251,203,90,.15),0 15px 45px rgba(0,0,0,.5),0 0 23px rgba(47,194,124,.2),0 0 38px rgba(231,188,78,.12);
+ }
+ /* Safari iPhone: tránh tự phóng to trang khi khách nhập ô đăng ký. */
+ .auth-page-login .auth-input-wrap input{font-size:16px;}
+}
+@media(prefers-reduced-motion:reduce){
+ .auth-page-login::before,.auth-page-login::after{animation:none!important;transform:none!important;}
+}
