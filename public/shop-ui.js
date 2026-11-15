@@ -70,7 +70,7 @@ export function shopCard(product,esc){
   const category=shopCategories().find(x=>x[0]===product.category)||shopCategories().at(-1);
   const cardClass=['beauty','fashion','home','technology','other'].includes(product.category)?product.category:'other';
   return `<article class="shop-product-card">
-   <div class="shop-product-art shop-art-${cardClass}">
+   <div class="shop-product-art shop-art-${cardClass}${product.image_url?' shop-has-photo':''}">
     ${product.image_url?`<img class="shop-product-photo" src="${esc(product.image_url)}" alt="Ảnh sản phẩm ${esc(product.title)}" loading="lazy" decoding="async">`:`<span class="shop-art-glow" aria-hidden="true"></span><span class="shop-art-icon" aria-hidden="true">${category[2]}</span><span class="shop-art-label">TRẠM CÓ LÚA · TIKTOK SHOP</span>`}
    </div>
    <div class="shop-product-content"><span class="shop-product-category">${esc(category[1])}</span>
