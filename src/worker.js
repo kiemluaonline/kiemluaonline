@@ -663,7 +663,8 @@ async function registerGoogleMember(env,req,identity,referredBy){
  await env.DB.batch([
   env.DB.prepare("INSERT INTO users(id,email,name,password_hash,password_salt,role,referral_code,referred_by,joined_ip,terms_accepted_at) VALUES(?,?,?,?,?,'member',?,?,?,?)")
    .bind(uid,identity.email,identity.name.length>=2?identity.name:'Thành viên Google',
-    await passwordDigest(password,salt),salt,referralCode(),referredBy||null,clientIP(req),new Date().toISOString()),
+    // Google đã xác minh email, nhưng không đánh dấu đã tích checkbox điều khoản khi chưa có thao tác đó.
+    await passwordDigest(password,salt),salt,referralCode(),referredBy||null,clientIP(req),null),
   env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_sub:'+identity.sub,uid),
   env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('google_user:'+uid,identity.sub),
   ...(gmailDomain(identity.email.split('@')[1])?[env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
@@ -938,8 +939,9 @@ async function handler(req, env) {
   }
   if(m==='POST' && p==='/api/auth/google/complete'){
     if(!googleReady(env))fail(503,'Google chưa được cấu hình.');
-    const b=await readBody(req);
-    if(b.accept_terms!=='yes')fail(400,'Bạn cần đồng ý điều khoản và chính sách quyền riêng tư.');
+    // Cho phiên Google cũ đang chờ hoàn tất tiếp tục mà không yêu cầu checkbox.
+    // Không ghi nhận đồng ý điều khoản nếu khách không thực sự tích chọn.
+    await readBody(req);
     const pending=await pendingGoogleSignup(req,env);
     if(!pending)fail(401,'Phiên đăng ký Google đã hết hạn. Vui lòng thử lại.');
     const settings=await getSettings(env);
@@ -970,10 +972,8 @@ async function handler(req, env) {
     const settings=await getSettings(env);
     let linkingId='';
     if(intent==='link')linkingId=(await auth(req,env)).id;
-    if(intent==='register'){
-      if(settings.signup_enabled!=='1')fail(403,'Hệ thống đang tắt đăng ký mới.');
-      if(body.accept_terms!=='yes')fail(400,'Bạn cần đồng ý điều khoản trước khi đăng ký Google.');
-    }
+    if(intent==='register'&&settings.signup_enabled!=='1')
+      fail(403,'Hệ thống đang tắt đăng ký mới.');
     const ref=intent==='register'?str(body.referral_code,30).toUpperCase():'';
     if(ref){
       const inviter=await env.DB.prepare("SELECT id FROM users WHERE referral_code=? AND status='active'").bind(ref).first();
@@ -1051,20 +1051,10 @@ async function handler(req, env) {
             userId=existing.id;
           }
         }
-        if(!userId&&flow.intent==='login'){
-          if(await registeredEmail(env,identity.email))
-            fail(409,'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi liên kết Google.',{auth_code:'email_exists'});
-          const currentSettings=await getSettings(env);
-          if(currentSettings.signup_enabled!=='1')
-            fail(403,'Hệ thống đã tắt đăng ký mới.',{auth_code:'signup_closed'});
-          const signupToken=newToken();
-          await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)')
-            .bind('google_signup_pending:'+signupToken,JSON.stringify({
-              identity:{sub:identity.sub,email:identity.email,name:identity.name},
-              expires:now()+OAUTH_WINDOW_MS
-            })).run();
-          return googleReturn(req,'','',signupToken);
-        }
+        if(!userId&&flow.intent==='login'&&await registeredEmail(env,identity.email))
+          fail(409,'Email đã có tài khoản. Hãy đăng nhập bằng mật khẩu rồi liên kết Google.',{auth_code:'email_exists'});
+        // Google lần đầu: tự tạo thành viên và đăng nhập ngay trong callback.
+        // Không tạo phiên chờ hay yêu cầu tích checkbox như đăng ký email.
         if(!userId){
           const settings=await getSettings(env);
           if(settings.signup_enabled!=='1')fail(403,'Hệ thống đã tắt đăng ký.',{auth_code:'signup_closed'});
