@@ -271,3 +271,35 @@
 @media(prefers-reduced-motion:reduce){
  .shop-showcase-link{transition:none!important;}
 }
+
+
+/* SHOP-SHOWCASE-REPORT-TOGETHER-20261115 */
+/* Báo ID đơn hàng ngay trong cùng khung trang trưng bày; không phải khung độc lập. */
+.shop-showcase-entry>.shop-report-section{
+ flex:1 0 100%;width:100%;min-width:0;
+ margin:0;padding:16px 0 0;
+ border:0;border-top:1px solid #d6e4c4;border-radius:0;
+ background:transparent;box-shadow:none;
+ gap:10px;
+}
+.shop-showcase-entry .shop-report-heading strong{color:#205c3f;}
+.shop-showcase-entry .shop-report-heading span{color:#5a7561;}
+.shop-showcase-entry .shop-report-open.btn:not(:disabled){
+ align-self:flex-start;
+ border:1px solid #d0aa54;
+ color:#22452e;
+ background:linear-gradient(110deg,#f1cd79,#fae6a9);
+ box-shadow:0 6px 16px rgba(168,126,45,.16);
+}
+.shop-showcase-entry .shop-report-open.btn:not(:disabled):hover{
+ background:linear-gradient(110deg,#f8db93,#ffeabd);
+ box-shadow:0 9px 18px rgba(168,126,45,.20);
+}
+@media(max-width:570px){
+ .shop-showcase-entry>.shop-report-section{margin:1px 0 0;padding:14px 0 0;border-radius:0;}
+ .shop-showcase-entry .shop-report-open.btn{align-self:stretch;width:100%;font-size:14px;}
+ .shop-showcase-entry .shop-report-history{min-height:39px;}
+}
+@media(prefers-reduced-motion:reduce){
+ .shop-showcase-entry .shop-report-open.btn{transition:none!important;}
+}
