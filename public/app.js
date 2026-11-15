@@ -1,5 +1,5 @@
-import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261115-showcase-link-v1';
-import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261115-id-only-v2';
+import { shopPage, adminShopPage, handleShopAction, handleShopSubmit } from './shop-ui.js?v=20261115-showcase-report-together-v1';
+import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261115-showcase-report-together-v1';
 import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261114-fees-v3';
 import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-withdraw-max-v1';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
