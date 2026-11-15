@@ -1,5 +1,17 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "📷 Ảnh sản phẩm (không bắt buộc)": "📷 Duab khoom (tsis yuam)",
+  "Ảnh sản phẩm (không bắt buộc)": "Duab khoom (tsis yuam)",
+  "Chọn ảnh từ Thư viện iPhone. Website tự nén ảnh nhỏ để tiết kiệm dung lượng; ảnh mới sẽ thay ảnh cũ khi bạn lưu sản phẩm.": "Xaiv duab hauv iPhone. Website yuav txo duab kom txuag chaw; thaum khaws khoom, duab tshiab yuav hloov daim qub.",
+  "Chưa có ảnh sản phẩm.": "Tseem tsis tau muaj duab khoom.",
+  "Chưa chọn ảnh.": "Tseem tsis tau xaiv duab.",
+  "Chưa chọn ảnh mới.": "Tseem tsis tau xaiv duab tshiab.",
+  "Đang chuẩn bị ảnh...": "Tab tom npaj duab...",
+  "Xóa ảnh sản phẩm hiện tại": "Rho daim duab khoom qub tawm",
+  "Đã xóa ảnh sản phẩm.": "Twb rho daim duab khoom tawm lawm.",
+  "Ảnh sản phẩm vừa chọn": "Daim duab khoom nyuam qhuav xaiv",
+  "Ảnh hiện tại của sản phẩm": "Daim duab khoom tam sim no",
+  "Đã lưu sản phẩm TikTok Shop và ảnh.": "Twb khaws khoom TikTok Shop thiab daim duab lawm.",
   "HƯỚNG DẪN CHO KHÁCH HÀNG": "QHIA RAU COV NEEG YUAV KHOOM",
   "Có 2 cách mua hàng để được xét Lúa": "Muaj 2 txoj kev yuav khoom kom tau kuaj Lúa",
   "Chọn một trong hai cách bên dưới và mua qua đúng đường dẫn do Trạm Có Lúa cung cấp.": "Xaiv ib txoj kev hauv qab no thiab yuav raws txoj link uas Trạm Có Lúa muab.",
