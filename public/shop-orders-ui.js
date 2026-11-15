@@ -41,7 +41,7 @@ export async function shopOrdersPage(ctx){
     <div class="sorder-summary-card"><span>⌛ Đang xử lý</span><strong>${fmt(pending)}</strong><small>Chờ xác minh / giải quyết</small></div>
     <div class="sorder-summary-card sorder-summary-lua"><span>🌾 Lúa đã nhận</span><strong>${fmt(accrued)}</strong><small>Không tính Lúa dự kiến</small></div>
    </section>
-   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Sau khi mua qua gian hàng hoặc liên kết của Admin, vào mục “Báo đơn hàng” riêng và nhập ID đơn TikTok, không cần chọn sản phẩm. Admin sẽ kiểm tra nguồn mua trước khi xét Lúa.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
+   <section class="sorder-intro"><div><strong>Bạn đã đặt hàng trên TikTok Shop?</strong><p>Sau khi mua qua gian hàng hoặc liên kết của Admin, trở lại Mua sắm nhận Lúa và bấm “Đã mua? Báo đơn” để nhập ID đơn TikTok. Không cần chọn sản phẩm; Admin sẽ kiểm tra nguồn mua trước khi xét Lúa.</p></div><button type="button" class="btn" data-go="shop">🛍️ Đến gian hàng</button></section>
    <aside class="sorder-origin-policy" role="note"><strong>⚠️ Chỉ xét Lúa cho đơn mua đúng trang trưng bày của Admin</strong><p>Đơn phải được đặt qua trang trưng bày TikTok Shop của Admin hoặc liên kết sản phẩm tại Trạm Có Lúa. Mua ở nơi khác sẽ không được tính thưởng Lúa, kể cả khi gửi ID đơn hàng.</p></aside>
    ${alerts.unread?`<div class="sorder-notice" role="status" aria-live="polite">🔔 Có <strong>${fmt(alerts.unread)} đơn hàng vừa được cập nhật</strong>. Xem trạng thái mới và phần thưởng bên dưới.</div>`:''}
    <div class="sorder-section-heading"><h2>Lịch sử đơn hàng</h2><span>${fmt(orders.length)} đơn</span></div>
@@ -76,7 +76,7 @@ export async function shopOrdersPage(ctx){
        <ol>${events.map(e=>`<li><strong>${shopOrderMeta(e.status).text}</strong><small>${esc(dt(e.created_at))}</small><p>${e.status==='pending'?'Đã tiếp nhận ID đơn hàng.':e.status==='provisional'?'ID đơn đã được xác minh, đang chờ hoàn tất.':e.status==='resolved'?'Đơn đã giải quyết và phần thưởng đã vào ví.':e.status==='rejected'?'Đơn hàng không đủ điều kiện nhận thưởng.':'Trạng thái đã cập nhật.'}</p></li>`).join('')}</ol>
        </details>
      </article>`;
-   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Sau khi mua qua gian hàng của Admin, nhập ID đơn TikTok tại mục “Báo đơn hàng” riêng để theo dõi thưởng Lúa.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
+   }).join('')}</div>`:`<div class="sorder-empty"><span>📦</span><h3>Chưa có đơn hàng nào</h3><p>Sau khi mua qua gian hàng của Admin, vào Mua sắm nhận Lúa và bấm “Đã mua? Báo đơn” để gửi ID, sau đó theo dõi thưởng Lúa tại đây.</p><button type="button" class="btn" data-go="shop">Xem sản phẩm →</button></div>`}
    <div class="sorder-footnote">Đây là trạng thái cập nhật trên Trạm Có Lúa, không phải dữ liệu đơn hàng đồng bộ trực tiếp từ TikTok. Lúa dự kiến không phải phần thưởng đã nhận. Lúa chính thức chỉ được cộng khi đơn hợp lệ và được giải quyết.</div>
  </div>`;
 }
