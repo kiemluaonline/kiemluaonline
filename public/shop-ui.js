@@ -3,6 +3,65 @@ function askShopConfirm(message){
  const label=window.TramI18n?.translateLabel?.(message)??message;
  return window.confirm(label);
 }
+
+const shopPhotoCache=new WeakMap();
+async function shopPhotoData(file){
+ if(!file||!file.size)return '';
+ let promise=shopPhotoCache.get(file);
+ if(!promise){
+  promise=(async()=>{
+   if(file.size>20*1024*1024)throw new Error('Ảnh gốc lớn hơn 20 MB. Hãy chọn ảnh nhỏ hơn.');
+   if(file.type&&!file.type.startsWith('image/'))throw new Error('Bạn cần chọn tệp hình ảnh.');
+   const read=blob=>new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result));
+    reader.onerror=()=>reject(new Error('Không đọc được ảnh trên điện thoại.'));
+    reader.readAsDataURL(blob);
+   });
+   const source=await read(file);
+   const img=await new Promise((resolve,reject)=>{
+    const el=new Image();
+    el.onload=()=>resolve(el);
+    el.onerror=()=>reject(new Error('Không mở được ảnh này. Thử chọn ảnh JPG, PNG hoặc ảnh chụp màn hình.'));
+    el.src=source;
+   });
+   if(!img.naturalWidth||!img.naturalHeight)throw new Error('Ảnh không hợp lệ.');
+   for(const maxSide of [900,720,600,480,360]){
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+    canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+    const context=canvas.getContext('2d');
+    if(!context)throw new Error('Trình duyệt không thể nén ảnh này.');
+    context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
+    context.drawImage(img,0,0,canvas.width,canvas.height);
+    for(const quality of [.82,.70,.58,.46]){
+     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));
+     if(blob&&blob.size>=1000&&blob.size<=155000)return read(blob);
+    }
+   }
+   throw new Error('Ảnh quá phức tạp để nén dưới 160 KB. Hãy cắt bớt ảnh rồi thử lại.');
+  })();
+  shopPhotoCache.set(file,promise);
+ }
+ return promise;
+}
+// Xem trước bằng ảnh đã nén; không tải ảnh gốc lên máy chủ và không dùng blob: URL.
+export async function previewShopPhoto(input){
+ const target=input.closest('.shop-product-photo-field')?.querySelector('[data-shop-photo-preview]');
+ if(!target)return;
+ const file=input.files?.[0];
+ if(!file){target.textContent='Chưa chọn ảnh mới.';return;}
+ target.textContent='Đang chuẩn bị ảnh...';
+ try{
+  const data=await shopPhotoData(file);
+  if(input.files?.[0]!==file)return;
+  const img=document.createElement('img');
+  img.src=data;img.alt='Ảnh sản phẩm vừa chọn';img.width=150;img.height=120;
+  target.replaceChildren(img);
+ }catch(err){target.textContent=err.message;throw err;}
+}
+
 export function shopCategories(){
   return [['all','Tất cả','✨'],['beauty','Làm đẹp','🧴'],['fashion','Thời trang','👟'],['home','Nhà cửa','🏡'],['technology','Công nghệ','🎧'],['other','Khác','🎁']];
 }
@@ -11,8 +70,8 @@ export function shopCard(product,esc){
   const category=shopCategories().find(x=>x[0]===product.category)||shopCategories().at(-1);
   const cardClass=['beauty','fashion','home','technology','other'].includes(product.category)?product.category:'other';
   return `<article class="shop-product-card">
-   <div class="shop-product-art shop-art-${cardClass}" aria-hidden="true">
-    <span class="shop-art-glow"></span><span class="shop-art-icon">${category[2]}</span><span class="shop-art-label">TRẠM CÓ LÚA · TIKTOK SHOP</span>
+   <div class="shop-product-art shop-art-${cardClass}">
+    ${product.image_url?`<img class="shop-product-photo" src="${esc(product.image_url)}" alt="Ảnh sản phẩm ${esc(product.title)}" loading="lazy" decoding="async">`:`<span class="shop-art-glow" aria-hidden="true"></span><span class="shop-art-icon" aria-hidden="true">${category[2]}</span><span class="shop-art-label">TRẠM CÓ LÚA · TIKTOK SHOP</span>`}
    </div>
    <div class="shop-product-content"><span class="shop-product-category">${esc(category[1])}</span>
    <h3>${esc(product.title)}</h3><p>${esc(product.description||'Khám phá sản phẩm phù hợp trên TikTok Shop.')}</p>
@@ -144,6 +203,15 @@ export async function adminShopPage(ctx){
      <div class="field"><label for="shop-description">Giới thiệu sản phẩm (không bắt buộc)</label><textarea id="shop-description" name="description" maxlength="330" placeholder="Mô tả ngắn, rõ ràng...">${esc(edit.description||'')}</textarea></div>
      ${select('category','Danh mục',categories.map(x=>[x[0],x[1]]),edit.category||'beauty')}
      ${field('shop-product-link','Link sản phẩm TikTok Shop',edit.link||'','required type="url" placeholder="https://vt.tiktok.com/..."')}
+     <div class="field shop-product-photo-field">
+      <label for="shop-product-photo">📷 Ảnh sản phẩm (không bắt buộc)</label>
+      <input type="file" id="shop-product-photo" name="shop-product-photo" accept="image/*" data-shop-image-input>
+      <p class="note">Chọn ảnh từ Thư viện iPhone. Website tự nén ảnh nhỏ để tiết kiệm dung lượng; ảnh mới sẽ thay ảnh cũ khi bạn lưu sản phẩm.</p>
+      <div class="shop-photo-preview" data-shop-photo-preview>
+       ${edit.image_url?`<img src="${esc(edit.image_url)}" alt="Ảnh hiện tại của sản phẩm" loading="lazy">`:'<span>Chưa có ảnh sản phẩm.</span>'}
+      </div>
+      ${edit.id&&edit.image_url?`<button type="button" class="btn alt sm" data-action="shop-remove-image" data-id="${esc(edit.id)}">Xóa ảnh sản phẩm hiện tại</button>`:''}
+     </div>
      ${select('is_active','Hiển thị sản phẩm',[['1','Hiển thị công khai'],['0','Lưu nháp / Tạm ẩn']],String(edit.is_active??1))}
      <div class="shop-admin-buttons"><button class="btn" type="submit">💾 ${edit.id?'Lưu thay đổi':'Thêm sản phẩm'}</button>${edit.id?'<button type="button" class="btn alt" data-action="shop-reset-product">Thêm mới</button>':''}</div>
     </form>
@@ -165,7 +233,7 @@ export async function adminShopPage(ctx){
      <p class="note">Để trống rồi lưu nếu muốn ẩn nút bên phía khách. Chỉ lưu link TikTok HTTPS; không thay đổi danh sách sản phẩm hoặc lịch sử đơn hàng.</p>
    </form>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Danh sách sản phẩm</h2><p>Bật/tắt hoặc sửa sản phẩm mà không ảnh hưởng nhiệm vụ cũ.</p></div></div>
-   ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
+   ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
    </section>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Yêu cầu sản phẩm từ khách</h2><p>Đối chiếu mã SP ở đầu thẻ với mã khách gửi trên Zalo/Telegram. Bạn có thể chọn sản phẩm có sẵn hoặc nhập link sản phẩm mới ngay tại yêu cầu để tự báo khách.</p></div><span class="shop-count">${pending.length} đang chờ</span></div>
    ${d.requests.length?`<div class="shop-admin-requests">${d.requests.map(r=>`<article class="shop-admin-request"><div class="shop-request-top"><strong>${esc(r.code)}</strong><span class="shop-state shop-state-${esc(r.status)}">${r.status==='pending'?'Chờ xử lý':r.status==='ready'?'Đã có sản phẩm':'Từ chối'}</span></div>
@@ -180,6 +248,11 @@ ${!opts?'<p class="shop-quick-hint">Bạn chưa thêm sản phẩm nào. Có th�
  <input id="shopquick-title-${esc(r.id)}" name="title" type="text" maxlength="110" minlength="3" required placeholder="Tên sản phẩm tìm được trên TikTok Shop">
  <label for="shopquick-link-${esc(r.id)}">Link sản phẩm TikTok Shop <span aria-hidden="true">*</span></label>
  <input id="shopquick-link-${esc(r.id)}" name="link" type="url" maxlength="900" required placeholder="https://vt.tiktok.com/...">
+ <div class="shop-product-photo-field">
+  <label for="shopquick-photo-${esc(r.id)}">Ảnh sản phẩm (không bắt buộc)</label>
+  <input id="shopquick-photo-${esc(r.id)}" type="file" name="shop-quick-photo" accept="image/*" data-shop-image-input>
+  <div class="shop-photo-preview" data-shop-photo-preview><span>Chưa chọn ảnh.</span></div>
+ </div>
  <label for="shopquick-category-${esc(r.id)}">Danh mục</label>
  <select id="shopquick-category-${esc(r.id)}" name="category">
   <option value="other">Theo yêu cầu / Khác</option><option value="beauty">Làm đẹp</option><option value="fashion">Thời trang</option><option value="home">Nhà cửa</option><option value="technology">Công nghệ</option>
@@ -196,6 +269,12 @@ export async function handleShopAction(action,el,ctx){
   if(action==='shop-filter'){state.shopCategory=el.dataset.category||'all';await navigate('shop');return true;}
   if(action==='shop-edit-product'){state.shopEdit=el.dataset.id;await navigate('admin-shop');document.getElementById('shop-product-form')?.scrollIntoView({behavior:'smooth'});return true;}
   if(action==='shop-reset-product'){state.shopEdit=null;await navigate('admin-shop');return true;}
+  if(action==='shop-remove-image'){
+   const pid=el.dataset.id;
+   if(!pid||!askShopConfirm('Xóa ảnh sản phẩm hiện tại? Sản phẩm và đơn hàng vẫn được giữ nguyên.'))return true;
+   await api('/api/admin/shop/products/'+encodeURIComponent(pid)+'/image','PUT',{image_data:''});
+   toast('Đã xóa ảnh sản phẩm.');await navigate('admin-shop');return true;
+  }
   if(action==='shop-start-request'){
     el.disabled=true;
     try{
@@ -244,16 +323,31 @@ export async function handleShopSubmit(kind,b,ctx){
     const title=raw?.querySelector('[name="shop-title"]')?.value||'';
     const link=raw?.querySelector('[name="shop-product-link"]')?.value||'';
     const payload={title,link,description:b.description||'',category:b.category,is_active:b.is_active==='1'};
-    if(b.id)await api('/api/admin/shop/products/'+encodeURIComponent(b.id),'PATCH',payload);
-    else await api('/api/admin/shop/products','POST',payload);
-    state.shopEdit=null;toast('Đã lưu sản phẩm TikTok Shop.');await navigate('admin-shop');return true;
+    const photo=raw?.querySelector('[name="shop-product-photo"]')?.files?.[0];
+    const imageData=photo?.size?await shopPhotoData(photo):'';
+    let productId=b.id;
+    if(productId)await api('/api/admin/shop/products/'+encodeURIComponent(productId),'PATCH',payload);
+    else{const created=await api('/api/admin/shop/products','POST',payload);productId=created.id;}
+    if(imageData){
+     try{await api('/api/admin/shop/products/'+encodeURIComponent(productId)+'/image','PUT',{image_data:imageData});}
+     catch(err){
+      state.shopEdit=productId;await navigate('admin-shop');
+      toast('Đã lưu sản phẩm nhưng chưa lưu được ảnh: '+err.message,true);return true;
+     }
+    }
+    state.shopEdit=null;toast('Đã lưu sản phẩm TikTok Shop'+(imageData?' và ảnh.':'.'));await navigate('admin-shop');return true;
   }
   if(kind==='shop-fulfill'){
     if(!b.request_id)throw new Error('Chưa xác định được mã yêu cầu cần xử lý.');
+    const imageData=b['shop-quick-photo']?.size?await shopPhotoData(b['shop-quick-photo']):'';
     if(!askShopConfirm('Đã kiểm tra đúng sản phẩm, đúng link sản phẩm và mã yêu cầu của khách? Website sẽ thông báo tự động.'))return true;
     const result=await api('/api/admin/shop/requests/'+encodeURIComponent(b.request_id),'POST',{
       status:'ready_new',title:b.title,link:b.link,category:b.category||'other',description:''
     });
+    if(imageData){
+     try{await api('/api/admin/shop/products/'+encodeURIComponent(result.product_id)+'/image','PUT',{image_data:imageData});}
+     catch(err){await navigate('admin-shop');toast('Đã thêm sản phẩm, nhưng ảnh chưa lưu được: '+err.message,true);return true;}
+    }
     toast(result.message);await navigate('admin-shop');return true;
   }
   if(kind==='shop-showcase'){
