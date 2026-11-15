@@ -91,6 +91,14 @@ const showcasePage=await shopPage({
 assert.match(showcasePage,/href="https:\/\/www\.tiktok\.com\/@tramcolua\/shop\?tab=products"/);
 assert.match(showcasePage,/Vào trang trưng bày/);
 assert.match(showcasePage,/rel="noopener noreferrer sponsored"/);
+assert.match(showcasePage,/class="shop-showcase-entry"[\s\S]*?class="shop-order-entry shop-report-section"/,
+ 'When a showcase URL exists, order reporting must be inside the same showcase card.');
+assert.equal((showcasePage.match(/id="shop-report-order"/g)||[]).length,1,'One report section ID per page');
+assert.equal((showcasePage.match(/data-action="shop-report-order"/g)||[]).length,1,'One reporting button per page');
+assert.ok(showcasePage.indexOf('id="shop-report-order"')<showcasePage.indexOf('id="shop-catalog"'),
+ 'Reporting should appear with the showcase above the product catalogue.');
+assert.match(showcasePage,/data-go="shop-orders"/,'Order history remains reachable beside the showroom.');
+
 assert.doesNotMatch(showcasePage,/hoa hồng|tiếp thị liên kết|Affiliate/i);
 const hiddenShowcase=await call('/api/admin/shop/showcase','PUT',{url:''},'admin');
 assert.equal(hiddenShowcase.status,200);
@@ -100,6 +108,11 @@ const hiddenPage=await shopPage({
  esc:x=>String(x),state:{shopCategory:'all'}
 });
 assert.doesNotMatch(hiddenPage,/class="shop-showcase-entry"/);
+assert.match(hiddenPage,/id="shop-report-order"/,'Without a showcase link, buyers can still report their orders.');
+assert.equal((hiddenPage.match(/data-action="shop-report-order"/g)||[]).length,1);
+assert.ok(hiddenPage.indexOf('id="shop-report-order"')>hiddenPage.indexOf('id="shop-catalog"'),
+ 'No showcase link: keep existing reporting area below products.');
+
 await call('/api/admin/shop/showcase','PUT',{url:showroom},'admin');
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,
  'Setting a storefront must not affect Lúa or rewards.');
