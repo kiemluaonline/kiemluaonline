@@ -1164,3 +1164,99 @@ html[lang="hmn"] .language-legal-notice{display:block}
  }
  .welcome-site .welcome-art-main{transform:rotate(-2deg);}
 }
+
+
+/* SIGNED-IN-EMERALD-GOLD-20261115: gentle green-gold styling after login only. */
+/* Chỉ trong .layout (sau đăng nhập). Giữ nguyên bố cục, biểu mẫu và màu trạng thái. */
+.layout .main-area{
+ position:relative;
+ background:
+  radial-gradient(ellipse 390px 310px at 96% 9%,rgba(84,186,128,.12),transparent 76%),
+  radial-gradient(ellipse 330px 270px at 3% 37%,rgba(229,186,84,.105),transparent 78%),
+  linear-gradient(158deg,#f9fcf8 0%,#f2f8f2 53%,#fafaf3 100%);
+}
+.layout .main-area::before{
+ content:"";position:absolute;inset:0 0 auto;height:390px;
+ pointer-events:none;z-index:0;opacity:.5;
+ background:
+  radial-gradient(ellipse 35% 54% at 4% 8%,rgba(63,178,119,.17),transparent 79%),
+  radial-gradient(ellipse 31% 47% at 93% 64%,rgba(237,192,90,.17),transparent 82%);
+ animation:tl-inside-ambient 15s ease-in-out infinite alternate;
+}
+.layout .main-area>.content{position:relative;z-index:1;}
+.layout .topbar{
+ background:linear-gradient(112deg,rgba(255,255,255,.99),rgba(244,251,243,.98) 64%,rgba(255,250,233,.97));
+ border-bottom:1px solid #dcebdc;
+}
+.layout .topbar::after{
+ content:"";position:absolute;bottom:0;left:0;right:0;height:2px;
+ background:linear-gradient(90deg,transparent,#4daa7c 30%,#ebc36e 68%,transparent);
+ opacity:.55;pointer-events:none;
+}
+.layout .sidebar{
+ background:
+  radial-gradient(ellipse 210px 250px at 92% 9%,rgba(230,190,92,.095),transparent 82%),
+  linear-gradient(164deg,#0d372c,#0b322a 52%,#153d30 100%);
+}
+.layout .sidebar .brand-mark-image{
+ box-shadow:0 5px 20px rgba(222,183,74,.17);
+}
+.layout .nav button.active{
+ color:#16593b;
+ background:linear-gradient(108deg,#e2f5e3 0%,#edf4de 68%,#fff4d7 100%);
+ box-shadow:inset 3px 0 #d6ae56,0 4px 13px rgba(22,79,51,.065);
+}
+.layout .balance-pill{
+ background:linear-gradient(110deg,#e8f8e9 0%,#eef9df 58%,#fff2cf 100%);
+ border-color:#c9dca8;
+ color:#175c42;
+ animation:tl-inside-lua-glow 10s ease-in-out infinite;
+}
+.layout .menu-toggle{
+ background:linear-gradient(135deg,#e9f6ea,#f8f3de);
+ border:1px solid #d4e6cc;
+}
+.layout .header-icon-button{
+ background:linear-gradient(140deg,#f5fbf4,#f8f5e5);
+ border-color:#d7e5cf;
+}
+.layout .topbar .header-avatar{
+ background:linear-gradient(145deg,#1a7558,#175b45);
+ box-shadow:0 4px 15px rgba(24,107,71,.18),0 0 0 2px rgba(232,199,117,.18);
+}
+.layout .global-payment-wrap>.task-payment{
+ border-color:#b5dfb3;
+ background:
+  radial-gradient(ellipse 44% 85% at 100% 0%,rgba(247,221,145,.18),transparent 80%),
+  linear-gradient(115deg,#edfaf0 0%,#f9fdf7 63%,#f4fae9 100%);
+}
+.layout #viewContent .page-head .eyebrow,
+.layout #viewContent .eyebrow{color:#598363;}
+.layout #viewContent .page-head h2{color:#174736;}
+.layout .content .card:not(.task-payment){
+ border-color:#dbe9dc;
+ box-shadow:0 9px 28px rgba(23,81,52,.07),0 2px 7px rgba(184,145,48,.025);
+}
+/* Chỉ nhấn nhẹ ánh vàng tại viền thẻ; không đổi màu thông báo lỗi hay các trạng thái duyệt. */
+@media(hover:hover) and (pointer:fine){
+ .layout .content .card:not(.task-payment):hover{
+  border-color:#cddfb8;
+  box-shadow:0 15px 33px rgba(23,81,52,.095),0 4px 16px rgba(208,165,74,.065);
+ }
+}
+@keyframes tl-inside-ambient{
+ from{opacity:.35;}
+ to{opacity:.74;}
+}
+@keyframes tl-inside-lua-glow{
+ 0%,100%{box-shadow:0 3px 12px rgba(33,124,73,.08);}
+ 50%{box-shadow:0 3px 16px rgba(210,167,62,.18),0 0 0 1px rgba(238,207,133,.17);}
+}
+@media(max-width:730px){
+ .layout .main-area::before{height:280px;opacity:.42;}
+ .layout .topbar::after{opacity:.42;}
+ /* Không tạo thêm chuyển động trên thẻ hoặc chữ khi khách cuộn trang bằng iPhone. */
+}
+@media(prefers-reduced-motion:reduce){
+ .layout .main-area::before,.layout .balance-pill{animation:none!important;}
+}
