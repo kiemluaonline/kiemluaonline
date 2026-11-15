@@ -73,6 +73,9 @@ assert.match(form,/Thêm sản phẩm & thông báo khách/);
 assert.match(form,/name="request_id"/);
 assert.match(form,/data-form="shop-showcase"/,'Admin should have a dedicated showcase link form.');
 assert.match(form,/shop-showcase-url/,'Admin link input must be present.');
+assert.match(form,/name="shop-product-photo"/,'Admin can select a photo for new or existing products.');
+assert.match(form,/name="shop-quick-photo"/,'Quick product fulfillment can include a photo.');
+assert.match(form,/data-shop-image-input/,'iPhone photo picker must be available.');
 const showroom='https://www.tiktok.com/@tramcolua/shop?tab=products';
 const invalidShowcase=await call('/api/admin/shop/showcase','PUT',{url:'https://tiktok.com.evil.example/shop'},'admin');
 assert.equal(invalidShowcase.status,400,'Do not allow fake TikTok domains.');
@@ -151,6 +154,45 @@ assert.equal(done.status,'ready');
 assert.ok(done.product_id);
 assert.equal(done.seen_at,null);
 assert.equal(sql.prepare('SELECT is_active FROM shop_products WHERE id=?').get(done.product_id).is_active,1);
+
+const rawPhoto=Buffer.concat([Buffer.from([255,216,255,224]),Buffer.alloc(1190,99),Buffer.from([255,217])]);
+const encodedPhoto='data:image/jpeg;base64,'+rawPhoto.toString('base64');
+const imagePath='/api/shop/images/'+done.product_id;
+const notYet=await shopAPI(new Request('https://example.org'+imagePath,{
+ headers:{'X-User':'u1'}}),env,H);
+assert.equal(notYet.status,404,'Need image upload before the photo is shown.');
+const invalidImage=await call('/api/admin/shop/products/'+done.product_id+'/image','PUT',{image_data:'data:image/png;base64,AAAA'},'admin');
+assert.equal(invalidImage.status,400,'Only compressed JPEG is accepted.');
+assert.equal((await call('/api/admin/shop/products/'+done.product_id+'/image','PUT',{image_data:encodedPhoto})).status,403,
+ 'Members must never upload product images.');
+const uploadedImage=await call('/api/admin/shop/products/'+done.product_id+'/image','PUT',{image_data:encodedPhoto},'admin');
+assert.equal(uploadedImage.status,200);
+assert.equal(uploadedImage.data.image_url,imagePath);
+const imgResponse=await shopAPI(new Request('https://example.org'+imagePath,{
+ headers:{'X-User':'u1'}}),env,H);
+assert.equal(imgResponse.status,200);
+assert.equal(imgResponse.headers.get('Content-Type'),'image/jpeg');
+assert.equal(imgResponse.headers.get('Cache-Control'),'private, no-store');
+assert.equal(Buffer.from(await imgResponse.arrayBuffer()).equals(rawPhoto),true,'Image body should be identical to uploaded bytes.');
+const displayedPhoto=(await call('/api/shop')).data.products.find(x=>x.id===done.product_id);
+assert.equal(displayedPhoto.image_url,imagePath,'Member list should use image URL, not embed base64 images.');
+assert.ok(!JSON.stringify((await call('/api/shop')).data).includes(encodedPhoto),'Do not download image bytes in API listing.');
+const displayedCard=shopCard(displayedPhoto,x=>String(x));
+assert.match(displayedCard,/class="shop-product-photo"/,'Real product photo must replace decorative emoji.');
+assert.match(displayedCard,/loading="lazy"/,'Do not eagerly load all product images.');
+assert.doesNotMatch(displayedCard,/shop-art-icon/,'Do not duplicate emoji when a product has a photo.');
+const updatedAdmin=(await call('/api/admin/shop','GET',undefined,'admin')).data.products;
+assert.equal(updatedAdmin.find(x=>x.id===done.product_id).image_url,imagePath,'Admin can preview saved image.');
+const imageRemoval=await call('/api/admin/shop/products/'+done.product_id+'/image','PUT',{image_data:''},'admin');
+assert.equal(imageRemoval.status,200);
+assert.equal((await call('/api/shop')).data.products.find(x=>x.id===done.product_id).image_url,'');
+assert.equal(sql.prepare("SELECT COUNT(*) n FROM settings WHERE key=?").get('shop_product_image:'+done.product_id).n,0);
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM shop_products WHERE id=?').get(done.product_id).n,1,
+ 'Removing image must preserve the product.');
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM wallet_entries').get().n,0,
+ 'Photos must never change the member wallet.');
+console.log('PASS: product images upload, member viewing, lightweight listing, photo removal and wallet unchanged.');
+
 assert.equal((await call('/api/shop/alerts')).data.unread,1);
 assert.equal((await call('/api/shop/alerts','GET',undefined,'u2')).data.unread,0);
 const myShop=(await call('/api/shop')).data;
