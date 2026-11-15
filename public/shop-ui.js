@@ -50,7 +50,37 @@ export async function shopPage(ctx){
     </div>
     <div class="shop-hero-visual" aria-hidden="true"><div class="shop-deco-orbit shop-orbit-one"></div><div class="shop-deco-orbit shop-orbit-two"></div><div class="shop-main-bag">🛍️</div><div class="shop-floating shop-floating-one">🌾 Tích Lúa</div><div class="shop-floating shop-floating-two">✨ Món bạn thích</div></div>
    </section>
-   ${showcaseURL?`<section class="shop-showcase-entry" aria-label="Trang trưng bày TikTok Shop của Admin">
+   <section class="shop-buy-guide" aria-labelledby="shop-buy-guide-title">
+    <div class="shop-buy-guide-head">
+      <span class="shop-buy-guide-label">HƯỚNG DẪN CHO KHÁCH HÀNG</span>
+      <h2 id="shop-buy-guide-title">Có 2 cách mua hàng để được xét Lúa</h2>
+      <p>Chọn một trong hai cách bên dưới và mua qua đúng đường dẫn do Trạm Có Lúa cung cấp.</p>
+    </div>
+    <div class="shop-buy-guide-grid">
+      <article class="shop-buy-way">
+        <span class="shop-buy-way-number" aria-hidden="true">01</span>
+        <div class="shop-buy-way-symbol" aria-hidden="true">🛍️</div>
+        <h3>Cách 1: Mua tại trang trưng bày TikTok Shop</h3>
+        <p>Bấm “Vào trang trưng bày” của Admin ngay trên website, chọn sản phẩm bạn thích và đặt mua trực tiếp trên TikTok Shop.</p>
+        ${showcaseURL?'<a href="#shop-showcase" class="shop-buy-way-link">Đến trang trưng bày ↓</a>':'<span class="shop-buy-way-unavailable">Trang trưng bày đang được cập nhật</span>'}
+      </article>
+      <article class="shop-buy-way">
+        <span class="shop-buy-way-number" aria-hidden="true">02</span>
+        <div class="shop-buy-way-symbol" aria-hidden="true">🌾</div>
+        <h3>Cách 2: Mua từ gian hàng trên website</h3>
+        <p>Vào “Gian hàng của Trạm” bên dưới, chọn món muốn mua rồi bấm “Xem &amp; mua ngay – Tích Lúa” để mở đúng link TikTok Shop và đặt hàng.</p>
+        <a href="#shop-catalog" class="shop-buy-way-link">Xem sản phẩm trên website ↓</a>
+      </article>
+    </div>
+    <div class="shop-buy-guide-finish">
+      <span class="shop-buy-guide-finish-icon" aria-hidden="true">📦</span>
+      <div><strong>Mua xong, quay lại website để báo đơn!</strong>
+        <p>Trở lại Trạm Có Lúa, bấm “Đã mua? Báo đơn” rồi nhập mã đơn hàng TikTok. Admin kiểm tra nguồn mua và chỉ cộng Lúa khi đơn hợp lệ, được giải quyết.</p>
+      </div>
+      <a href="#shop-report-order" class="shop-buy-guide-report">Đến chỗ báo đơn ↓</a>
+    </div>
+   </section>
+   ${showcaseURL?`<section class="shop-showcase-entry" id="shop-showcase" aria-label="Trang trưng bày TikTok Shop của Admin">
     <div class="shop-showcase-icon" aria-hidden="true">🌾</div>
     <div class="shop-showcase-copy"><span class="shop-showcase-kicker">GIAN HÀNG CHÍNH THỨC CỦA ADMIN</span>
       <h3>Khám phá trang trưng bày TikTok Shop</h3>
