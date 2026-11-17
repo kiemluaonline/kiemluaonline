@@ -1683,3 +1683,109 @@ body.task-result-open{overflow:hidden}
  .task-result-modal.modal{animation:none}
  .task-result-modal .task-result-primary.btn:active{transform:none}
 }
+
+
+/* Task start progress dialog: checking then server-confirmed */
+.task-start-cover.modal-cover{
+ z-index:111;background:rgba(5,18,23,.68);
+ -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+ padding:16px;align-items:center;justify-content:center
+}
+.task-start-modal.modal{
+ position:relative;overflow:hidden;max-width:480px;width:100%;
+ padding:27px 26px 34px;border-radius:28px;
+ background:linear-gradient(160deg,#fff 65%,#fbfefb 100%);
+ border:1px solid #d8e7df;
+ box-shadow:0 28px 90px rgba(3,27,21,.26);
+ animation:task-start-enter .24s ease-out both
+}
+.task-start-kicker{
+ display:block;margin-bottom:23px;
+ color:#5a8d72;font-size:10px;font-weight:900;
+ letter-spacing:.16em;line-height:1.5
+}
+.task-start-heading{display:flex;align-items:center;gap:16px;min-width:0}
+.task-start-heading-icon{
+ flex:none;width:64px;height:64px;border-radius:19px;
+ display:grid;place-items:center;
+ color:#1b8063;background:linear-gradient(145deg,#eff8f5,#e0f4e9);
+ border:1px solid #d0e6d8
+}
+.task-start-modal.is-ready .task-start-heading-icon{
+ color:#0d996d;background:linear-gradient(135deg,#e4fff2,#cef5df);
+ border-color:#b8e8cb
+}
+.task-start-heading-icon svg{display:block;width:38px;height:38px}
+.task-start-spinner{
+ display:block;width:33px;height:33px;
+ border:3px solid #b6d9cd;border-top-color:#188b68;
+ border-radius:50%;animation:task-start-spin .8s linear infinite
+}
+.task-start-heading-text{flex:1;min-width:0;text-align:left}
+.task-start-modal h3#task-start-title{
+ margin:0 0 4px;min-height:0;color:#16392b;
+ font-size:22px;line-height:1.28;font-weight:900;
+ overflow-wrap:anywhere
+}
+.task-start-heading-text p{
+ margin:0;color:#5f7770;font-size:14px;
+ line-height:1.45;font-weight:650
+}
+.task-start-status{
+ display:flex;align-items:center;gap:14px;
+ margin-top:28px;padding:22px 17px;min-height:104px;
+ color:#295c51;background:linear-gradient(125deg,#eff8fc,#e9f6f2);
+ border:1px solid #d6e7e7;border-radius:18px;
+ font-size:15px;line-height:1.55;font-weight:750;
+ text-align:left;overflow-wrap:anywhere
+}
+.task-start-modal.is-ready .task-start-status{
+ color:#19684e;background:linear-gradient(125deg,#effbf3,#e5f8ee);
+ border-color:#d1eadc
+}
+.task-start-status-icon{
+ width:30px;flex:none;align-self:center;
+ color:#307b88;font-size:26px;font-weight:900;text-align:center
+}
+.task-start-modal.is-checking .task-start-status-icon{
+ animation:task-start-pulse 1s ease-in-out infinite
+}
+.task-start-modal.is-ready .task-start-status-icon{color:#14936b}
+.task-start-fallback{
+ display:block;margin:14px auto 0;padding:12px 8px;
+ min-height:44px;text-align:center;font-weight:750;
+ font-size:13px;line-height:1.45;color:#187b60;
+ text-decoration:underline;text-underline-offset:3px;
+ touch-action:manipulation;-webkit-tap-highlight-color:transparent
+}
+.task-start-fallback:focus-visible{outline:3px solid #168a67;outline-offset:2px;border-radius:9px}
+.task-start-accent{
+ position:absolute;inset:auto 0 0;height:4px;
+ background:linear-gradient(90deg,#20825f,#70cda4,#ecc96c)
+}
+@keyframes task-start-spin{to{transform:rotate(360deg)}}
+@keyframes task-start-pulse{50%{opacity:.4}}
+@keyframes task-start-enter{
+ from{opacity:0;transform:translateY(13px) scale(.98)}
+ to{opacity:1;transform:translateY(0) scale(1)}
+}
+@media(max-width:480px){
+ .task-start-cover.modal-cover{padding:14px}
+ .task-start-modal.modal{padding:24px 19px 28px;border-radius:23px}
+ .task-start-kicker{margin-bottom:20px}
+ .task-start-heading{gap:12px}
+ .task-start-heading-icon{width:54px;height:54px;border-radius:16px}
+ .task-start-modal h3#task-start-title{font-size:19px}
+ .task-start-heading-text p{font-size:13px}
+ .task-start-status{
+  margin-top:23px;padding:18px 13px;min-height:92px;
+  font-size:14px;gap:10px;border-radius:15px
+ }
+ .task-start-status-icon{width:25px;font-size:23px}
+}
+@media(prefers-reduced-motion:reduce){
+ .task-start-modal.modal,.task-start-spinner,.task-start-modal.is-checking .task-start-status-icon{
+  animation:none
+ }
+ .task-start-spinner{border-top-color:#188b68}
+}
