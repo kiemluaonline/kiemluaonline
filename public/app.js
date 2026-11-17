@@ -1421,6 +1421,31 @@ async function startTask(taskId){
   throw error;
  }
 }
+// Chrome Android / Safari iPhone: vuốt quay lại từ website nhiệm vụ có thể
+// khôi phục trang cũ từ back-forward cache (BFCache), giữ cả popup "Đang chuyển".
+// Chỉ tải lại khi tài liệu THỰC SỰ đã rời khỏi trang Nhiệm vụ rồi quay về.
+// Không gửi /start hay /return, không tiêu tốn thêm lượt và không tự cộng Lúa.
+let taskPageWasLeft=false;
+let taskPageReturnReloading=false;
+function reloadTaskPageOnHistoryReturn(){
+ if(!taskPageWasLeft||taskPageReturnReloading||document.hidden)return;
+ taskPageWasLeft=false;
+ taskPageReturnReloading=true;
+ window.location.reload();
+}
+window.addEventListener('pagehide',()=>{
+ const modalRoot=document.getElementById('modal-root');
+ const taskDialog=modalRoot?.querySelector('.task-start-cover, form[data-form="task-claim"]');
+ if(state.me?.user?.role==='member'&&(state.view==='tasks'||taskDialog))
+  taskPageWasLeft=true;
+});
+window.addEventListener('pageshow',event=>{
+ if(event.persisted)reloadTaskPageOnHistoryReturn();
+});
+document.addEventListener('visibilitychange',()=>{
+ // Trình duyệt trên điện thoại có thể kích hoạt visibilitychange trước pageshow.
+ if(!document.hidden)reloadTaskPageOnHistoryReturn();
+});
 function renderAttemptModal(){
  const a=state.attempt;if(!a)return;
  const remain=a.category==='video'?Math.max(0,Math.ceil((a.available_at-Date.now())/1000)):0;
