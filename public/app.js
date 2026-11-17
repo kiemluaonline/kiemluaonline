@@ -881,7 +881,8 @@ function renderMemberTaskCard(t){
    t.category==='link'?'Thực hiện qua liên kết':'Theo hướng dẫn';
  const usedLabel=isLink&&maxUses>1?`${used}/${maxUses}`:null;
  const badge=usedLabel||`${used}/${maxUses}`;
- const countText=t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
+ const countText=t.link_blocked==='link_task_limit'?`Đã dùng ${used}/${maxUses} lượt quay về hôm nay`:
+   t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
    t.my_status==='pending'?'Đã gửi, đang chờ Admin đối soát':
    t.my_status==='approved'?'Nhiệm vụ đã được duyệt':
    t.my_status==='rejected'?'Nhiệm vụ đã bị từ chối':
@@ -889,6 +890,7 @@ function renderMemberTaskCard(t){
    `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
  const progress=Math.round(used/maxUses*100);
  const blockNote=t.link_blocked?(
+  t.link_blocked==='link_task_limit'?'Bạn đã dùng hết số lượt quay về link đích của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
   t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
   t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
   t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':
