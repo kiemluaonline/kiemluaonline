@@ -1549,3 +1549,27 @@ assert.match(taskTabsCode,/\['app','link','other'\]\.includes\(el\.dataset\.filt
 assert.match(taskTabsCode,/function renderMemberTaskCard\(t\)/,
  'Existing member task card design must remain unchanged');
 console.log('PASS: member task tabs show App, Link and Khác only, with Link default and no video tasks.');
+
+const cleanedReturnClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const cleanedReturnMethod=cleanedReturnClient.slice(
+ cleanedReturnClient.indexOf('async function processLinkReturn(){'),
+ cleanedReturnClient.indexOf('async function boot(){')
+);
+const cleanedReturnSuccess=cleanedReturnMethod.slice(
+ cleanedReturnMethod.indexOf('state.returnChallenge={taskId,'),
+ cleanedReturnMethod.indexOf('renderLinkReturnModal();')
+);
+assert.match(cleanedReturnSuccess,/clearLinkReturnQuery\(\)/,
+ 'Browser address bar must be cleaned after capturing returned task challenge');
+assert.ok(cleanedReturnSuccess.indexOf('clearLinkReturnQuery()') <
+ cleanedReturnSuccess.indexOf("await navigate('tasks')"),
+ 'Remove task identifier before displaying post-return verification');
+const cleanedHelper=cleanedReturnClient.slice(cleanedReturnClient.indexOf('function clearLinkReturnQuery(){'),
+ cleanedReturnClient.indexOf('function renderLinkReturnModal(){'));
+assert.match(cleanedHelper,/params\.delete\('link_return'\)/,
+ 'Only shortlink query parameter is removed');
+assert.match(cleanedHelper,/window\.history\.replaceState\(null,'',location\.pathname/,
+ 'Use history.replaceState without adding navigation to history');
+assert.match(cleanedReturnClient,/\+encodeURIComponent\(c\.taskId\)\+'\/return'/,
+ 'CAPTCHA submission must still use the captured task ID from in-memory state');
+console.log('PASS: shortlink destination query is removed from address bar without breaking CAPTCHA verification.');
