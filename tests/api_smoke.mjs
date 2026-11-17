@@ -1355,3 +1355,56 @@ assert.equal((await call('/api/payout-accounts/'+oldSavedId,'DELETE',{},newLogin
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/saved_account_id/);
 assert.match(readFileSync(new URL('../public/payout-accounts-ui.js',import.meta.url),'utf8'),/Đặt mặc định/);
 console.log('PASS: bank-only saved recipients and BVBank IDs, blocked new ZaloPay, legacy wallet retention, owner isolation, snapshots and safe deletions.');
+
+
+// Trang đích Shortlink: chỉ ghi nhận tín hiệu quay về, không tự ghi Lúa.
+const returnDevice='44444444-3333-4333-8444-555555555555',returnIP='198.51.100.251';
+const returnMember=await call('/api/auth/register','POST',{
+ name:'Thành viên thử quay về',email:'link-return-test@example.com',
+ password:'test-password-2026',accept_terms:'yes'
+},'',returnIP,returnDevice);
+assert.equal(returnMember.status,201,JSON.stringify(returnMember));
+const returnTask=await call('/api/admin/tasks','POST',{
+ title:'Nhiệm vụ Link quay về website',description:'Chỉ báo đã đến trang đích',
+ category:'link',url:'https://example.com/short-link-test',reward:77,
+ min_seconds:5,review_mode:'manual',repeat_policy:'daily',is_active:true
+},admCookie);
+assert.equal(returnTask.status,201,JSON.stringify(returnTask));
+const returnPath='/api/tasks/'+returnTask.data.id+'/return';
+assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice)).status,409,
+ 'Truy cập URL đích trước khi bắt đầu nhiệm vụ không được ghi nhận');
+assert.equal((await call(returnPath,'POST',{},'',returnIP,returnDevice)).status,401,
+ 'Không thể ghi nhận lượt quay về khi chưa đăng nhập');
+const memberBefore=(await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance;
+const startedReturn=await call('/api/tasks/'+returnTask.data.id+'/start','POST',{},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(startedReturn.status,200,JSON.stringify(startedReturn));
+assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,
+ '55555555-3333-4333-8444-555555555555')).status,409,'Sai mã trình duyệt không được ghi nhận');
+assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
+ 'Sai IP không được ghi nhận');
+const returned=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(returned.status,200,JSON.stringify(returned));
+assert.equal(returned.data.status,'pending');
+assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance,
+ memberBefore,'Quay về trang đích KHÔNG tự cộng Lúa');
+const returnRow=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(returnTask.data.id);
+assert.equal(returnRow.status,'pending');
+assert.match(returnRow.evidence,/\[LINK_RETURN_V1\]/);
+assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?")
+ .get(returnRow.id).n,0,'Chưa có giao dịch Lúa khi chưa đối soát');
+assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice)).status,409,
+ 'Không thể dùng lại lượt quay về đã ghi nhận');
+assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{status:'approved'},admCookie)).status,400,
+ 'Để duyệt tín hiệu quay về, Admin phải xác nhận đã tự đối soát nguồn thu');
+assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
+ status:'approved',revenue_confirmed:true
+},admCookie)).status,200);
+assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance,
+ memberBefore+77,'Chỉ ghi Lúa sau khi Admin chủ động xác nhận nguồn thu và duyệt');
+assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
+ status:'approved',revenue_confirmed:true
+},admCookie)).status,409,'Không thể duyệt trùng');
+assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/Sao chép trang đích/);
+assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/async function processLinkReturn/);
+console.log('PASS: link destination return records pending evidence, blocks duplication, requires Admin reconciliation, and never auto-credits wallet.');
