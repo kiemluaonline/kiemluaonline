@@ -397,7 +397,10 @@
   if(match)return 'Muaj '+match[1]+' Lúa';
   match=/^Nhiệm vụ đã tạo \(([\d.,]+)\)$/.exec(v);
   if(match)return 'Cov haujlwm tsim lawm ('+match[1]+')';
-  // Các câu chứa số lượng / mã thật không có sẵn trong từ điển cố định.
+  // Hạn mức theo nhiệm vụ hiển thị từ dữ liệu thật, dịch số lượng mà không đổi dữ liệu.
+  match=/^Đã sử dụng (\\d+)\/(\\d+) lượt hôm nay$/.exec(v);
+  if(match)return 'Hnub no twb siv '+match[1]+'/'+match[2]+' zaug lawm';
+    // Các câu chứa số lượng / mã thật không có sẵn trong từ điển cố định.
   const counts=[
    [/^([\d.,]+) sản phẩm$/,'yam khoom'],
    [/^([\d.,]+) sản phẩm đang hiển thị$/,'yam khoom tab tom qhia'],
