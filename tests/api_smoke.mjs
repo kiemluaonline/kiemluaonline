@@ -1518,3 +1518,18 @@ const adminCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8
 assert.match(adminCss,/\.admin-tasks-panel/);
 assert.match(adminCss,/min-height:44px/);
 console.log('PASS: Admin can see per-task quotas, daily submissions, pending reconciliations, and mobile-accessible actions.');
+const securityClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const securityCard=securityClient.slice(securityClient.indexOf('function taskDashboardCard('),
+ securityClient.indexOf('// Dữ liệu IPv4 dùng để HIỂN THỊ'));
+const ipPosition=securityCard.indexOf('class="task-security-ip"');
+const noticePosition=securityCard.indexOf('class="task-security-policy"');
+const devicePosition=securityCard.indexOf('class="task-security-id"');
+assert.ok(ipPosition>=0&&ipPosition<noticePosition&&noticePosition<devicePosition,
+ 'Quota policy must be directly below current IP and above masked device code');
+assert.match(securityCard,/Quota chặn theo mã thiết bị và địa chỉ IP - đổi IP\/VPN\/4G không giúp vượt giới hạn\./);
+const securityStyle=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+assert.match(securityStyle,/\.task-security-compact p\.task-security-policy/);
+const hmoobExtra=readFileSync(new URL('../public/i18n-extra.js',import.meta.url),'utf8');
+assert.match(hmoobExtra,/Quota chặn theo mã thiết bị và địa chỉ IP - đổi IP\/VPN\/4G không giúp vượt giới hạn\./);
+console.log('PASS: compact member fraud card shows visible IP/device quota policy right below IP in Vietnamese and Hmoob.');
+
