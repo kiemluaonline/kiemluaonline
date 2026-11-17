@@ -1085,12 +1085,14 @@ async function adminUsers(){
 }
 async function adminReviews(){
  const d=await api('/api/admin/reviews');
+ const pendingReturns=d.reviews.filter(c=>c.status==='pending'&&String(c.evidence||'').startsWith('[LINK_RETURN_V1]')).length;
  return `${heading('Duyệt bằng chứng','Chỉ khi duyệt thành công, Lúa mới được ghi vào ví thành viên.')}
+ <div class="callout section">🔗 <strong>${fmt(pendingReturns)} lượt quay về đang chờ đối soát</strong> trong danh sách đang tải. Khách đã giải phép tính nhưng chưa được cộng Lúa. Admin cần kiểm tra nguồn thu hợp lệ trước khi quyết định.</div>
  <div class="callout section"><strong>Link tự quay về:</strong> “Đã truy cập trang đích” chỉ là tín hiệu kỹ thuật. Không đọc được mã đã nhập trên dịch vụ rút gọn và không có xác nhận doanh thu. Phải kiểm tra nguồn tiền hợp lệ trước khi duyệt Lúa.</div><div class="callout section"><strong>Quản lý dung lượng bằng chứng:</strong> Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.
  <div class="section">${d.processed_evidence_count>0?`<p class="note"><strong>Có ${fmt(d.processed_evidence_count)} hồ sơ đã xử lý còn bằng chứng.</strong> Thao tác hàng loạt sẽ xóa bằng chứng của TẤT CẢ những hồ sơ đó, kể cả hồ sơ không hiển thị bên dưới.</p><button type="button" class="btn danger sm proof-delete-all" data-action="erase-all-processed-evidence" data-count="${Number(d.processed_evidence_count)}">🗑 Xóa tất cả bằng chứng đã xử lý</button>`:'<p class="note">Hiện không có bằng chứng đã xử lý cần dọn.</p>'}</div></div>
  <section class="card section">${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Kiểm tra','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
- <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}">Duyệt</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
+ <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong><div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div><details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
@@ -1474,6 +1476,13 @@ app.addEventListener('change',e=>{
   const video=e.target.value==='video', input=document.querySelector('#task-form [name="min_seconds"]');
   document.getElementById('task-time-field').hidden=!video;
   input.disabled=!video;input.required=video;
+  const link=e.target.value==='link',hint=document.getElementById('admin-link-task-hint');
+  if(hint)hint.hidden=!link;
+  const mode=document.querySelector('#task-form [name="review_mode"]');
+  if(link&&mode?.value==='auto'){
+   mode.value='manual';
+   toast('Link tự quay về cần Admin đối soát; đã chọn duyệt thủ công.');
+  }
  }
 });
 
@@ -1728,6 +1737,8 @@ app.addEventListener('submit',async e=>{
   }
   if(kind==='settings'){await api('/api/admin/settings','PUT',b);state.meta=await api('/api/meta');toast('Đã lưu cài đặt.');await navigate('admin-settings');}
   if(kind==='admin-task'){
+    if(b.category==='link'&&b.review_mode!=='manual')
+      throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');
     const data={...b,reward:Number(b.reward),min_seconds:Number(b.min_seconds),is_active:b.is_active==='1'};
     if(data.id)await api('/api/admin/tasks/'+encodeURIComponent(data.id),'PATCH',data);
     else await api('/api/admin/tasks','POST',data);
