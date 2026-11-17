@@ -1229,13 +1229,15 @@ async function handler(req, env) {
       env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM wallet_entries WHERE user_id=? AND amount>0 AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
       env.DB.prepare("SELECT COALESCE(SUM(c.reward),0) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=? AND c.status='approved' AND t.category='link'").bind(me.id).first(),
       env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
-      env.DB.prepare("SELECT id,bank_account,vnd_amount,COALESCE(reviewed_at,created_at) AS paid_at FROM withdrawals WHERE status='paid' ORDER BY COALESCE(reviewed_at,created_at) DESC,id DESC LIMIT 12").all()
+      env.DB.prepare("SELECT id,bank_account,vnd_amount,COALESCE(reviewed_at,created_at) AS paid_at FROM withdrawals WHERE status='paid' AND vnd_amount>=5000 ORDER BY COALESCE(reviewed_at,created_at) DESC,id DESC LIMIT 12").all()
     ]);
     return json({
       today_lua:todayLua.n,link_lua:linkLua.n,submitted_today:submittedToday.n,
       next_reset_at:Date.parse(today+'T00:00:00+07:00')+DAY,
       ip:clientIP(req),device_code:await deviceCode(req,env),device_registered:Boolean(browserDeviceId(req)),
-      // Các khoản đã chi thật do Admin xác nhận; không công khai user_id hoặc số TK đầy đủ.
+      // Thẻ thanh toán chỉ công khai khoản đã chi từ 5.000đ trở lên để đúng mức rút tối thiểu hiện hành.
+      // Giữ nguyên lịch sử giao dịch cũ (kể cả dưới 5.000đ) trong D1 và màn hình đối soát Admin.
+      // Không công khai user_id hoặc số TK đầy đủ.
       recent_payments:recent.results.map(w=>({id:w.id,masked_account:maskedAccount(w.bank_account),
         vnd_amount:w.vnd_amount,at:w.paid_at})),
       latest_payment:recent.results[0]?{masked_account:maskedAccount(recent.results[0].bank_account),
