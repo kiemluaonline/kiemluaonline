@@ -1215,7 +1215,7 @@ function showTaskRules(taskId){
    <li><span class="task-rules-rule-icon" aria-hidden="true">♧</span><span>Không tạo nhiều tài khoản trên cùng một thiết bị để nhận thưởng.</span></li>
    <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Không lấy kết quả nhiệm vụ từ website khác rồi gửi nhận Lúa tại Trạm Có Lúa.</span></li>
   </ul>
-  <p class="task-rules-note">Lượt quay về và phép tính không xác nhận doanh thu. Chỉ cộng Lúa sau khi Admin kiểm tra, phê duyệt nhiệm vụ hợp lệ theo điều kiện của đối tác.</p>
+  <p class="task-rules-note">${task.review_mode==='manual'?'Lượt quay về và phép tính không xác nhận doanh thu. Chỉ cộng Lúa sau khi Admin kiểm tra và duyệt nhiệm vụ hợp lệ theo điều kiện đối tác.':'Thưởng chỉ được ghi nhận khi nhiệm vụ vượt qua các bước xác minh của hệ thống và đáp ứng điều kiện áp dụng.'}</p>
   <div class="task-rules-actions">
    <button type="button" class="btn task-rules-cancel" data-action="cancel-task-rules">Hủy</button>
    <button type="button" class="btn task-rules-accept" data-action="confirm-task-rules">▷ Bắt đầu</button>
