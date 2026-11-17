@@ -1444,6 +1444,65 @@ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,
 assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
  status:'approved',revenue_confirmed:true
 },admCookie)).status,409,'Không thể duyệt trùng');
+
+// Giới hạn đích Link theo từng lượt: 0/2 -> 1/2 -> 2/2, không phụ thuộc thời gian 20 phút.
+const quotaReturnTask=await call('/api/admin/tasks','POST',{
+ title:'Link chỉ quay về hai lượt',description:'Kiểm thử hai lần quay về độc lập',
+ category:'link',url:'https://example.com/quota-return-test',reward:23,
+ min_seconds:5,review_mode:'manual',repeat_policy:'daily',link_24h_limit:2,is_active:true
+},admCookie);
+assert.equal(quotaReturnTask.status,201,JSON.stringify(quotaReturnTask));
+const quotaPath='/api/tasks/'+quotaReturnTask.data.id+'/return';
+const taskViewBefore=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
+ .find(t=>t.id===quotaReturnTask.data.id);
+assert.equal(taskViewBefore.link_24h_count,0,'Ban đầu là 0/2');
+const qStart1=await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(qStart1.status,200,JSON.stringify(qStart1));
+assert.equal(qStart1.data.expires_in_seconds,86400,'Nhiệm vụ Link cho phép tìm mã tối đa 24 giờ');
+sqlite.prepare("UPDATE task_attempts SET created_at=datetime('now','-80 minutes') WHERE id=?").run(qStart1.data.attempt_id);
+const qLanding1=await call(quotaPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(qLanding1.status,200,JSON.stringify(qLanding1));
+assert.equal(qLanding1.data.challenge,true);
+const taskViewFirst=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
+ .find(t=>t.id===quotaReturnTask.data.id);
+assert.equal(taskViewFirst.link_24h_count,1,'Lượt quay về đầu tiên hiển thị 1/2 trước cả CAPTCHA');
+const qLandingSame=await call(quotaPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(qLandingSame.status,200,'Tải lại cùng phiên không dùng thêm lượt; khách vẫn giải được CAPTCHA');
+const taskViewSame=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
+ .find(t=>t.id===quotaReturnTask.data.id);
+assert.equal(taskViewSame.link_24h_count,1,'Tải lại link đích không được tự biến 1/2 thành 2/2');
+assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=?")
+ .get(returnMemberId,'attempt:'+qStart1.data.attempt_id).n,0,
+ 'Người vượt lâu hơn 20 giây không bị cảnh báo về quá nhanh');
+const qAnswer1=await call(quotaPath,'POST',{answer:qLanding1.data.a+qLanding1.data.b},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(qAnswer1.status,200,JSON.stringify(qAnswer1));
+assert.equal(qAnswer1.data.status,'pending');
+const qStart2=await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(qStart2.status,200,'Sau lần quay về đầu tiên vẫn cho Bắt đầu lần hai');
+const qLanding2=await call(quotaPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(qLanding2.status,200,JSON.stringify(qLanding2));
+const taskViewSecond=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
+ .find(t=>t.id===quotaReturnTask.data.id);
+assert.equal(taskViewSecond.link_24h_count,2,'Lượt về thứ hai hiển thị 2/2');
+assert.equal(taskViewSecond.link_blocked,'link_task_limit','Hết lượt phải khóa nút bắt đầu');
+const qStart3=await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(qStart3.status,429,'Không cho tạo lượt thứ ba trong cùng ngày');
+const qAnswer2=await call(quotaPath,'POST',{answer:qLanding2.data.a+qLanding2.data.b},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(qAnswer2.status,200,JSON.stringify(qAnswer2));
+const qReviewRow=sqlite.prepare('SELECT id FROM task_completions WHERE task_id=? ORDER BY created_at DESC LIMIT 1').get(quotaReturnTask.data.id);
+assert.equal((await call('/api/admin/reviews/'+qReviewRow.id,'POST',{status:'rejected'},admCookie)).status,200);
+const afterReject=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
+ .find(t=>t.id===quotaReturnTask.data.id);
+assert.equal(afterReject.link_24h_count,2,'Từ chối một lượt không làm hồi số lần quay về hôm nay');
+assert.equal((await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{},
+ returnMember.cookie,returnIP,returnDevice)).status,429,
+ 'Hai lần đến đích vẫn hết lượt dù một lần bị Admin từ chối');
+
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/Sao chép trang đích/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/async function processLinkReturn/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/renderLinkReturnModal/);
@@ -1604,3 +1663,10 @@ assert.match(reviewFraudClient,/data-fast-return/);
 assert.match(reviewFraudClient,/Cần ít nhất 20 ký tự ghi rõ căn cứ đối soát/);
 assert.match(reviewFraudClient,/admin-link-risk-warning/);
 console.log('PASS: anti-fraud flags very fast returns, allows only one active Link attempt, requires Admin override evidence, and preserves manual reward approval.');
+
+const oneReturnWorker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
+assert.match(oneReturnWorker,/async function linkReturnUsage\(/);
+assert.match(oneReturnWorker,/UPDATE task_attempts SET available_at=\?/);
+assert.match(oneReturnWorker,/attemptSeconds=task.category==='link'\?86400:1200/);
+assert.match(oneReturnWorker,/link_24h_count:used/);
+console.log('PASS: unique counted destination returns, 0/2 -> 1/2 -> 2/2, long genuine sessions, no duplicate or rejected return refunds.');
