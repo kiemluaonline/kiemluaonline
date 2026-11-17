@@ -1527,3 +1527,12 @@ html[lang="hmn"] .language-legal-notice{display:block}
   margin:8px 0 9px;padding:9px 10px;font-size:12px
  }
 }
+
+/* Suspicious shortlink return warnings for Admin */
+.layout .content .admin-link-risk-warning{
+ margin:9px 0;padding:10px 12px;min-height:0;
+ border:1px solid #f0c7a5;border-left:4px solid #d97735;
+ background:#fff6eb;color:#85421c;border-radius:11px;
+ font-size:12px;line-height:1.55;font-weight:750;
+ white-space:normal;overflow-wrap:anywhere
+}
