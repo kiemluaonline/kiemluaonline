@@ -1445,7 +1445,9 @@ assert.match(rulesOverlay,/QUY TẮC BẮT BUỘC/);
 assert.match(rulesOverlay,/Không dùng tool, script, auto/);
 assert.match(rulesOverlay,/Không dùng VPN, proxy/);
 assert.match(rulesOverlay,/Không tạo nhiều tài khoản/);
-assert.match(rulesOverlay,/Không lấy kết quả nhiệm vụ từ website khác/);
+assert.match(rulesOverlay,/Chỉ thực hiện nhiệm vụ thông qua nút/);
+assert.match(rulesOverlay,/Không sử dụng link của người khác hoặc tự truy cập trang xác minh/);
+assert.doesNotMatch(rulesOverlay,/Không lấy kết quả nhiệm vụ từ website khác/);
 assert.match(rulesOverlay,/data-action="cancel-task-rules"/);
 assert.match(rulesOverlay,/data-action="confirm-task-rules"/);
 assert.doesNotMatch(rulesOverlay,/\/api\/tasks\//,
