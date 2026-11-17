@@ -680,6 +680,7 @@ function taskDashboardCard(d,quotas={}){
   <section class="card task-device-card task-security-compact" aria-label="Bảo vệ chống gian lận">
    <h3 class="task-security-title">🛡️ Bảo vệ chống gian lận</h3>
    <div class="task-security-ip"><span>IP hiện tại:</span> <strong id="taskDisplayIP">${esc(compactIP(d.ip))}</strong></div>
+   <p class="task-security-policy" role="note">🛡️ Quota chặn theo mã thiết bị và địa chỉ IP - đổi IP/VPN/4G không giúp vượt giới hạn.</p>
    <div class="task-security-id"><span>📱 Đã định danh thiết bị:</span> <code>${esc(maskDeviceCode(d.device_code))}</code></div>
    <div class="task-security-quotas"><span>Hạn mức nhiệm vụ được đặt lại lúc 00:00 (giờ Việt Nam).</span></div>
    <details class="task-security-details"><summary>Thông tin IP</summary>
