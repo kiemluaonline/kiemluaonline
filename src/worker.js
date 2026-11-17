@@ -5,6 +5,8 @@ import { payoutAccountsAPI } from './payout-accounts.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
+// Tín hiệu rà soát, KHÔNG phải bằng chứng người dùng chưa vượt link.
+const LINK_RETURN_FAST_SECONDS = 20;
 // Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
 const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
@@ -1231,6 +1233,17 @@ async function handler(req, env) {
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
     if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
       fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
+    // Lượt quay về sớm bất thường cần được Admin xem xét. Người dùng có thể
+    // mở trực tiếp link đích sau khi Bắt đầu; thời gian không chứng minh đã vượt link.
+    const startedAt=Date.parse(String(attempt.created_at||'').replace(' ','T')+'Z');
+    const secondsSinceStart=Number.isFinite(startedAt)?Math.max(0,Math.floor((now()-startedAt)/1000)):null;
+    const riskKey='attempt:'+attempt.id;
+    if(secondsSinceStart!==null&&secondsSinceStart<LINK_RETURN_FAST_SECONDS){
+      const marked=await env.DB.prepare(
+        "SELECT id FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=? LIMIT 1"
+      ).bind(me.id,riskKey).first();
+      if(!marked)await event(env,req,'link_return_too_fast',me.id,riskKey);
+    }
     // Chỉ hiển thị ô phép tính sau khi đến trang đích, không tự ghi nhận khi tải trang.
     if (!Object.prototype.hasOwnProperty.call(body,'answer'))
       return json({ok:true,challenge:true,a:attempt.captcha_a,b:attempt.captcha_b,
@@ -1249,8 +1262,12 @@ async function handler(req, env) {
     const browserLink=await linkBrowserQuota(env,req,me.id,task,settings);
     const completionId=id();
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
+    const fastReturn=await env.DB.prepare(
+      "SELECT id FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=? LIMIT 1"
+    ).bind(me.id,riskKey).first();
     const evidence='[LINK_RETURN_V1] Thành viên đã quay về và giải phép tính trên Trạm Có Lúa (không phải xác nhận lượt xem hoặc doanh thu của bên rút gọn). Phiên: ' +
-      attempt.id + '; UTC: ' + new Date().toISOString();
+      attempt.id + '; UTC: ' + new Date().toISOString() +
+      (fastReturn?' [LINK_RETURN_FAST_V1] Cảnh báo: phiên quay về trong dưới 20 giây, cần đối soát riêng.':'');
     const batch=await env.DB.batch([
       env.DB.prepare(TASK_CLAIM_UPDATE)
         .bind(completionId,attempt.id,me.id,now(),now(),task.category,
@@ -1289,10 +1306,20 @@ async function handler(req, env) {
     await linkBrowserQuota(env,req,me.id,task,settings);
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
-    const a = rand(), b = rand(), attempt = id(), available = now() + (task.category === 'video' ? task.min_seconds * 1000 : 0);
-    await env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
-       VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, now() + 20 * 60000,
-      clientIP(req), await deviceCode(req, env)).run();
+    const startedNow=now();
+    const a = rand(), b = rand(), attempt = id(), available = startedNow + (task.category === 'video' ? task.min_seconds * 1000 : 0);
+    const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
+       VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, startedNow + 20 * 60000,
+      clientIP(req), await deviceCode(req, env));
+    if(task.category==='link'){
+      // Mỗi nhiệm vụ link chỉ được có một phiên còn hiệu lực trên một tài khoản.
+      // Tạo mới làm hết hạn phiên cũ; không sửa lịch sử nhiệm vụ đã hoàn thành.
+      await env.DB.batch([
+        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>?')
+          .bind(startedNow,me.id,task.id,startedNow),
+        insertAttempt
+      ]);
+    }else await insertAttempt.run();
     return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: 1200,
       review_mode: task.review_mode, category: task.category, task_url: task.url });
   }
@@ -1628,9 +1655,13 @@ async function handler(req, env) {
       if (!['approved', 'rejected'].includes(b.status)) fail(400, 'Trạng thái không hợp lệ.');
       const c = await env.DB.prepare('SELECT * FROM task_completions WHERE id=?').bind(review[1]).first();
       if (!c || c.status !== 'pending') fail(409, 'Không tìm thấy bằng chứng đang chờ duyệt.');
-      if (b.status === 'approved' && String(c.evidence||'').startsWith('[LINK_RETURN_V1]')
-          && b.revenue_confirmed !== true)
+      const isReturn=String(c.evidence||'').startsWith('[LINK_RETURN_V1]');
+      const isFastReturn=isReturn&&String(c.evidence).includes('[LINK_RETURN_FAST_V1]');
+      if (b.status === 'approved' && isReturn && b.revenue_confirmed !== true)
         fail(400, 'Cần xác nhận đã tự đối soát nguồn thu thật trước khi duyệt lượt quay về.');
+      const riskReason=str(b.risk_override_reason,500);
+      if(b.status==='approved'&&isFastReturn&&riskReason.length<20)
+        fail(400, 'Lượt quay về quá nhanh. Cần ghi lý do đối soát độc lập (tối thiểu 20 ký tự) trước khi duyệt.');
       const actionId = id();
       const r = await env.DB.batch([
         env.DB.prepare("UPDATE task_completions SET status=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
@@ -1642,6 +1673,8 @@ async function handler(req, env) {
           .bind(actionId, c.user_id, c.reward, c.id, b.status, c.id)
       ]);
       if (!r[0].meta?.changes) fail(409, 'Bằng chứng đã được xử lý.');
+      if(b.status==='approved'&&isFastReturn)
+        await event(env,req,'link_fast_return_approved',c.user_id,'completion:'+c.id+'; đối soát: '+riskReason);
       if (b.status === 'approved') await giveReferral(env, c.user_id, await getSettings(env));
       return json({ ok: true });
     }
