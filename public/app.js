@@ -863,6 +863,62 @@ function startTaskResetTimer(){
  update();
  const timer=setInterval(()=>{if(el.isConnected)update();else clearInterval(timer);},1000);
 }
+function renderMemberTaskCard(t){
+ const isLink=t.category==='link';
+ const maxUses=isLink?Math.max(1,Math.min(20,Math.floor(Number(t.link_24h_limit)||1))):1;
+ const count=isLink?Math.max(0,Math.floor(Number(t.link_24h_count)||0)):(t.my_status?1:0);
+ const used=Math.min(maxUses,count);
+ const left=Math.max(0,maxUses-used);
+ const daily=(isLink&&maxUses>1)||t.repeat_policy==='daily';
+ const name=t.category==='link'?'Link rút gọn':t.category==='video'?'Xem video':t.category==='app'?'Nhiệm vụ App':'Nhiệm vụ';
+ const symbol=t.category==='link'?'🔗':t.category==='video'?'🎬':t.category==='app'?'📱':'✨';
+ const timing=t.category==='video'?Math.max(5,Number(t.min_seconds)||5)+' giây tối thiểu':
+   t.category==='link'?'Thực hiện qua liên kết':'Theo hướng dẫn';
+ const usedLabel=isLink&&maxUses>1?`${used}/${maxUses}`:null;
+ const badge=usedLabel||`${used}/${maxUses}`;
+ const countText=t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
+   t.my_status==='pending'?'Đã gửi, đang chờ Admin đối soát':
+   t.my_status==='approved'?'Nhiệm vụ đã được duyệt':
+   t.my_status==='rejected'?'Nhiệm vụ đã bị từ chối':
+   daily?`Còn ${left}/${maxUses} lượt hôm nay`:
+   `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
+ const progress=Math.round(used/maxUses*100);
+ const blockNote=t.link_blocked?(
+  t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
+  t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
+  t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':
+  t.link_blocked==='link_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. IP đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
+  t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':
+  'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
+ ):'';
+ const button=t.link_blocked?
+  `<button class="btn task-card-modern-action is-disabled" type="button" disabled>⛔ Chưa thể bắt đầu</button>`:
+  t.my_status?
+   `<div class="task-card-modern-completed">${chip(t.my_status)}<span>Trạng thái được cập nhật từ hệ thống.</span></div>`:
+   `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> Làm nhiệm vụ <span aria-hidden="true">›</span></button>`;
+ return `<article class="card task-card task-card-modern">
+  <div class="task-card-modern-head">
+   <span class="task-card-modern-icon" aria-hidden="true">${symbol}</span>
+   <div class="task-card-modern-identity">
+    <span class="task-card-modern-type">${name}</span>
+    <h3>${esc(t.title)}</h3>
+    <div class="task-card-modern-chips">
+     <span class="task-card-modern-timing">◷ ${esc(timing)}</span>
+     <span class="task-card-modern-reward">🌾 +${fmt(t.reward)} Lúa</span>
+    </div>
+   </div>
+   <div class="task-card-modern-count" aria-label="Đã làm ${used} trong ${maxUses} lượt"><strong>${badge}</strong><small>lượt</small></div>
+  </div>
+  <p class="task-card-modern-description">${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
+  ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
+  <div class="task-card-modern-bottom">
+   <div class="task-card-modern-quota"><span class="task-card-modern-quota-icon" aria-hidden="true">◉</span><span>${esc(countText)}</span></div>
+   <div class="task-card-modern-track" role="progressbar" aria-label="Lượt đã thực hiện" aria-valuemin="0" aria-valuemax="${maxUses}" aria-valuenow="${used}"><span style="width:${progress}%"></span></div>
+   ${blockNote?`<p class="task-link-blocked">⛔ ${esc(blockNote)}</p>`:''}
+   ${button}
+  </div>
+ </article>`;
+}
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
  state.memberTasks=data.tasks;
@@ -871,18 +927,9 @@ async function tasks(){
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
  ${taskDashboardCard(stats,data)}
- <h3 class="task-list-heading">Danh sách nhiệm vụ</h3>
+ <div class="task-card-modern-section-head"><h3>Khám phá nhiệm vụ</h3><span>🌾 Tích Lúa mỗi ngày</span></div>
  <div class="task-filter-row">${[['all','Tất cả'],['app','📱 Nhiệm vụ App'],['link','🔗 Link'],['video','🎬 Video'],['other','Khác']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
- ${shownTasks.length?`<div class="grid">${shownTasks.map(t=>`<article class="card task-card">
- <div class="task-top"><span class="task-icon">${t.category==='video'?'🎬':t.category==='link'?'🔗':t.category==='app'?'📱':'📋'}</span><strong class="green">+${fmt(t.reward)} Lúa</strong></div>
- <h3>${esc(t.title)}</h3><p>${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
- ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
- <div class="task-meta">${t.category==='video'?`<span>${t.min_seconds} giây tối thiểu</span><span>•</span>`:''}<span>${t.review_mode==='manual'?'Admin duyệt bằng chứng':'Kiểm tra tự động'}</span></div>
- <div class="task-meta"><span>${t.category==='link'&&t.link_24h_limit>1?`${t.link_24h_count||0}/${t.link_24h_limit} lượt nhiệm vụ này / ngày`:t.repeat_policy==='daily'?'Mỗi ngày 1 lượt':'Mỗi tài khoản 1 lượt'}</span></div>
- ${t.link_blocked
-   ?`<p class="task-link-blocked">⛔ ${t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':t.link_blocked==='link_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. IP đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'}</p>`
-   :t.my_status?chip(t.my_status):`<button class="btn" data-action="start-task" data-id="${esc(t.id)}">Bắt đầu nhiệm vụ →</button>`}
- </article>`).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
+ ${shownTasks.length?`<div class="grid task-card-modern-grid">${shownTasks.map(renderMemberTaskCard).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
 async function referrals(){
  const r=await api('/api/referrals'),link=location.origin+'/?ref='+encodeURIComponent(r.referral_code);
@@ -1213,7 +1260,7 @@ function showTaskRules(taskId){
    <li><span class="task-rules-rule-icon" aria-hidden="true">⊘</span><span>Không dùng tool, script, auto hay bất kỳ hành vi gian lận nào.</span></li>
    <li><span class="task-rules-rule-icon" aria-hidden="true">◎</span><span>Không dùng VPN, proxy hay trình duyệt ẩn danh khi làm nhiệm vụ.</span></li>
    <li><span class="task-rules-rule-icon" aria-hidden="true">♧</span><span>Không tạo nhiều tài khoản trên cùng một thiết bị để nhận thưởng.</span></li>
-   <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Chỉ thực hiện nhiệm vụ thông qua nút “Bắt đầu” tại Trạm Có Lúa. Không sử dụng link của người khác hoặc tự truy cập trang xác minh để nhận thưởng.</span></li>
+   <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Không hoàn thành cùng một nhiệm vụ trên website kiếm thưởng khác rồi quay lại Trạm Có Lúa để làm lại hoặc nhận Lúa. Muốn nhận Lúa, phải bắt đầu nhiệm vụ tại Trạm Có Lúa.</span></li>
   </ul>
   <p class="task-rules-note">${task.review_mode==='manual'?'Lượt quay về và phép tính không xác nhận doanh thu. Chỉ cộng Lúa sau khi Admin kiểm tra và duyệt nhiệm vụ hợp lệ theo điều kiện đối tác.':'Thưởng chỉ được ghi nhận khi nhiệm vụ vượt qua các bước xác minh của hệ thống và đáp ứng điều kiện áp dụng.'}</p>
   <div class="task-rules-actions">
