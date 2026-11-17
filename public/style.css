@@ -1536,3 +1536,149 @@ html[lang="hmn"] .language-legal-notice{display:block}
  font-size:12px;line-height:1.55;font-weight:750;
  white-space:normal;overflow-wrap:anywhere
 }
+
+
+/* Member task result popup: success and pending; independent of Admin review dialogs. */
+body.task-result-open{overflow:hidden}
+.task-result-cover.modal-cover{
+ z-index:110;display:flex;align-items:center;justify-content:center;
+ padding:18px;overflow-y:auto;
+ background:rgba(7,30,25,.72);
+ -webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);
+}
+.task-result-modal.modal{
+ --result-main:#139d72;--result-deep:#087255;
+ --result-soft:#e4faf0;--result-border:#bce8ce;
+ position:relative;isolation:isolate;overflow:hidden;
+ width:100%;max-width:438px;max-height:calc(100dvh - 36px);
+ padding:34px 30px 27px;border-radius:30px;
+ border:1.5px solid var(--result-border);
+ background:
+  radial-gradient(circle at 50% 17%,rgba(179,255,222,.35),transparent 44%),
+  linear-gradient(165deg,#fff 52%,#f9fefa 100%);
+ box-shadow:0 24px 70px rgba(3,34,24,.27),0 3px 14px rgba(3,34,24,.13);
+ color:#1e332b;text-align:center;
+ animation:task-result-pop .33s cubic-bezier(.2,.88,.22,1.05) both;
+}
+.task-result-pending .task-result-modal{
+ --result-main:#c8881e;--result-deep:#91600e;
+ --result-soft:#fff5d8;--result-border:#eed7a5;
+ background:
+  radial-gradient(circle at 50% 17%,rgba(255,232,157,.32),transparent 45%),
+  linear-gradient(165deg,#fff 52%,#fffdf6 100%);
+}
+.task-result-modal .task-result-close{
+ position:absolute;right:15px;top:15px;z-index:2;
+ display:grid;place-items:center;
+ width:45px;height:45px;padding:0;
+ border:0;border-radius:50%;
+ background:rgba(25,52,39,.045);color:#78897c;
+ font-size:27px;line-height:1;cursor:pointer;
+ -webkit-tap-highlight-color:transparent;touch-action:manipulation
+}
+.task-result-modal .task-result-close:hover{background:rgba(25,52,39,.10);color:#3c5647}
+.task-result-icon-wrap{
+ position:relative;display:grid;place-items:center;
+ height:144px;margin:8px auto 15px
+}
+.task-result-glow{
+ position:absolute;width:148px;height:148px;border-radius:50%;
+ background:radial-gradient(circle,var(--result-soft) 13%,transparent 71%);
+}
+.task-result-icon{
+ position:relative;display:grid;place-items:center;
+ width:118px;height:118px;border-radius:50%;
+ color:var(--result-main);
+ background:linear-gradient(135deg,#f2fff7,var(--result-soft));
+ box-shadow:0 0 0 9px rgba(126,221,173,.14),0 12px 32px rgba(16,110,64,.11)
+}
+.task-result-pending .task-result-icon{
+ background:linear-gradient(135deg,#fffdf2,#fff0c2);
+ box-shadow:0 0 0 9px rgba(242,190,79,.17),0 12px 32px rgba(170,116,21,.10)
+}
+.task-result-icon svg{width:102px;height:102px;display:block}
+.task-result-eyebrow{
+ color:#698b73;font-size:11px;line-height:1.4;
+ font-weight:850;letter-spacing:.19em;margin-bottom:10px
+}
+.task-result-pending .task-result-eyebrow{color:#a38142}
+.task-result-modal h3#task-result-title{
+ color:#162f24;font-size:clamp(24px,5vw,29px);
+ line-height:1.23;letter-spacing:-.55px;
+ font-weight:900;margin:0 auto 11px;max-width:360px
+}
+.task-result-description{
+ color:#607568;font-size:15px;line-height:1.6;
+ margin:0 auto 21px;max-width:350px;min-height:0
+}
+.task-result-reward-block{
+ display:flex;flex-direction:column;align-items:center;
+ gap:8px;padding:15px 13px 14px;
+ border:1px solid var(--result-border);border-radius:18px;
+ background:linear-gradient(155deg,#fff,var(--result-soft));
+}
+.task-result-reward-label{
+ font-size:13px;line-height:1.3;color:#597869;font-weight:650
+}
+.task-result-pending .task-result-reward-label{color:#94743d}
+.task-result-reward-amount{
+ color:var(--result-deep);font-size:clamp(23px,6.8vw,32px);
+ font-weight:900;letter-spacing:-.5px;line-height:1.25;
+ font-variant-numeric:tabular-nums
+}
+.task-result-status{
+ display:inline-flex;align-items:center;justify-content:center;
+ gap:7px;color:var(--result-deep);font-size:12px;
+ font-weight:850;padding:6px 11px;
+ border-radius:99px;background:rgba(255,255,255,.73)
+}
+.task-result-status-dot{
+ width:8px;height:8px;border-radius:50%;
+ background:var(--result-main);box-shadow:0 0 0 3px var(--result-soft)
+}
+.task-result-note{
+ margin:15px auto 19px;max-width:335px;
+ color:#697d70;font-size:12.5px;line-height:1.6;min-height:0
+}
+.task-result-modal .task-result-primary.btn{
+ display:flex;justify-content:center;align-items:center;
+ width:100%;min-height:58px;margin:0;cursor:pointer;
+ padding:15px 18px;border-radius:16px;border:1px solid var(--result-deep);
+ background:linear-gradient(110deg,var(--result-main),var(--result-deep));
+ color:#fff;font-size:17px;font-weight:900;letter-spacing:.01em;
+ box-shadow:0 10px 24px rgba(19,137,92,.20);
+ -webkit-tap-highlight-color:transparent;touch-action:manipulation
+}
+.task-result-pending .task-result-primary.btn{
+ box-shadow:0 9px 20px rgba(160,106,22,.18)
+}
+.task-result-modal .task-result-primary.btn:active{transform:translateY(1px)}
+.task-result-modal button:focus-visible{outline:3px solid var(--result-main);outline-offset:3px}
+.task-result-accent{
+ position:absolute;bottom:0;left:15%;right:15%;height:4px;
+ border-radius:6px 6px 0 0;
+ background:linear-gradient(90deg,transparent,var(--result-main),transparent)
+}
+@keyframes task-result-pop{
+ from{opacity:0;transform:translateY(17px) scale(.965)}
+ to{opacity:1;transform:translateY(0) scale(1)}
+}
+@media(max-width:480px){
+ .task-result-cover.modal-cover{padding:12px}
+ .task-result-modal.modal{
+  padding:25px 19px 21px;border-radius:24px;
+  max-height:calc(100dvh - 24px);overflow-y:auto
+ }
+ .task-result-icon-wrap{height:118px;margin:8px auto 10px}
+ .task-result-icon{width:98px;height:98px}
+ .task-result-icon svg{width:89px;height:89px}
+ .task-result-glow{width:124px;height:124px}
+ .task-result-modal .task-result-close{top:9px;right:9px}
+ .task-result-description{font-size:14px;margin-bottom:16px}
+ .task-result-reward-block{padding:13px}
+ .task-result-modal .task-result-primary.btn{min-height:58px}
+}
+@media(prefers-reduced-motion:reduce){
+ .task-result-modal.modal{animation:none}
+ .task-result-modal .task-result-primary.btn:active{transform:none}
+}
