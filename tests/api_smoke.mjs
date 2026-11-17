@@ -1405,6 +1405,13 @@ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,
  memberBefore,'Quay về trang đích KHÔNG tự cộng Lúa');
 const returnRow=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(returnTask.data.id);
 assert.equal(returnRow.status,'pending');
+const adminLinkTasks=await call('/api/admin/tasks','GET',undefined,admCookie);
+assert.equal(adminLinkTasks.status,200);
+const adminReturnTask=adminLinkTasks.data.tasks.find(t=>t.id===returnTask.data.id);
+assert.equal(adminReturnTask.link_24h_limit,1,'Admin should see each task own link quota');
+assert.equal(adminReturnTask.submitted_today,1,'Admin today count is from actual pending completion');
+assert.equal(adminReturnTask.pending_today,1,'Admin pending count must include returned-link review');
+
 assert.match(returnRow.evidence,/\[LINK_RETURN_V1\]/);
 assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?")
  .get(returnRow.id).n,0,'Chưa có giao dịch Lúa khi chưa đối soát');
@@ -1489,3 +1496,25 @@ assert.match(cardCss,/\.task-card-modern-action/);
 assert.match(cardCss,/@media\(max-width:600px\)/,'Responsive Android / iPhone layout');
 assert.match(cardCss,/min-height:58px/,'Mobile touch target must be large');
 console.log('PASS: redesigned task cards use real API quota counts, status, blocked reasons, rewards and mobile-sized buttons.');
+
+const latestAdminClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const adminTaskCode=latestAdminClient.slice(latestAdminClient.indexOf('async function adminTasks(){'),
+ latestAdminClient.indexOf('async function adminUsers(){'));
+assert.match(adminTaskCode,/Hạn mức \/ hôm nay/);
+assert.match(adminTaskCode,/t\.link_24h_limit/,'Admin display per-task quota from backend');
+assert.match(adminTaskCode,/t\.pending_today/,'Admin display pending count from backend');
+assert.match(adminTaskCode,/t\.submitted_today/,'Admin display submitted count from backend');
+assert.match(adminTaskCode,/Sao chép trang đích/,'Keep shortlink destination URL copy button');
+assert.match(adminTaskCode,/Admin kiểm tra bằng chứng/,'Show manual shortlink review guidance');
+assert.match(latestAdminClient,/admin-link-task-hint/,'Admin link setup notes present');
+assert.match(latestAdminClient,/if\(b\.category==='link'&&b\.review_mode!=='manual'\)/,
+ 'Admin form must not allow automatic credit mode for returned link');
+const adminReviewCode=latestAdminClient.slice(latestAdminClient.indexOf('async function adminReviews(){'),
+ latestAdminClient.indexOf('async function adminWithdrawals(){'));
+assert.match(adminReviewCode,/pendingReturns/);
+assert.match(adminReviewCode,/Đã quay về và giải phép tính/);
+assert.match(adminReviewCode,/Duyệt sau đối soát/);
+const adminCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+assert.match(adminCss,/\.admin-tasks-panel/);
+assert.match(adminCss,/min-height:44px/);
+console.log('PASS: Admin can see per-task quotas, daily submissions, pending reconciliations, and mobile-accessible actions.');
