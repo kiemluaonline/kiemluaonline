@@ -1436,3 +1436,30 @@ assert.match(linkOpenClient,/data-form="link-return-captcha"/,
  'CAPTCHA chỉ cần hiển thị khi người xem đã quay về trang đích');
 
 console.log('PASS: link destination return records pending evidence, blocks duplication, requires Admin reconciliation, and never auto-credits wallet.');
+
+const rulesSource=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const rulesOverlay=rulesSource.slice(rulesSource.indexOf('function showTaskRules('),
+ rulesSource.indexOf('async function startTask('));
+assert.match(rulesOverlay,/Xác nhận nhiệm vụ/);
+assert.match(rulesOverlay,/QUY TẮC BẮT BUỘC/);
+assert.match(rulesOverlay,/Không dùng tool, script, auto/);
+assert.match(rulesOverlay,/Không dùng VPN, proxy/);
+assert.match(rulesOverlay,/Không tạo nhiều tài khoản/);
+assert.match(rulesOverlay,/Không lấy kết quả nhiệm vụ từ website khác/);
+assert.match(rulesOverlay,/data-action="cancel-task-rules"/);
+assert.match(rulesOverlay,/data-action="confirm-task-rules"/);
+assert.doesNotMatch(rulesOverlay,/\/api\/tasks\//,
+ 'Mở bảng lưu ý không tạo phiên nhiệm vụ hay tiêu hao lượt');
+assert.match(rulesSource,/if\(act==='start-task'\)\{showTaskRules\(el.dataset.id\);return;\}/,
+ 'Bấm nhiệm vụ phải mở thông báo trước');
+assert.match(rulesSource,/if\(act==='confirm-task-rules'\)/);
+assert.match(rulesSource,/await startTask\(taskId\)/,
+ 'Chỉ bắt đầu phiên nhiệm vụ khi thành viên xác nhận');
+assert.match(rulesSource,/if\(act==='cancel-task-rules'\)/);
+assert.match(rulesSource,/if\(data.category==='link'&&data.review_mode==='manual'\)/,
+ 'Sau xác nhận, Link được mở trực tiếp mà không có hộp nộp bằng chứng cũ');
+const rulesCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+assert.match(rulesCss,/\.task-rules-modal/);
+assert.match(rulesCss,/\.task-rules-actions/);
+assert.match(rulesCss,/@media\(max-width:480px\)/);
+console.log('PASS: task start requires member rules confirmation before opening link; Hủy creates no attempt.');
