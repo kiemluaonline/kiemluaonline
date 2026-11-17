@@ -1218,7 +1218,7 @@ async function handler(req, env) {
   const returnMatch = p.match(/^\/api\/tasks\/([^/]+)\/return$/);
   if (m === 'POST' && returnMatch) {
     const me = await auth(req, env);
-    await readBody(req); // yêu cầu POST cùng nguồn gốc và header chống CSRF.
+    const body=await readBody(req); // POST cùng nguồn gốc, không xử lý phép tính ở trình duyệt.
     const task = await env.DB.prepare("SELECT * FROM tasks WHERE id=? AND category='link' AND is_active=1")
       .bind(returnMatch[1]).first();
     if (!task || !task.url) fail(404, 'Link nhiệm vụ không còn hoạt động.');
@@ -1231,13 +1231,25 @@ async function handler(req, env) {
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
     if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
       fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
+    // Chỉ hiển thị ô phép tính sau khi đến trang đích, không tự ghi nhận khi tải trang.
+    if (!Object.prototype.hasOwnProperty.call(body,'answer'))
+      return json({ok:true,challenge:true,a:attempt.captcha_a,b:attempt.captcha_b,
+        expires_at:attempt.expires_at});
+    if (!/^\d+$/.test(String(body.answer)) ||
+        Number(body.answer)!==attempt.captcha_a+attempt.captcha_b) {
+      const a=rand(),b=rand();
+      await env.DB.prepare('UPDATE task_attempts SET captcha_a=?,captcha_b=? WHERE id=? AND consumed_by IS NULL')
+        .bind(a,b,attempt.id).run();
+      await event(env,req,'captcha_wrong',me.id,'link_return:'+task.id);
+      fail(422,'Phép tính chưa đúng. Hãy giải phép tính mới.',{a,b});
+    }
     const settings=await getSettings(env);
     const quota=await taskQuota(env,req,me.id,settings,'link');
     const link=await linkIPQuota(env,req,me.id,task,settings);
     const browserLink=await linkBrowserQuota(env,req,me.id,task,settings);
     const completionId=id();
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
-    const evidence='[LINK_RETURN_V1] Thành viên đã truy cập trang đích Trạm Có Lúa (không phải xác nhận lượt xem hoặc doanh thu của bên rút gọn). Phiên: ' +
+    const evidence='[LINK_RETURN_V1] Thành viên đã quay về và giải phép tính trên Trạm Có Lúa (không phải xác nhận lượt xem hoặc doanh thu của bên rút gọn). Phiên: ' +
       attempt.id + '; UTC: ' + new Date().toISOString();
     const batch=await env.DB.batch([
       env.DB.prepare(TASK_CLAIM_UPDATE)
