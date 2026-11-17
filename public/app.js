@@ -131,6 +131,49 @@ function browserDeviceId(){
  }catch{return '';}
 }
 function toast(msg,bad=false){ const t=document.getElementById('toast');t.textContent=msg;t.className='visible'+(bad?' bad':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',4500); }
+
+// Popup kết quả nhiệm vụ: chỉ tin trạng thái server, tuyệt đối không tự cộng Lúa ở giao diện.
+function closeTaskResultModal(){
+ const root=document.getElementById('modal-root');
+ if(root?.querySelector('.task-result-cover'))root.innerHTML='';
+ document.body.classList.remove('task-result-open');
+}
+function renderTaskResultModal(result,{linkReturn=false}={}){
+ const root=document.getElementById('modal-root');
+ if(!root)return;
+ const approved=result?.status==='approved';
+ const reward=Number(result?.reward);
+ const hasReward=Number.isSafeInteger(reward)&&reward>0;
+ const icon=approved?
+  '<svg viewBox="0 0 96 96" fill="none" aria-hidden="true"><circle cx="48" cy="48" r="40" stroke="currentColor" stroke-width="4"/><path d="M26 49 41 64 71 33" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>':
+  '<svg viewBox="0 0 96 96" fill="none" aria-hidden="true"><circle cx="48" cy="48" r="40" stroke="currentColor" stroke-width="4"/><path d="M48 25v25l16 11" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="48" cy="48" r="3" fill="currentColor"/></svg>';
+ const heading=approved?'Hoàn thành nhiệm vụ!':'Đã gửi nhiệm vụ thành công!';
+ const description=approved?'Lúa đã được cộng vào ví của bạn.':
+  linkReturn?'Đã ghi nhận lượt quay về. Nhiệm vụ đang chờ Admin đối soát.':
+  'Nhiệm vụ của bạn đang chờ Admin duyệt.';
+ const statusLabel=approved?'Đã cộng Lúa':'Chờ Admin duyệt';
+ const rewardLabel=approved?'Bạn vừa nhận được':'Phần thưởng dự kiến';
+ root.innerHTML=`<div class="modal-cover task-result-cover ${approved?'task-result-success':'task-result-pending'}">
+  <section class="modal task-result-modal" role="dialog" aria-modal="true" aria-labelledby="task-result-title" aria-describedby="task-result-description">
+   <button type="button" class="task-result-close" data-action="close-task-result" aria-label="Đóng thông báo">×</button>
+   <div class="task-result-icon-wrap"><div class="task-result-glow"></div><div class="task-result-icon">${icon}</div></div>
+   <div class="task-result-eyebrow">🌾 TRẠM CÓ LÚA</div>
+   <h3 id="task-result-title">${heading}</h3>
+   <p class="task-result-description" id="task-result-description">${description}</p>
+   <div class="task-result-reward-block">
+    <span class="task-result-reward-label">${rewardLabel}</span>
+    ${hasReward?`<strong class="task-result-reward-amount">+${fmt(reward)} Lúa</strong>`:'<strong class="task-result-reward-amount">🌾 Trạm Có Lúa</strong>'}
+    <span class="task-result-status"><span class="task-result-status-dot"></span>${statusLabel}</span>
+   </div>
+   ${approved?'<p class="task-result-note">Bạn có thể kiểm tra số Lúa trong ví hoặc lịch sử nhận thưởng.</p>':
+    '<p class="task-result-note">Lúa chỉ được cộng sau khi Admin xác nhận nhiệm vụ hợp lệ.</p>'}
+   <button type="button" class="btn task-result-primary" data-action="close-task-result">${approved?'Tuyệt vời!':'Đã hiểu'}</button>
+   <div class="task-result-accent" aria-hidden="true"></div>
+  </section>
+ </div>`;
+ document.body.classList.add('task-result-open');
+ root.querySelector('.task-result-primary')?.focus({preventScroll:true});
+}
 async function api(path, method='GET', body=null){
   const device=browserDeviceId();
   const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
@@ -524,6 +567,7 @@ async function initGlobalPaidCard(userId){
  }
 }
 function renderShell(){
+ document.body.classList.remove('task-result-open');
  stopPaidRotation(); // tránh giữ timer của người đăng nhập trước
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
  const user=state.me.user;
@@ -1498,6 +1542,9 @@ window.addEventListener('resize',()=>{
  if(app.querySelector('.layout'))setMenuOpen(false);
 });
 app.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&document.querySelector('#modal-root .task-result-cover')){
+  e.preventDefault();closeTaskResultModal();return;
+ }
  if(!app.querySelector('.layout.menu-open'))return;
  if(e.key==='Escape'){e.preventDefault();setMenuOpen(false,true);return;}
  if(e.key!=='Tab')return;
@@ -1508,6 +1555,7 @@ app.addEventListener('keydown',e=>{
  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
 });
 app.addEventListener('click',async e=>{
+ if(e.target.classList?.contains('task-result-cover')){closeTaskResultModal();return;}
  const el=e.target.closest('button[data-go],button[data-auth],button[data-action]');if(!el)return;
  if(el.dataset.auth){state.authMode=el.dataset.auth;renderAuth();return;}
  if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
@@ -1596,6 +1644,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    state.returnChallenge=null;document.getElementById('modal-root').innerHTML='';
    clearLinkReturnQuery();return;
   }
+  if(act==='close-task-result'){closeTaskResultModal();return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
@@ -1694,7 +1743,8 @@ app.addEventListener('submit',async e=>{
     state.returnChallenge=null;
     document.getElementById('modal-root').innerHTML='';
     clearLinkReturnQuery();
-    await afterAction('history');toast(result.message);
+    await afterAction('history');
+    renderTaskResultModal({...result,reward:state.memberTasks.find(t=>t.id===c.taskId)?.reward},{linkReturn:true});
    }catch(err){
     if(err.status===422 && Number.isInteger(err.a) && Number.isInteger(err.b)){
      c.a=err.a;c.b=err.b;renderLinkReturnModal();
@@ -1764,7 +1814,8 @@ app.addEventListener('submit',async e=>{
     const photo=a.category==='app'?await shrinkAppProof(b.photo):'';
     const r=await api('/api/tasks/'+encodeURIComponent(a.taskId)+'/submit','POST',{
       attempt_id:a.attempt_id,answer:b.answer,evidence:b.evidence||'',...(a.category==='app'?{photo}:{}) });
-    state.attempt=null;document.getElementById('modal-root').innerHTML='';toast(r.message);await afterAction('tasks');
+    state.attempt=null;document.getElementById('modal-root').innerHTML='';
+    await afterAction('tasks');renderTaskResultModal(r);
   }
  }catch(err){
    if(err.account_status==='suspended'){
