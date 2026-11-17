@@ -1383,7 +1383,22 @@ assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,
  '55555555-3333-4333-8444-555555555555')).status,409,'Sai mã trình duyệt không được ghi nhận');
 assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
  'Sai IP không được ghi nhận');
-const returned=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+const challenge=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(challenge.status,200,JSON.stringify(challenge));
+assert.equal(challenge.data.challenge,true,'Khi quay về phải hiện phép tính, chưa ghi lượt');
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(returnTask.data.id).n,0,
+ 'Chưa giải phép tính thì chưa được ghi nhận nhiệm vụ');
+const wrongReturn=await call(returnPath,'POST',{answer:'999'},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(wrongReturn.status,422,'Trả sai phải đổi phép tính');
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(returnTask.data.id).n,0,
+ 'Giải sai vẫn không được ghi nhận');
+const newChallenge=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(newChallenge.data.challenge,true);
+assert.equal(newChallenge.data.a,wrongReturn.data.a);
+assert.equal(newChallenge.data.b,wrongReturn.data.b);
+const returned=await call(returnPath,'POST',{answer:newChallenge.data.a+newChallenge.data.b},
+ returnMember.cookie,returnIP,returnDevice);
 assert.equal(returned.status,200,JSON.stringify(returned));
 assert.equal(returned.data.status,'pending');
 assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance,
@@ -1407,4 +1422,6 @@ assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
 },admCookie)).status,409,'Không thể duyệt trùng');
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/Sao chép trang đích/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/async function processLinkReturn/);
+assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/renderLinkReturnModal/);
+assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/link-return-captcha/);
 console.log('PASS: link destination return records pending evidence, blocks duplication, requires Admin reconciliation, and never auto-credits wallet.');
