@@ -1445,8 +1445,8 @@ assert.match(rulesOverlay,/QUY TẮC BẮT BUỘC/);
 assert.match(rulesOverlay,/Không dùng tool, script, auto/);
 assert.match(rulesOverlay,/Không dùng VPN, proxy/);
 assert.match(rulesOverlay,/Không tạo nhiều tài khoản/);
-assert.match(rulesOverlay,/Chỉ thực hiện nhiệm vụ thông qua nút/);
-assert.match(rulesOverlay,/Không sử dụng link của người khác hoặc tự truy cập trang xác minh/);
+assert.match(rulesOverlay,/Không hoàn thành cùng một nhiệm vụ trên website kiếm thưởng khác/);
+assert.match(rulesOverlay,/Muốn nhận Lúa, phải bắt đầu nhiệm vụ tại Trạm Có Lúa/);
 assert.doesNotMatch(rulesOverlay,/Không lấy kết quả nhiệm vụ từ website khác/);
 assert.match(rulesOverlay,/data-action="cancel-task-rules"/);
 assert.match(rulesOverlay,/data-action="confirm-task-rules"/);
@@ -1465,3 +1465,27 @@ assert.match(rulesCss,/\.task-rules-modal/);
 assert.match(rulesCss,/\.task-rules-actions/);
 assert.match(rulesCss,/@media\(max-width:480px\)/);
 console.log('PASS: task start requires member rules confirmation before opening link; Hủy creates no attempt.');
+
+const cardClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const cardBlock=cardClient.slice(cardClient.indexOf('function renderMemberTaskCard('),cardClient.indexOf('async function tasks(){'));
+assert.ok(cardBlock.length>1000,'Member task card renderer must be present');
+assert.match(cardBlock,/t\.link_24h_limit/,'Per-task limits must come from the server');
+assert.match(cardBlock,/t\.link_24h_count/,'Used daily counts must come from the server');
+assert.match(cardBlock,/t\.my_status/,'Keep server review status and hide CTA when completed');
+assert.match(cardBlock,/t\.link_blocked/,'Keep network/device and quota block messages');
+assert.match(cardBlock,/task-card-modern-action/,'Large mobile action button must be present');
+assert.match(cardBlock,/data-action="start-task"/,'New CTA must preserve original task action');
+assert.match(cardClient,/shownTasks\.map\(renderMemberTaskCard\)/,
+ 'Use modern cards for each real task');
+assert.doesNotMatch(cardBlock,/90 giây|~90s|400 Lúa/,
+ 'Do not hardcode example durations or rewards');
+assert.match(cardBlock,/Math\.max\(0,maxUses-used\)/,'Remaining tries never go negative');
+assert.match(cardBlock,/task-card-modern-track/,'Show server-backed progress');
+assert.match(cardBlock,/Còn \$\{left\}\/\$\{maxUses\} lượt hôm nay/,
+ 'Show real daily limit for recurring tasks');
+const cardCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+assert.match(cardCss,/\.task-card-modern-grid/);
+assert.match(cardCss,/\.task-card-modern-action/);
+assert.match(cardCss,/@media\(max-width:600px\)/,'Responsive Android / iPhone layout');
+assert.match(cardCss,/min-height:58px/,'Mobile touch target must be large');
+console.log('PASS: redesigned task cards use real API quota counts, status, blocked reasons, rewards and mobile-sized buttons.');
