@@ -1818,3 +1818,22 @@ const startProgressHmoob=readFileSync(new URL('../public/i18n-extra.js',import.m
 assert.match(startProgressHmoob,/"Đang kiểm tra nhiệm vụ\.\.\.":/);
 assert.match(startProgressHmoob,/"Đã khởi tạo nhiệm vụ":/);
 console.log('PASS: start-task modal shows checking then server-verified created before redirect, with error rollback and mobile/Hmoob support.');
+
+const memberSafeWorker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
+const memberSafeClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const memberQuotaUi=memberSafeClient.slice(memberSafeClient.indexOf('function renderMemberTaskCard('),memberSafeClient.indexOf('async function tasks(){'));
+assert.ok(memberQuotaUi.length>1500,'Member task card renderer must exist');
+assert.doesNotMatch(memberQuotaUi,/link đích|trang đích|lượt quay về/i,'Member quota must not reveal destination-link terminology');
+assert.match(memberQuotaUi,/Đã sử dụng \$\{used\}\/\$\{maxUses\} lượt hôm nay/);
+assert.match(memberQuotaUi,/Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay/);
+assert.match(memberQuotaUi,/Lượt mới mở lúc 00:00/);
+assert.match(memberSafeWorker,/Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay/);
+assert.doesNotMatch(memberSafeWorker,/fail\(429,'Bạn đã dùng hết lượt quay về/);
+assert.doesNotMatch(memberSafeWorker,/fail\(409,'Chưa ghi nhận lượt quay về/);
+assert.match(memberSafeClient,/Sao chép trang đích/,'Admin must keep destination copy utility');
+const memberSafeHmoob=readFileSync(new URL('../public/i18n-extra.js',import.meta.url),'utf8');
+assert.match(memberSafeHmoob,/"Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay\./);
+assert.match(memberSafeHmoob,/"Đã nhận yêu cầu xác minh\. Nhiệm vụ đang chờ Admin đối soát\."/);
+const memberSafeI18n=readFileSync(new URL('../public/i18n.js',import.meta.url),'utf8');
+assert.match(memberSafeI18n,/Đã sử dụng/);
+console.log('PASS: member task quota avoids destination-link jargon while preserving Admin destination copy and security limits.');
