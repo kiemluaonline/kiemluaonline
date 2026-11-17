@@ -1190,18 +1190,31 @@ async function handler(req, env) {
         .bind(me.id,ip,browserCode,conflict).first();
       if(!seen)await event(env,req,conflict,me.id,(denied==='link_owner'?'link_owner':'link_browser_owner')+':list');
     }
-    const [overrides,counts]=await Promise.all([
+    const [overrides,counts,linkReturnCounts]=await Promise.all([
       env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all(),
-      env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id").bind(me.id).all()
+      env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id").bind(me.id).all(),
+      // Một lượt đến link đích được tính ngay khi quay về, kể cả chưa giải phép tính;
+      // lượt đã gửi (kể cả bị từ chối) tính một lần, không đếm lại phiên đã tiêu thụ.
+      env.DB.prepare(`SELECT task_id,SUM(n) AS n FROM (
+        SELECT task_id,COUNT(*) n FROM task_completions
+          WHERE user_id=? AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id
+        UNION ALL
+        SELECT task_id,COUNT(*) n FROM task_attempts
+          WHERE user_id=? AND consumed_by IS NULL AND available_at<0
+            AND date(datetime(-available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')
+          GROUP BY task_id
+       ) GROUP BY task_id`).bind(me.id,me.id).all()
     ]);
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
     const done=new Map(counts.results.map(r=>[r.task_id,{n:Number(r.n),pending:Number(r.pending||0)}]));
+    const returned=new Map(linkReturnCounts.results.map(r=>[r.task_id,Number(r.n||0)]));
     const tasks=results.results.map(t=>{
       const appCode=str(overrides.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
       const displayCategory=t.category==='other'&&appCode?'app':t.category;
       const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
-      const entry=done.get(t.id)||{n:0,pending:0},used=entry.n;
-      const blocked=t.category==='link'?(max>1&&used>=max?'link_task_limit':(browserDenied||denied)):null;
+      const entry=done.get(t.id)||{n:0,pending:0};
+      const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
+      const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||denied)):null;
       return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
