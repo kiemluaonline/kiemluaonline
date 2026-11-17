@@ -9,7 +9,7 @@ const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.Tr
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, taskFilter:'all',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'all',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
 let paidRotationTimer=null,paidRefreshTimer=null;
 function stopPaidRotation(){
  if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
@@ -865,6 +865,7 @@ function startTaskResetTimer(){
 }
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
+ state.memberTasks=data.tasks;
  const shownTasks=data.tasks.filter(t=>state.taskFilter==='all'||t.category===state.taskFilter);
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
@@ -1189,6 +1190,38 @@ async function adminSettings(){
  <p>Admin duyệt nhiệm vụ có thể cộng Lúa; Admin từ chối yêu cầu rút sẽ tự hoàn Lúa vào ví.</p>
  <p class="note">Mọi thay đổi chính sách thưởng cần được công khai rõ ràng với người dùng.</p></section></div>`;
 }
+// Màn hình đọc quy tắc trước khi tạo phiên nhiệm vụ / chuyển sang link.
+// Hủy chỉ đóng thông báo, không tiêu hao lượt và không gọi API start.
+function showTaskRules(taskId){
+ const task=state.memberTasks.find(t=>t.id===taskId);
+ if(!task)throw new Error('Nhiệm vụ không còn trong danh sách. Hãy tải lại trang Nhiệm vụ.');
+ const root=document.getElementById('modal-root');
+ if(!root)throw new Error('Không tìm thấy cửa sổ thông báo.');
+ state.pendingTaskRules=taskId;
+ root.innerHTML=`<div class="modal-cover task-rules-cover"><section class="modal task-rules-modal" role="dialog" aria-modal="true" aria-labelledby="task-rules-title" aria-describedby="task-rules-subtitle">
+  <div class="task-rules-header">
+   <span class="task-rules-icon" aria-hidden="true">🛡️</span>
+   <div><h3 id="task-rules-title">Xác nhận nhiệm vụ</h3>
+    <p id="task-rules-subtitle">Đọc kỹ trước khi bắt đầu</p></div>
+  </div>
+  <dl class="task-rules-meta">
+   <div><dt>Nhiệm vụ</dt><dd>${esc(task.title)}</dd></div>
+   <div><dt>Thưởng dự kiến</dt><dd class="task-rules-reward">+${fmt(task.reward)} Lúa</dd></div>
+  </dl>
+  <h4 class="task-rules-heading">QUY TẮC BẮT BUỘC</h4>
+  <ul class="task-rules-list">
+   <li><span class="task-rules-rule-icon" aria-hidden="true">⊘</span><span>Không dùng tool, script, auto hay bất kỳ hành vi gian lận nào.</span></li>
+   <li><span class="task-rules-rule-icon" aria-hidden="true">◎</span><span>Không dùng VPN, proxy hay trình duyệt ẩn danh khi làm nhiệm vụ.</span></li>
+   <li><span class="task-rules-rule-icon" aria-hidden="true">♧</span><span>Không tạo nhiều tài khoản trên cùng một thiết bị để nhận thưởng.</span></li>
+   <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Không lấy kết quả nhiệm vụ từ website khác rồi gửi nhận Lúa tại Trạm Có Lúa.</span></li>
+  </ul>
+  <p class="task-rules-note">Lượt quay về và phép tính không xác nhận doanh thu. Chỉ cộng Lúa sau khi Admin kiểm tra, phê duyệt nhiệm vụ hợp lệ theo điều kiện của đối tác.</p>
+  <div class="task-rules-actions">
+   <button type="button" class="btn task-rules-cancel" data-action="cancel-task-rules">Hủy</button>
+   <button type="button" class="btn task-rules-accept" data-action="confirm-task-rules">▷ Bắt đầu</button>
+  </div>
+ </section></div>`;
+}
 async function startTask(taskId){
  const data=await api(`/api/tasks/${encodeURIComponent(taskId)}/start`,'POST',{});
  // Link rút gọn có Admin duyệt: mở thẳng link trong CÙNG tab.
@@ -1457,7 +1490,20 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
   if(act==='filter-tasks'){state.taskFilter=el.dataset.filter||'all';await navigate('tasks');return;}
-  if(act==='start-task'){await startTask(el.dataset.id);return;}
+  if(act==='start-task'){showTaskRules(el.dataset.id);return;}
+  if(act==='cancel-task-rules'){
+   state.pendingTaskRules=null;document.getElementById('modal-root').innerHTML='';return;
+  }
+  if(act==='confirm-task-rules'){
+   const taskId=state.pendingTaskRules;
+   if(!taskId)throw new Error('Phiên xác nhận đã đóng. Hãy chọn lại nhiệm vụ.');
+   el.disabled=true;
+   try{
+    await startTask(taskId);
+    state.pendingTaskRules=null;
+   }finally{if(el.isConnected)el.disabled=false;}
+   return;
+  }
   if(act==='view-photo'){
    const root=document.getElementById('modal-root');
    root.innerHTML=`<div class="modal-cover"><section class="modal"><button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button><h3>Ảnh bằng chứng nhiệm vụ App</h3><p class="note">Ghi chú: ${esc(el.dataset.note||'Không có')}</p><img class="app-proof-image" src="/api/admin/reviews/${encodeURIComponent(el.dataset.id)}/photo" alt="Ảnh chụp màn hình thành viên gửi" loading="lazy"><p class="note">Chỉ Admin đã đăng nhập mới xem được ảnh. Hãy đối chiếu kết quả trong hệ thống giới thiệu của ứng dụng trước khi duyệt.</p></section></div>`;
