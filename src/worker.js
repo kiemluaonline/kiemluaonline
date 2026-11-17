@@ -1212,6 +1212,55 @@ async function handler(req, env) {
         vnd_amount:recent.results[0].vnd_amount,at:recent.results[0].paid_at}:null
     });
   }
+  // Trang đích của link tĩnh: /?link_return=<task_id>.
+  // Chỉ ghi nhận phiên đăng nhập đã quay về, KHÔNG xác minh quảng cáo/tiền
+  // và TUYỆT ĐỐI không tự cộng Lúa. URL trang đích có thể bị mở trực tiếp.
+  const returnMatch = p.match(/^\/api\/tasks\/([^/]+)\/return$/);
+  if (m === 'POST' && returnMatch) {
+    const me = await auth(req, env);
+    await readBody(req); // yêu cầu POST cùng nguồn gốc và header chống CSRF.
+    const task = await env.DB.prepare("SELECT * FROM tasks WHERE id=? AND category='link' AND is_active=1")
+      .bind(returnMatch[1]).first();
+    if (!task || !task.url) fail(404, 'Link nhiệm vụ không còn hoạt động.');
+    if (task.review_mode !== 'manual')
+      fail(409, 'Admin cần chọn chế độ duyệt thủ công cho nhiệm vụ Link trước khi sử dụng xác minh quay về.');
+    const attempt = await env.DB.prepare(
+      'SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ' +
+      'ORDER BY created_at DESC,id DESC LIMIT 1'
+    ).bind(me.id, task.id, now()).first();
+    if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
+    if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
+      fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
+    const settings=await getSettings(env);
+    const quota=await taskQuota(env,req,me.id,settings,'link');
+    const link=await linkIPQuota(env,req,me.id,task,settings);
+    const browserLink=await linkBrowserQuota(env,req,me.id,task,settings);
+    const completionId=id();
+    const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
+    const evidence='[LINK_RETURN_V1] Thành viên đã truy cập trang đích Trạm Có Lúa (không phải xác nhận lượt xem hoặc doanh thu của bên rút gọn). Phiên: ' +
+      attempt.id + '; UTC: ' + new Date().toISOString();
+    const batch=await env.DB.batch([
+      env.DB.prepare(TASK_CLAIM_UPDATE)
+        .bind(completionId,attempt.id,me.id,now(),now(),task.category,
+          quota.maxUser,me.id,quota.day,quota.maxUser,
+          quota.maxIP,quota.ip,me.id,quota.day,quota.maxIP,
+          quota.maxDevice,quota.device,me.id,quota.day,quota.maxDevice,
+          link.enabled,link.ip,link.limit,
+          link.owner,link.ip,me.id,
+          link.perTask,me.id,task.id,link.perTask,
+          browserLink.enabled,browserLink.code,browserLink.limit,
+          browserLink.owner,browserLink.code,me.id),
+      env.DB.prepare(
+        'INSERT OR IGNORE INTO task_completions (id,user_id,task_id,period_key,status,reward,evidence,ip,device_code) ' +
+        "SELECT ?,?,?,?,'pending',?,?,?,? FROM task_attempts WHERE id=? AND user_id=? AND consumed_by=?"
+      ).bind(completionId,me.id,task.id,completionPeriod,task.reward,evidence,
+        clientIP(req),await deviceCode(req,env),attempt.id,me.id,completionId)
+    ]);
+    if (!batch[0].meta?.changes || !batch[1].meta?.changes)
+      fail(409, 'Lượt quay về đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
+    return json({ok:true,status:'pending',
+      message:'Đã ghi nhận quay về Trạm Có Lúa. Đang chờ Admin đối soát; chưa cộng Lúa.'});
+  }
   const startMatch = p.match(/^\/api\/tasks\/([^/]+)\/start$/);
   if (m === 'POST' && startMatch) {
     const me = await auth(req, env), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(startMatch[1]).first();
@@ -1556,6 +1605,9 @@ async function handler(req, env) {
       if (!['approved', 'rejected'].includes(b.status)) fail(400, 'Trạng thái không hợp lệ.');
       const c = await env.DB.prepare('SELECT * FROM task_completions WHERE id=?').bind(review[1]).first();
       if (!c || c.status !== 'pending') fail(409, 'Không tìm thấy bằng chứng đang chờ duyệt.');
+      if (b.status === 'approved' && String(c.evidence||'').startsWith('[LINK_RETURN_V1]')
+          && b.revenue_confirmed !== true)
+        fail(400, 'Cần xác nhận đã tự đối soát nguồn thu thật trước khi duyệt lượt quay về.');
       const actionId = id();
       const r = await env.DB.batch([
         env.DB.prepare("UPDATE task_completions SET status=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
