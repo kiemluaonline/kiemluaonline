@@ -1023,13 +1023,18 @@ async function adminOverview(){
  <div class="callout section">Để có dữ liệu thật, hãy tạo nhiệm vụ, cấu hình chính sách thưởng và quy đổi. Trạng thái chi trả chỉ được cập nhật sau khi đã chuyển khoản thật.</div>`;
 }
 function taskForm(task={}){
+ const linkHint=task.category==='link'?'':'hidden';
  return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa nhiệm vụ':'Tạo nhiệm vụ thật'}</h3>
  <input type="hidden" name="id" value="${esc(task.id||'')}">
  ${field('title','Tên nhiệm vụ',task.title||'', 'required minlength="3"')}
  <div class="field"><label for="description">Hướng dẫn / mô tả</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
  <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Link rút gọn'],['app','App (tải & nhập mã)'],['other','Khác']],task.category||'video')}
  ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động sau khi xác nhận CAPTCHA']],task.review_mode||'manual')}</div>
- ${field('url','URL HTTPS (link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
+ <div class="callout admin-link-task-hint" id="admin-link-task-hint" ${linkHint}>
+ <strong>🔗 Link tự quay về:</strong> Chọn <strong>Admin kiểm tra bằng chứng</strong>, tạo nhiệm vụ <strong>Tắt / nháp</strong> rồi lưu. Sao chép trang đích ở danh sách bên dưới làm URL gốc khi rút gọn. Sau đó dán link đã rút gọn vào URL nhiệm vụ và bật công khai.
+ <p class="note">Thành viên xem lưu ý → Bắt đầu → quay về → giải phép tính → Chờ đối soát. Chỉ duyệt sau khi xác minh nguồn thu hợp lệ; phép tính không chứng minh đối tác đã tính tiền.</p>
+ </div>
+ ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
  <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
  ${field('link_24h_limit','Lượt link rút gọn này / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
@@ -1044,10 +1049,24 @@ function taskForm(task={}){
 async function adminTasks(){
  const d=await api('/api/admin/tasks');state.adminTasks=d.tasks;
  const edit=state.taskEdit?d.tasks.find(x=>x.id===state.taskEdit):null;
- const rows=d.tasks.map(t=>`<tr><td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div>${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}</td><td>${fmt(t.reward)}</td><td>${t.review_mode==='manual'?'Duyệt tay':'Tự động'}</td><td>${t.is_active?chip('active'):chip('suspended')}</td><td><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button></td></tr>`);
- return `${heading('Quản lý nhiệm vụ','Thêm, sửa và bật/tắt nhiệm vụ bất kỳ lúc nào.')}
- <section class="info-split">${taskForm(edit||{})}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, phần thưởng và đường dẫn.</p><p>2. Chọn chế độ duyệt bằng chứng để kiểm tra thủ công, hoặc tự động cho tác vụ có thể kiểm tra.</p><p>3. Bật công khai khi đã kiểm thử.</p><div class="callout">Không được dùng nhiệm vụ giả để quảng cáo mức thu nhập không có thật.</div></article></section>
- <section class="section"><h3>Nhiệm vụ đã tạo (${d.tasks.length})</h3>${table(['Tên nhiệm vụ','Lúa','Duyệt','Trạng thái','Thao tác'],rows)}</section>`;
+ const rows=d.tasks.map(t=>{
+  const max=Math.max(1,Math.min(20,Number(t.link_24h_limit)||1));
+  const quota=t.category==='link'?(max>1||t.repeat_policy==='daily'?max+' lượt/ngày':'1 lượt/tài khoản'):(t.repeat_policy==='daily'?'1 lượt/ngày':'1 lượt/tài khoản');
+  return `<tr>
+   <td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div>
+    ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
+   </td>
+   <td class="num">${fmt(t.reward)} Lúa</td>
+   <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
+   <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
+    ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
+   <td>${t.is_active?chip('active'):chip('suspended')}</td>
+   <td><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button></td>
+  </tr>`;
+ });
+ return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
+ <section class="info-split">${taskForm(edit||{})}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, Lúa và hạn mức của từng nhiệm vụ. Thẻ thành viên tự lấy các số liệu này.</p><p>2. Với Link tự quay về, đặt chế độ <strong>Admin kiểm tra bằng chứng</strong>; lấy trang đích từ nút bên dưới để tạo link rút gọn.</p><p>3. Khi thành viên vượt link, quay về và giải phép tính, lượt sẽ được đưa vào <strong>Chờ đối soát</strong>.</p><p>4. Kiểm tra khoản thu hợp lệ rồi mới duyệt, chỉ bật công khai sau khi kiểm thử.</p><div class="callout">Quay về và giải CAPTCHA không chứng minh nhà cung cấp đã tính tiền. Chỉ dùng nguồn cho phép hình thức nhiệm vụ thưởng.</div></article></section>
+ <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${d.tasks.length})</h3><p class="note">Số lượt hôm nay được tính theo giờ Việt Nam. Số lượt giới hạn mỗi tài khoản có thể cấu hình riêng cho từng nhiệm vụ.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>`;
 }
 async function adminUsers(){
  const d=await api('/api/admin/users');
