@@ -1957,3 +1957,61 @@ assert.doesNotMatch(compactStyle,/\.task-payment\s*\{[^}]*display\s*:\s*none/,
 assert.doesNotMatch(compactStyle,/\.layout\s+\.task-security-compact\s*\{[^}]*display\s*:\s*none/,
  'Fraud prevention information must remain visible');
 console.log('PASS: unified compact responsive UI loaded last for tasks, payout, shopping, cards and admin; mobile tap targets retained.');
+
+
+// Kiểm thử vuốt quay lại từ link nhiệm vụ: BFCache không được giữ popup cũ.
+const swipeGuardStart=frontendForWelcome.indexOf('let taskPageWasLeft=false;');
+const swipeGuardEnd=frontendForWelcome.indexOf('function renderAttemptModal(){',swipeGuardStart);
+assert.ok(swipeGuardStart>0&&swipeGuardEnd>swipeGuardStart,
+ 'Task page must register mobile history return handlers');
+const swipeGuardSource=frontendForWelcome.slice(swipeGuardStart,swipeGuardEnd);
+const swipeVM=await import('node:vm');
+function swipeBackFixture({role='member',view='tasks',taskDialog=false}={}){
+ const windowHandlers={},documentHandlers={};
+ let reloadCount=0;
+ const fakeDocument={
+  hidden:false,
+  getElementById(id){return id==='modal-root'?{
+   querySelector(){return taskDialog?{}:null;}
+  }:null;},
+  addEventListener(name,cb){documentHandlers[name]=cb;}
+ };
+ const fakeWindow={
+  location:{reload(){reloadCount++;}},
+  addEventListener(name,cb){windowHandlers[name]=cb;}
+ };
+ swipeVM.runInNewContext(swipeGuardSource,{
+  state:{me:role?{user:{role}}:null,view},
+  window:fakeWindow,
+  document:fakeDocument
+ });
+ return {windowHandlers,documentHandlers,fakeDocument,get reloadCount(){return reloadCount;}};
+}
+const swipeOld=swipeBackFixture();
+swipeOld.windowHandlers.pageshow({persisted:true});
+assert.equal(swipeOld.reloadCount,0,'Ordinary initial page load must not reload again');
+swipeOld.windowHandlers.pagehide();
+swipeOld.windowHandlers.pageshow({persisted:true});
+assert.equal(swipeOld.reloadCount,1,'Returning via Chrome/Safari swipe-back must reload frozen task page');
+swipeOld.documentHandlers.visibilitychange();
+swipeOld.windowHandlers.pageshow({persisted:true});
+assert.equal(swipeOld.reloadCount,1,'Multiple mobile resume events must not cause reload loop');
+const swipeForeground=swipeBackFixture({taskDialog:true,view:'overview'});
+swipeForeground.windowHandlers.pagehide();
+swipeForeground.fakeDocument.hidden=true;
+swipeForeground.windowHandlers.pageshow({persisted:true});
+assert.equal(swipeForeground.reloadCount,0,'Do not refresh while the restored task page remains hidden');
+swipeForeground.fakeDocument.hidden=false;
+swipeForeground.documentHandlers.visibilitychange();
+assert.equal(swipeForeground.reloadCount,1,'Chrome visibilitychange fallback refreshes on return');
+const swipeOtherPage=swipeBackFixture({view:'profile'});
+swipeOtherPage.windowHandlers.pagehide();
+swipeOtherPage.windowHandlers.pageshow({persisted:true});
+assert.equal(swipeOtherPage.reloadCount,0,'Normal member profile navigation must not refresh needlessly');
+const swipeAdmin=swipeBackFixture({role:'admin'});
+swipeAdmin.windowHandlers.pagehide();
+swipeAdmin.windowHandlers.pageshow({persisted:true});
+assert.equal(swipeAdmin.reloadCount,0,'Admin work must not be interrupted by member task refresh');
+assert.doesNotMatch(swipeGuardSource,/api\s*\(|\/api\/tasks|startTask\s*\(|processLinkReturn\s*\(/,
+ 'Returning without completing a task must never create a claim, consume quota or submit a return');
+console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, but normal navigation and Admin stay intact.');
