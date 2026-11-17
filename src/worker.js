@@ -765,6 +765,21 @@ async function linkTaskPerAccountLimit(env,task){
   .bind('link_task_limit:'+task.id).first();
  return Math.max(1,Math.min(20,int(limit?.value,1)));
 }
+// Đếm số LƯỢT QUAY VỀ theo từng nhiệm vụ trong ngày VN, không chỉ lượt được duyệt.
+// Những lượt đã gửi (kể cả bị từ chối) nằm ở task_completions.
+// Lượt đã đến trang đích nhưng chưa nộp CAPTCHA được đánh dấu bằng
+// available_at < 0 trên phiên Link (dấu âm biểu thị thời điểm quay về, ms).
+// Không thay đổi cấu trúc D1, và không ảnh hưởng available_at của Video.
+async function linkReturnUsage(env,userId,taskId){
+ const row=await env.DB.prepare(`SELECT
+  (SELECT COUNT(*) FROM task_completions
+   WHERE user_id=? AND task_id=? AND date(created_at,'+7 hours')=date('now','+7 hours'))
+  + (SELECT COUNT(*) FROM task_attempts
+   WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0
+   AND date(datetime(-available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours'))
+   AS n`).bind(userId,taskId,userId,taskId).first();
+ return Number(row?.n||0);
+}
 async function linkIPQuota(env,req,userId,task,settings){
  if(task.category!=='link')return {enabled:0,owner:0,limit:0,ip:'',perTask:0};
  const ip=clientIP(req);
@@ -1233,6 +1248,23 @@ async function handler(req, env) {
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
     if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
       fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
+    const hasAnswer=Object.prototype.hasOwnProperty.call(body,'answer');
+    // Ghi một lượt quay về CHỈ MỘT LẦN mỗi phiên, ngay lúc khách đến trang đích.
+    // Nhiều lần tải lại cùng phiên không tăng 0/2 -> 1/2 nhiều lần; CAPTCHA
+    // có thể mở lại trong phiên để người dùng thật không mất lượt vì reload.
+    if(attempt.available_at>=0){
+      if(hasAnswer)
+        fail(409,'Chưa ghi nhận lượt quay về. Hãy mở trang đích qua nhiệm vụ trước khi xác minh.');
+      const perTaskLimit=await linkTaskPerAccountLimit(env,task);
+      if(await linkReturnUsage(env,me.id,task.id)>=perTaskLimit)
+        fail(429,'Bạn đã dùng hết lượt quay về của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+      const arrivedAt=now();
+      const mark=await env.DB.prepare(
+        'UPDATE task_attempts SET available_at=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
+      ).bind(-arrivedAt,attempt.id,me.id,arrivedAt).run();
+      if(!mark.meta?.changes)fail(409,'Phiên đã thay đổi. Hãy tải lại trang Nhiệm vụ.');
+      attempt.available_at=-arrivedAt;
+    }
     // Lượt quay về sớm bất thường cần được Admin xem xét. Người dùng có thể
     // mở trực tiếp link đích sau khi Bắt đầu; thời gian không chứng minh đã vượt link.
     const startedAt=Date.parse(String(attempt.created_at||'').replace(' ','T')+'Z');
@@ -1244,8 +1276,9 @@ async function handler(req, env) {
       ).bind(me.id,riskKey).first();
       if(!marked)await event(env,req,'link_return_too_fast',me.id,riskKey);
     }
-    // Chỉ hiển thị ô phép tính sau khi đến trang đích, không tự ghi nhận khi tải trang.
-    if (!Object.prototype.hasOwnProperty.call(body,'answer'))
+    // Lần đến trang đích đã được đếm; hiển thị phép tính không tự cộng Lúa.
+    // Nạp lại link cùng phiên chỉ lấy lại phép tính, không tạo thêm lượt quay về.
+    if (!hasAnswer)
       return json({ok:true,challenge:true,a:attempt.captcha_a,b:attempt.captcha_b,
         expires_at:attempt.expires_at});
     if (!/^\d+$/.test(String(body.answer)) ||
@@ -1304,12 +1337,17 @@ async function handler(req, env) {
     await taskQuota(env,req,me.id,settings,task.category);
     await linkIPQuota(env,req,me.id,task,settings);
     await linkBrowserQuota(env,req,me.id,task,settings);
+    if(task.category==='link'&&await linkReturnUsage(env,me.id,task.id)>=await linkTaskPerAccountLimit(env,task))
+      fail(429,'Bạn đã dùng hết lượt quay về của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
     const startedNow=now();
     const a = rand(), b = rand(), attempt = id(), available = startedNow + (task.category === 'video' ? task.min_seconds * 1000 : 0);
+    // Khách có thể tìm mã trên Google lâu: Link được phép quay về trong 24 giờ.
+    // Video và các nhiệm vụ khác giữ nguyên thời hạn 20 phút.
+    const attemptSeconds=task.category==='link'?86400:1200;
     const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
-       VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, startedNow + 20 * 60000,
+       VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
       clientIP(req), await deviceCode(req, env));
     if(task.category==='link'){
       // Mỗi nhiệm vụ link chỉ được có một phiên còn hiệu lực trên một tài khoản.
@@ -1320,7 +1358,7 @@ async function handler(req, env) {
         insertAttempt
       ]);
     }else await insertAttempt.run();
-    return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: 1200,
+    return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: attemptSeconds,
       review_mode: task.review_mode, category: task.category, task_url: task.url });
   }
   const submitMatch = p.match(/^\/api\/tasks\/([^/]+)\/submit$/);
