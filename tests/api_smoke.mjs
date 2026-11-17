@@ -1905,7 +1905,7 @@ const paymentAutoSrc=paymentAutoClient.slice(
  paymentAutoClient.indexOf('function paidAnnouncementSignature('),
  paymentAutoClient.indexOf('const BANK_LIST',paymentAutoClient.indexOf('function paidAnnouncementSignature('))
 );
-assert.match(paymentAutoSrc,/api\('\\/api\\/public-paid-announcements'\)/,
+assert.ok(paymentAutoSrc.includes("api('/api/public-paid-announcements')"),
  'New payments must poll their lightweight endpoint without a manual update');
 assert.match(paymentAutoSrc,/paidRefreshTimer=setInterval\(refreshPaidRotation,15000\)/,
  'Members check fresh paid transactions every 15 seconds while viewing');
