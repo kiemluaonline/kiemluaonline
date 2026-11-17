@@ -1260,3 +1260,75 @@ html[lang="hmn"] .language-legal-notice{display:block}
 @media(prefers-reduced-motion:reduce){
  .layout .main-area::before,.layout .balance-pill{animation:none!important;}
 }
+
+/* Xác nhận quy tắc trước khi tạo phiên nhiệm vụ — giao diện tối, thân thiện iPhone. */
+.task-rules-cover{background:rgba(3,9,29,.78);z-index:85}
+.task-rules-modal{
+ position:relative;max-width:545px;max-height:92dvh;overflow-y:auto;
+ padding:27px 29px 25px;background:linear-gradient(155deg,#111a33 0%,#0a1329 90%);
+ color:#edf4ff;border:1.5px solid #367cf1;border-radius:29px;
+ box-shadow:0 0 0 4px rgba(31,86,191,.18),0 27px 85px rgba(0,8,26,.6);
+ scrollbar-width:thin
+}
+.task-rules-modal::before{
+ content:"";position:absolute;top:0;left:9%;right:9%;height:4px;
+ border-radius:0 0 8px 8px;background:linear-gradient(90deg,#327cf5,#7665fe);
+}
+.task-rules-header{display:flex;align-items:center;gap:15px}
+.task-rules-icon{
+ display:grid;place-items:center;flex:none;width:65px;height:65px;
+ font-size:30px;border-radius:20px;background:linear-gradient(145deg,#266bc9,#6058e8);
+ box-shadow:0 0 0 8px rgba(104,146,235,.12);
+}
+.task-rules-modal .task-rules-header h3{font-size:22px;line-height:1.2;color:#f4f7ff;margin:0 0 7px}
+.task-rules-header p{margin:0;color:#a9b9d4;font-size:14px}
+.task-rules-meta{
+ padding:5px 20px;background:rgba(255,255,255,.055);
+ border-radius:17px;margin:26px 0 22px
+}
+.task-rules-meta>div{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:13px 0}
+.task-rules-meta>div+div{border-top:1px solid rgba(158,183,238,.12)}
+.task-rules-meta dt{color:#aabbd4;font-size:15px}
+.task-rules-meta dd{margin:0;text-align:right;font-size:15px;font-weight:800;color:#f1f6ff;overflow-wrap:anywhere;max-width:64%}
+.task-rules-meta dd.task-rules-reward{color:#a8e3f8;font-size:17px}
+.task-rules-heading{font-size:13px;letter-spacing:.075em;font-weight:850;margin:0 0 14px;color:#b9caff}
+.task-rules-list{list-style:none;margin:0;padding:0;display:grid;gap:15px}
+.task-rules-list li{display:flex;gap:13px;align-items:flex-start;line-height:1.53;font-size:15px;color:#e0e9fb}
+.task-rules-rule-icon{
+ display:grid;place-items:center;flex:none;width:37px;height:37px;
+ border-radius:11px;font-size:22px;font-weight:700;color:#99c7fc;
+ background:rgba(51,102,203,.19)
+}
+.task-rules-note{
+ margin:19px 0 4px;font-size:12.5px;line-height:1.5;
+ color:#b0c0dd;background:rgba(71,117,202,.10);
+ border-radius:11px;padding:11px 12px
+}
+.task-rules-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:21px}
+.task-rules-modal .task-rules-actions .btn{
+ width:100%;min-height:53px;padding:13px 10px;font-size:16px;border-radius:14px
+}
+.task-rules-modal .task-rules-cancel{
+ background:rgba(255,255,255,.045);color:#eff5ff;
+ border:1px solid #344461
+}
+.task-rules-modal .task-rules-cancel:hover{background:#27334d}
+.task-rules-modal .task-rules-accept{
+ color:white;border:1px solid #4c80fe;
+ background:linear-gradient(100deg,#267cf8,#695dff);
+ box-shadow:0 6px 23px rgba(43,112,243,.25)
+}
+.task-rules-modal .task-rules-accept:hover{background:linear-gradient(100deg,#1866dc,#5246ea)}
+@media(max-width:480px){
+ .task-rules-cover{padding:12px}
+ .task-rules-modal{padding:22px 19px 19px;border-radius:24px}
+ .task-rules-icon{width:53px;height:53px;font-size:25px;border-radius:16px}
+ .task-rules-modal .task-rules-header h3{font-size:19px}
+ .task-rules-header p{font-size:13px}
+ .task-rules-list li{font-size:14px;gap:11px}
+ .task-rules-list{gap:12px}
+ .task-rules-rule-icon{width:34px;height:34px;font-size:20px}
+ .task-rules-meta{padding:4px 15px;margin:21px 0}
+ .task-rules-meta dt,.task-rules-meta dd{font-size:14px}
+ .task-rules-actions{gap:9px}
+}
