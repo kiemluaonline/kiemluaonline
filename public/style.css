@@ -1497,3 +1497,19 @@ html[lang="hmn"] .language-legal-notice{display:block}
  .layout .content .task-card-modern-track>span{transition:none}
  .layout .content .task-card-modern-action:active{transform:none}
 }
+
+/* Admin task management touch targets */
+.admin-tasks-panel .table-wrap{border-radius:15px}
+.admin-tasks-panel table td{vertical-align:top}
+.admin-tasks-panel table td .small{line-height:1.5;margin-top:5px}
+.admin-tasks-panel table td .btn{margin-top:8px;white-space:normal;text-align:center}
+.admin-link-task-hint{margin:15px 0;line-height:1.6;border:1px solid #c5e1cf;background:#f2faf1;color:#20583d}
+.admin-link-task-hint .note{margin:7px 0 0;max-width:620px;color:#466b57}
+.admin-link-task-hint[hidden]{display:none!important}
+@media(max-width:730px){
+ .admin-tasks-panel .table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+ .admin-tasks-panel table td .btn{min-height:44px;padding:10px 13px;font-size:13px}
+ .admin-tasks-panel table th{white-space:normal;min-width:80px}
+ .admin-tasks-panel table td:first-child{min-width:210px}
+ .admin-tasks-panel table td:nth-child(3){min-width:170px}
+}
