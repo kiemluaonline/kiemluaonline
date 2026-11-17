@@ -149,7 +149,7 @@ function renderTaskResultModal(result,{linkReturn=false}={}){
   '<svg viewBox="0 0 96 96" fill="none" aria-hidden="true"><circle cx="48" cy="48" r="40" stroke="currentColor" stroke-width="4"/><path d="M48 25v25l16 11" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="48" cy="48" r="3" fill="currentColor"/></svg>';
  const heading=approved?'Hoàn thành nhiệm vụ!':'Đã gửi nhiệm vụ thành công!';
  const description=approved?'Lúa đã được cộng vào ví của bạn.':
-  linkReturn?'Đã ghi nhận lượt quay về. Nhiệm vụ đang chờ Admin đối soát.':
+  linkReturn?'Đã nhận yêu cầu xác minh. Nhiệm vụ đang chờ Admin đối soát.':
   'Nhiệm vụ của bạn đang chờ Admin duyệt.';
  const statusLabel=approved?'Đã cộng Lúa':'Chờ Admin duyệt';
  const rewardLabel=approved?'Bạn vừa nhận được':'Phần thưởng dự kiến';
@@ -206,7 +206,7 @@ function renderLinkReturnModal(){
  <button class="close" type="button" data-action="close-link-return" aria-label="Đóng">×</button>
  <span class="eyebrow">🔗 TRỞ VỀ TỪ LINK RÚT GỌN</span>
  <h3 id="linkReturnTitle">Xác minh hoàn thành nhiệm vụ</h3>
- <p class="note">Bạn đã quay về Trạm Có Lúa. Giải phép tính để gửi lượt này cho Admin đối soát.</p>
+ <p class="note">Bạn đã trở lại Trạm Có Lúa. Giải phép tính để gửi yêu cầu cho Admin đối soát.</p>
  <form data-form="link-return-captcha">
   <div class="captcha">${c.a} + ${c.b} = ?</div>
   <div class="field">
@@ -925,7 +925,7 @@ function renderMemberTaskCard(t){
    t.category==='link'?'Thực hiện qua liên kết':'Theo hướng dẫn';
  const usedLabel=isLink&&maxUses>1?`${used}/${maxUses}`:null;
  const badge=usedLabel||`${used}/${maxUses}`;
- const countText=t.link_blocked==='link_task_limit'?`Đã dùng ${used}/${maxUses} lượt quay về hôm nay`:
+ const countText=t.link_blocked==='link_task_limit'?`Đã sử dụng ${used}/${maxUses} lượt hôm nay`:
    t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
    t.my_status==='pending'?'Đã gửi, đang chờ Admin đối soát':
    t.my_status==='approved'?'Nhiệm vụ đã được duyệt':
@@ -934,7 +934,7 @@ function renderMemberTaskCard(t){
    `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
  const progress=Math.round(used/maxUses*100);
  const blockNote=t.link_blocked?(
-  t.link_blocked==='link_task_limit'?'Bạn đã dùng hết số lượt quay về link đích của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
+  t.link_blocked==='link_task_limit'?'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
   t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
   t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
   t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':
