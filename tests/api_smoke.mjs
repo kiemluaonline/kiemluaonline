@@ -1733,3 +1733,88 @@ assert.match(outcomeI18n,/"Hoàn thành nhiệm vụ!":/);
 assert.match(outcomeI18n,/"Đã gửi nhiệm vụ thành công!":/);
 assert.match(outcomeI18n,/"Chờ Admin duyệt":/);
 console.log('PASS: styled task outcome dialog selects green only for approved with real reward, amber for Admin pending, mobile controls and Hmoob.');
+
+const startProgressClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const startProgressCode=startProgressClient.slice(
+ startProgressClient.indexOf('function renderTaskStartProgress('),
+ startProgressClient.indexOf('function renderAttemptModal(){')
+);
+assert.ok(startProgressCode.length>1500,'Task start progress flow must be present');
+const startProgressEvents=[];
+const startProgressRoot={
+ _html:'',
+ set innerHTML(html){this._html=html;startProgressEvents.push(html);},
+ get innerHTML(){return this._html;},
+ querySelector(selector){
+  if(selector==='.task-start-modal')return {focus(){}};
+  if(selector==='.task-start-cover'&&this._html.includes('task-start-cover'))return {};
+  return null;
+ }
+};
+const startProgressDoc={getElementById(id){return id==='modal-root'?startProgressRoot:null;}};
+const startProgressState={
+ memberTasks:[{id:'link4m-id',title:'Link4M & thật',reward:400}],
+ pendingTaskRules:'link4m-id',attempt:null
+};
+let resolveStartProgress;
+let startProgressReadyAtTimer='',startProgressRulesRestored=0,startProgressAttemptShown=0;
+const startProgressNavigated=[];
+const startProgressFns=new Function(
+ 'state','document','esc','safeUrl','api','location','showTaskRules','renderAttemptModal','setTimeout',
+ startProgressCode+'\nreturn {renderTaskStartProgress,startTask};'
+)(
+ startProgressState,startProgressDoc,
+ v=>String(v).replaceAll('&','&amp;'),v=>String(v),
+ ()=>new Promise(resolve=>{resolveStartProgress=resolve;}),
+ {assign(url){startProgressNavigated.push(url);}},
+ ()=>{startProgressRulesRestored++;},
+ ()=>{startProgressAttemptShown++;},
+ (callback,ms)=>{assert.equal(ms,750);startProgressReadyAtTimer=startProgressRoot.innerHTML;callback();}
+);
+const startProgressPromise=startProgressFns.startTask('link4m-id');
+assert.match(startProgressRoot.innerHTML,/task-start-modal is-checking/);
+assert.match(startProgressRoot.innerHTML,/Đang kiểm tra nhiệm vụ/);
+assert.match(startProgressRoot.innerHTML,/Vui lòng chờ phản hồi từ hệ thống/);
+assert.doesNotMatch(startProgressRoot.innerHTML,/Đã khởi tạo nhiệm vụ/);
+resolveStartProgress({attempt_id:'attempt-test',category:'link',
+ review_mode:'manual',task_url:'https://example.com/short-link'});
+await startProgressPromise;
+assert.match(startProgressReadyAtTimer,/task-start-modal is-ready/);
+assert.match(startProgressReadyAtTimer,/Đã khởi tạo nhiệm vụ/);
+assert.match(startProgressReadyAtTimer,/Lượt thực hiện đã được tạo từ hệ thống/);
+assert.match(startProgressReadyAtTimer,/href="https:\/\/example.com\/short-link"/);
+assert.deepEqual(startProgressNavigated,['https://example.com/short-link'],
+ 'After server-created stage, manual link must open in same tab');
+assert.equal(startProgressAttemptShown,0,'Do not show CAPTCHA/evidence before link redirect');
+assert.equal(startProgressRulesRestored,0,'Successful task start must not restore rules modal');
+assert.match(startProgressEvents[0],/Link4M &amp; thật/,'Task name must be HTML escaped');
+assert.ok(startProgressEvents.findIndex(v=>v.includes('is-checking'))<
+ startProgressEvents.findIndex(v=>v.includes('is-ready')),
+ 'Checking stage must be visible before created stage');
+let apiRejectCount=0,recoveredRules=0;
+const errorStartFns=new Function(
+ 'state','document','esc','safeUrl','api','location','showTaskRules','renderAttemptModal','setTimeout',
+ startProgressCode+'\nreturn {startTask};'
+)(
+ startProgressState,startProgressDoc,v=>String(v),v=>String(v),
+ async()=>{apiRejectCount++;throw new Error('Quota đã hết');},
+ {assign(){throw new Error('No redirect on API failure');}},
+ ()=>{recoveredRules++;startProgressRoot.innerHTML='<div class="task-rules-cover">Quy tắc</div>';},
+ ()=>{throw new Error('No attempt modal on API failure');},
+ (callback)=>callback()
+);
+await assert.rejects(errorStartFns.startTask('link4m-id'),/Quota đã hết/);
+assert.equal(apiRejectCount,1);
+assert.equal(recoveredRules,1,'API errors should restore rules rather than leaving spinner forever');
+assert.doesNotMatch(startProgressRoot.innerHTML,/task-start-modal is-ready/,
+ 'API error must never show created success');
+const startProgressCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+assert.match(startProgressCss,/\.task-start-cover\.modal-cover/);
+assert.match(startProgressCss,/\.task-start-modal\.modal/);
+assert.match(startProgressCss,/\.task-start-spinner/);
+assert.match(startProgressCss,/@media\(max-width:480px\)/);
+assert.match(startProgressCss,/min-height:44px/,'Touch-accessible fallback link must be available');
+const startProgressHmoob=readFileSync(new URL('../public/i18n-extra.js',import.meta.url),'utf8');
+assert.match(startProgressHmoob,/"Đang kiểm tra nhiệm vụ\.\.\.":/);
+assert.match(startProgressHmoob,/"Đã khởi tạo nhiệm vụ":/);
+console.log('PASS: start-task modal shows checking then server-verified created before redirect, with error rollback and mobile/Hmoob support.');
