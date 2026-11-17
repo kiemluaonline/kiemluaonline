@@ -1961,7 +1961,7 @@ console.log('PASS: unified compact responsive UI loaded last for tasks, payout, 
 
 // Kiểm thử vuốt quay lại từ link nhiệm vụ: BFCache không được giữ popup cũ.
 const swipeGuardStart=frontendForWelcome.indexOf('let taskPageWasLeft=false;');
-const swipeGuardEnd=frontendForWelcome.indexOf('function renderAttemptModal(){',swipeGuardStart);
+const swipeGuardEnd=frontendForWelcome.indexOf('async function shrinkAppProof(file) {',swipeGuardStart);
 assert.ok(swipeGuardStart>0&&swipeGuardEnd>swipeGuardStart,
  'Task page must register mobile history return handlers');
 const swipeGuardSource=frontendForWelcome.slice(swipeGuardStart,swipeGuardEnd);
