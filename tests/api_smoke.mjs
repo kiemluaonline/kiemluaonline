@@ -1670,3 +1670,66 @@ assert.match(oneReturnWorker,/UPDATE task_attempts SET available_at=\?/);
 assert.match(oneReturnWorker,/attemptSeconds=task.category==='link'\?86400:1200/);
 assert.match(oneReturnWorker,/link_24h_count:used/);
 console.log('PASS: unique counted destination returns, 0/2 -> 1/2 -> 2/2, long genuine sessions, no duplicate or rejected return refunds.');
+
+const outcomeClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const outcomeCode=outcomeClient.slice(
+ outcomeClient.indexOf('function closeTaskResultModal(){'),
+ outcomeClient.indexOf('async function api(',outcomeClient.indexOf('function closeTaskResultModal(){'))
+);
+assert.ok(outcomeCode.length>1500,'Task result modal renderer must exist');
+const outcomeRoot={
+ innerHTML:'',
+ querySelector(selector){return selector==='.task-result-primary'?{focus(){}}:selector==='.task-result-cover'?{}:null;}
+};
+const outcomeClasses=new Set();
+const outcomeDocument={
+ getElementById(id){return id==='modal-root'?outcomeRoot:null;},
+ body:{classList:{
+  add(v){outcomeClasses.add(v);},
+  remove(v){outcomeClasses.delete(v);}
+ }}
+};
+const outcomeFns=new Function('document','fmt',outcomeCode+
+ '\nreturn {renderTaskResultModal,closeTaskResultModal};')(
+ outcomeDocument,n=>String(n)
+);
+outcomeFns.renderTaskResultModal({status:'approved',reward:400});
+assert.match(outcomeRoot.innerHTML,/task-result-success/);
+assert.match(outcomeRoot.innerHTML,/Hoàn thành nhiệm vụ!/);
+assert.match(outcomeRoot.innerHTML,/Bạn vừa nhận được/);
+assert.match(outcomeRoot.innerHTML,/\+400 Lúa/);
+assert.match(outcomeRoot.innerHTML,/Đã cộng Lúa/);
+assert.doesNotMatch(outcomeRoot.innerHTML,/Chờ Admin duyệt/);
+assert.ok(outcomeClasses.has('task-result-open'));
+outcomeFns.closeTaskResultModal();
+assert.equal(outcomeRoot.innerHTML,'');
+assert.ok(!outcomeClasses.has('task-result-open'));
+outcomeFns.renderTaskResultModal({status:'pending',reward:400});
+assert.match(outcomeRoot.innerHTML,/task-result-pending/);
+assert.match(outcomeRoot.innerHTML,/Đã gửi nhiệm vụ thành công!/);
+assert.match(outcomeRoot.innerHTML,/Phần thưởng dự kiến/);
+assert.match(outcomeRoot.innerHTML,/Chờ Admin duyệt/);
+assert.match(outcomeRoot.innerHTML,/Lúa chỉ được cộng sau khi Admin xác nhận/);
+assert.doesNotMatch(outcomeRoot.innerHTML,/Bạn vừa nhận được|Đã cộng Lúa/);
+outcomeFns.renderTaskResultModal({status:'pending',reward:400},{linkReturn:true});
+assert.match(outcomeRoot.innerHTML,/Nhiệm vụ đang chờ Admin đối soát/);
+assert.doesNotMatch(outcomeRoot.innerHTML,/task-result-success|Đã cộng Lúa/);
+outcomeFns.renderTaskResultModal({status:'rejected',reward:0});
+assert.doesNotMatch(outcomeRoot.innerHTML,/task-result-success|Bạn vừa nhận được/);
+assert.match(outcomeRoot.innerHTML,/task-result-pending/);
+assert.match(outcomeClient,/await afterAction\('tasks'\);renderTaskResultModal\(r\);/,
+ 'Task claim should show result popup only after server response and wallet refresh');
+assert.match(outcomeClient,/await afterAction\('history'\);\s*renderTaskResultModal\(/,
+ 'Link return must show amber pending popup after server response');
+assert.match(outcomeClient,/if\(act==='close-task-result'\)/);
+assert.match(outcomeClient,/e\.target\.classList\?\.contains\('task-result-cover'\)/);
+const outcomeCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+assert.match(outcomeCss,/\.task-result-success/);
+assert.match(outcomeCss,/\.task-result-pending/);
+assert.match(outcomeCss,/min-height:58px/,'Result button must have a large mobile tap target');
+assert.match(outcomeCss,/@media\(prefers-reduced-motion:reduce\)/);
+const outcomeI18n=readFileSync(new URL('../public/i18n-extra.js',import.meta.url),'utf8');
+assert.match(outcomeI18n,/"Hoàn thành nhiệm vụ!":/);
+assert.match(outcomeI18n,/"Đã gửi nhiệm vụ thành công!":/);
+assert.match(outcomeI18n,/"Chờ Admin duyệt":/);
+console.log('PASS: styled task outcome dialog selects green only for approved with real reward, amber for Admin pending, mobile controls and Hmoob.');
