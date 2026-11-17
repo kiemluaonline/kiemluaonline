@@ -9,7 +9,7 @@ const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.Tr
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'all',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
 let paidRotationTimer=null,paidRefreshTimer=null;
 function stopPaidRotation(){
  if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
@@ -923,13 +923,13 @@ function renderMemberTaskCard(t){
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
  state.memberTasks=data.tasks;
- const shownTasks=data.tasks.filter(t=>state.taskFilter==='all'||t.category===state.taskFilter);
+ const shownTasks=data.tasks.filter(t=>['app','link','other'].includes(t.category)&&t.category===state.taskFilter);
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
  ${taskDashboardCard(stats,data)}
  <div class="task-card-modern-section-head"><h3>Khám phá nhiệm vụ</h3><span>🌾 Tích Lúa mỗi ngày</span></div>
- <div class="task-filter-row">${[['all','Tất cả'],['app','📱 Nhiệm vụ App'],['link','🔗 Link'],['video','🎬 Video'],['other','Khác']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
+ <div class="task-filter-row">${[['app','📱 Nhiệm vụ App'],['link','🔗 Link'],['other','Khác']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
  ${shownTasks.length?`<div class="grid task-card-modern-grid">${shownTasks.map(renderMemberTaskCard).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
 async function referrals(){
@@ -1565,7 +1565,7 @@ app.addEventListener('click',async e=>{
 if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
-  if(act==='filter-tasks'){state.taskFilter=el.dataset.filter||'all';await navigate('tasks');return;}
+  if(act==='filter-tasks'){state.taskFilter=['app','link','other'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
   if(act==='start-task'){showTaskRules(el.dataset.id);return;}
   if(act==='cancel-task-rules'){
    state.pendingTaskRules=null;document.getElementById('modal-root').innerHTML='';return;
