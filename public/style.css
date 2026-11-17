@@ -1332,3 +1332,168 @@ html[lang="hmn"] .language-legal-notice{display:block}
  .task-rules-meta dt,.task-rules-meta dd{font-size:14px}
  .task-rules-actions{gap:9px}
 }
+
+/* Task card redesign — Tram Co Lua. Readable on iPhone and Android. */
+.layout .content .task-card-modern-grid{
+ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:20px
+}
+.layout .content .task-card-modern{
+ position:relative;isolation:isolate;overflow:hidden;min-width:0;
+ padding:23px 23px 22px;border-radius:24px;
+ background:linear-gradient(148deg,#fff 0%,#fbfefa 72%,#f7fbf3 100%);
+ border:1px solid #dce9d9;
+ box-shadow:0 12px 36px rgba(20,81,49,.075),0 2px 6px rgba(20,81,49,.045);
+ gap:0
+}
+.layout .content .task-card-modern::before{
+ content:"";position:absolute;inset:0 0 auto;height:4px;pointer-events:none;
+ background:linear-gradient(90deg,#167452 0%,#44a46b 55%,#edc46c 100%)
+}
+.layout .content .task-card-modern::after{
+ content:"";position:absolute;z-index:-1;width:175px;height:175px;right:-95px;top:-100px;
+ background:radial-gradient(circle,rgba(241,207,117,.18),rgba(241,207,117,0) 70%);
+ pointer-events:none
+}
+.layout .content .task-card-modern-head{
+ display:flex;gap:13px;align-items:flex-start;min-width:0
+}
+.layout .content .task-card-modern-icon{
+ flex:none;width:60px;height:60px;border-radius:19px;
+ display:grid;place-items:center;font-size:28px;
+ background:linear-gradient(135deg,#eaf8e9,#f2f6d9);
+ border:1px solid #d7e9ce;
+ box-shadow:0 3px 12px rgba(24,106,58,.065)
+}
+.layout .content .task-card-modern-identity{flex:1;min-width:0}
+.layout .content .task-card-modern-type{
+ display:block;margin:0 0 3px;
+ color:#57826a;font-size:11px;font-weight:850;letter-spacing:.075em;text-transform:uppercase
+}
+.layout .content .task-card-modern h3{
+ margin:0 0 10px;color:#153c2c;font-size:19px;line-height:1.29;
+ font-weight:850;overflow-wrap:anywhere
+}
+.layout .content .task-card-modern-chips{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.layout .content .task-card-modern-timing,
+.layout .content .task-card-modern-reward{
+ display:inline-flex;align-items:center;gap:4px;white-space:normal;
+ padding:6px 9px;border-radius:9px;font-size:12px;line-height:1.25;font-weight:800
+}
+.layout .content .task-card-modern-timing{color:#5f7771;background:#f0f5f1}
+.layout .content .task-card-modern-reward{
+ color:#14754f;background:#e6f7e7;border:1px solid #d0ebd1
+}
+.layout .content .task-card-modern-count{
+ flex:none;min-width:47px;max-width:72px;
+ display:flex;flex-direction:column;align-items:center;gap:0;
+ padding:5px 7px;border-radius:12px;
+ background:#fff5df;border:1px solid #f0dfb5
+}
+.layout .content .task-card-modern-count strong{
+ display:block;color:#9a671f;font-size:18px;font-weight:900;line-height:1.25;
+ font-variant-numeric:tabular-nums
+}
+.layout .content .task-card-modern-count small{
+ color:#a7814a;font-size:10px;line-height:1.3;font-weight:750
+}
+.layout .content .task-card-modern-description{
+ color:#5e796b;margin:15px 0 12px;line-height:1.55;font-size:13px;
+ min-height:0;overflow-wrap:anywhere
+}
+.layout .content .task-card-modern .app-ref-code{margin:0 0 8px}
+.layout .content .task-card-modern .app-ref-code + .note{
+ color:#6d8274;margin:3px 0 12px;min-height:0
+}
+.layout .content .task-card-modern-bottom{
+ display:flex;flex-direction:column;gap:12px;margin-top:auto;padding-top:11px;
+ border-top:1px solid #e8f0e4;min-width:0
+}
+.layout .content .task-card-modern-quota{
+ display:flex;align-items:center;gap:8px;
+ color:#3f684e;font-size:13px;font-weight:800;line-height:1.4
+}
+.layout .content .task-card-modern-quota-icon{font-size:15px;color:#e5af45}
+.layout .content .task-card-modern-track{
+ width:100%;height:7px;overflow:hidden;border-radius:99px;background:#e9f1e8
+}
+.layout .content .task-card-modern-track>span{
+ display:block;height:100%;border-radius:99px;
+ background:linear-gradient(90deg,#1c8965,#d7bc5a);
+ transition:width .2s ease
+}
+.layout .content .task-card-modern .task-link-blocked{
+ min-height:0;margin:0;padding:11px 12px;background:#fff5eb;
+ border:1px solid #f0dcc0;border-radius:11px;
+ color:#935129;font-size:12px;line-height:1.5
+}
+.layout .content .task-card-modern-action{
+ display:flex;gap:9px;align-items:center;justify-content:center;
+ margin-top:2px;min-height:56px;width:100%;border-radius:15px;
+ font-size:16px;font-weight:850;line-height:1.35;letter-spacing:.012em;
+ background:linear-gradient(108deg,#146e55 0%,#159171 60%,#399f66 100%);
+ border:1px solid #178362;color:white;
+ box-shadow:0 7px 17px rgba(19,117,82,.20);
+ touch-action:manipulation;-webkit-tap-highlight-color:transparent
+}
+.layout .content .task-card-modern-action .task-card-modern-play{font-size:13px}
+.layout .content .task-card-modern-action:hover{
+ background:linear-gradient(108deg,#105a45,#147859 65%,#2b8757)
+}
+.layout .content .task-card-modern-action:active{transform:translateY(1px)}
+.layout .content .task-card-modern-action.is-disabled{
+ background:#e9eee8;border-color:#d9e0d8;color:#6c7b6d;box-shadow:none;
+ opacity:1;cursor:not-allowed
+}
+.layout .content .task-card-modern-completed{
+ display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+ padding:10px 12px;min-height:52px;
+ border-radius:13px;background:#f6faf5;border:1px solid #e0eadf
+}
+.layout .content .task-card-modern-completed span:not(.chip){
+ font-size:12px;color:#637968
+}
+.layout .content .task-card-modern-section-head{
+ display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;
+ gap:8px;margin:23px 0 14px
+}
+.layout .content .task-card-modern-section-head h3{
+ margin:0;color:#174933;font-size:20px;font-weight:850
+}
+.layout .content .task-card-modern-section-head>span{
+ color:#678c69;font-size:12px;font-weight:700
+}
+.layout .content .task-card-modern-grid .task-card-modern:focus-within{
+ outline:2px solid #2d9670;outline-offset:2px
+}
+@media(hover:hover) and (pointer:fine){
+ .layout .content .task-card-modern-grid .task-card-modern:hover{
+  border-color:#bad5ad;box-shadow:0 17px 38px rgba(21,99,62,.13);
+  transform:translateY(-2px)
+ }
+}
+@media(max-width:940px){
+ .layout .content .task-card-modern-grid{grid-template-columns:1fr;gap:16px}
+}
+@media(max-width:600px){
+ .layout .content .task-card-modern{padding:19px 16px 17px;border-radius:21px}
+ .layout .content .task-card-modern-head{gap:11px}
+ .layout .content .task-card-modern-icon{width:52px;height:52px;border-radius:16px;font-size:23px}
+ .layout .content .task-card-modern h3{font-size:17px;margin-bottom:9px}
+ .layout .content .task-card-modern-timing,
+ .layout .content .task-card-modern-reward{font-size:11px;padding:5px 7px}
+ .layout .content .task-card-modern-count{min-width:45px;max-width:58px;padding:6px 5px}
+ .layout .content .task-card-modern-count strong{font-size:16px}
+ .layout .content .task-card-modern-description{font-size:13px;margin-top:13px}
+ .layout .content .task-card-modern-action{min-height:58px;font-size:16px}
+ .layout .content .task-card-modern-section-head h3{font-size:19px}
+}
+@media(max-width:355px){
+ .layout .content .task-card-modern-head{gap:8px}
+ .layout .content .task-card-modern-icon{width:44px;height:44px;font-size:21px}
+ .layout .content .task-card-modern h3{font-size:16px}
+ .layout .content .task-card-modern-count{min-width:40px}
+}
+@media(prefers-reduced-motion:reduce){
+ .layout .content .task-card-modern-track>span{transition:none}
+ .layout .content .task-card-modern-action:active{transform:none}
+}
