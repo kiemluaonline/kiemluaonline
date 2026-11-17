@@ -1592,6 +1592,7 @@ body.task-result-open{overflow:hidden}
  background:linear-gradient(135deg,#f2fff7,var(--result-soft));
  box-shadow:0 0 0 9px rgba(126,221,173,.14),0 12px 32px rgba(16,110,64,.11)
 }
+.task-result-success .task-result-icon{border:1px solid #a6e2bf}
 .task-result-pending .task-result-icon{
  background:linear-gradient(135deg,#fffdf2,#fff0c2);
  box-shadow:0 0 0 9px rgba(242,190,79,.17),0 12px 32px rgba(170,116,21,.10)
