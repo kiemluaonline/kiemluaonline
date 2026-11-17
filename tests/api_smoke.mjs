@@ -1533,3 +1533,19 @@ const hmoobExtra=readFileSync(new URL('../public/i18n-extra.js',import.meta.url)
 assert.match(hmoobExtra,/Quota chặn theo mã thiết bị và địa chỉ IP - đổi IP\/VPN\/4G không giúp vượt giới hạn\./);
 console.log('PASS: compact member fraud card shows visible IP/device quota policy right below IP in Vietnamese and Hmoob.');
 
+const taskTabsCode=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const taskTabsView=taskTabsCode.slice(taskTabsCode.indexOf('async function tasks(){'),
+ taskTabsCode.indexOf('async function referrals(){'));
+assert.match(taskTabsView,/\['app','📱 Nhiệm vụ App'\]/);
+assert.match(taskTabsView,/\['link','🔗 Link'\]/);
+assert.match(taskTabsView,/\['other','Khác'\]/);
+assert.doesNotMatch(taskTabsView,/\['all','Tất cả'\]|\['video','🎬 Video'\]/,
+ 'Neither All nor Video filter should be visible to members');
+assert.match(taskTabsCode,/taskFilter:'link'/,'Link should be the default task tab');
+assert.match(taskTabsView,/\['app','link','other'\]\.includes\(t\.category\)/,
+ 'Do not display video tasks in remaining member tabs');
+assert.match(taskTabsCode,/\['app','link','other'\]\.includes\(el\.dataset\.filter\)/,
+ 'Only App, Link and Khác filters can be selected');
+assert.match(taskTabsCode,/function renderMemberTaskCard\(t\)/,
+ 'Existing member task card design must remain unchanged');
+console.log('PASS: member task tabs show App, Link and Khác only, with Link default and no video tasks.');
