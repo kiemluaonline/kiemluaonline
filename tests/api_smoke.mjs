@@ -361,6 +361,10 @@ const beforePayment=await call('/api/task-dashboard','GET',undefined,cookie);
 assert.equal(beforePayment.status,200);
 assert.equal(beforePayment.data.latest_payment,null,'No invented payout');
 assert.deepEqual(beforePayment.data.recent_payments,[],'No fake ticker entries without paid withdrawals');
+assert.equal((await call('/api/public-paid-announcements','GET',undefined,'')).status,401,
+ 'Payment announcements require a logged-in session');
+assert.deepEqual((await call('/api/public-paid-announcements','GET',undefined,cookie)).data.recent_payments,[],
+ 'Payment feed starts empty: no manufactured payouts');
 assert.equal(typeof beforePayment.data.submitted_today,'number');
 const referralMe=await call('/api/me','GET',undefined,refCookie);
 assert.equal(referralMe.data.balance,25);
@@ -522,6 +526,40 @@ assert.equal(legacyMemberPaid.find(x=>x.id===legacyOneThousandID).status,'paid',
 assert.equal(legacyMemberPaid.find(x=>x.id===oldPaidID).status,'paid',
  'Historic low-value ZaloPay payments stay in member history');
 assert.equal(rotatingPaid.data.latest_payment.masked_account,rotatingPaid.data.recent_payments[0].masked_account);
+
+assert.equal((await call('/api/public-paid-announcements','GET',undefined,cookie)).data.recent_payments.length,1,
+ 'Even one eligible payment remains visible; automatic poll keeps waiting for the next');
+const oldEligibleID='00000000-0000-4000-8000-0000000000ad';
+sqlite.prepare(`INSERT INTO withdrawals
+ (id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner,status,reviewed_at)
+ VALUES (?,?,70000,7000,10,'Vietcombank','444433332222','TEST MEMBER','paid',datetime('now','-1 day'))`)
+ .run(oldEligibleID,legacyUser);
+const afterOlder=await call('/api/public-paid-announcements','GET',undefined,cookie);
+assert.equal(afterOlder.status,200);
+assert.deepEqual(afterOlder.data.recent_payments.map(x=>x.id),[oldEligibleID,w2.data.id],
+ 'A newly loaded historical payment is shown before newer paid withdrawals');
+const newestPaidID='00000000-0000-4000-8000-0000000000ae';
+sqlite.prepare(`INSERT INTO withdrawals
+ (id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner,status,reviewed_at)
+ VALUES (?,?,120000,12000,10,'Vietcombank','666655554444','TEST MEMBER','paid',datetime('now','+1 day'))`)
+ .run(newestPaidID,legacyUser);
+const afterNewest=await call('/api/public-paid-announcements','GET',undefined,cookie);
+assert.equal(afterNewest.status,200);
+assert.deepEqual(afterNewest.data.recent_payments.map(x=>x.id),
+ [oldEligibleID,w2.data.id,newestPaidID],
+ 'The public ticker always receives eligible payments oldest -> newest');
+assert.ok(afterNewest.data.recent_payments.every(x=>x.vnd_amount>=5000));
+assert.ok(afterNewest.data.recent_payments.every(x=>!('bank_account' in x)&&!('user_id' in x)),
+ 'Only masked bank numbers and no user IDs in public rotation');
+const updatedDashboard=await call('/api/task-dashboard','GET',undefined,cookie);
+assert.deepEqual(updatedDashboard.data.recent_payments,afterNewest.data.recent_payments,
+ 'Initial member dashboard and background polling share the same chronological feed');
+assert.equal(updatedDashboard.data.latest_payment.vnd_amount,12000);
+assert.equal(updatedDashboard.data.latest_payment.at,afterNewest.data.recent_payments[2].at);
+assert.equal((await call('/api/history','GET',undefined,cookie)).data.withdrawals
+ .find(x=>x.id===legacyOneThousandID).vnd_amount,1000,
+ 'Filtering the public ticker must not delete old 1,000 VND withdrawal history');
+
 
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
 console.log('PASS: new ZaloPay withdrawals and wallet saving blocked; old ZaloPay D1 history/admin approve, pay and refund preserved.'); 
@@ -1861,3 +1899,21 @@ assert.match(readFileSync(new URL('../src/worker.js',import.meta.url),'utf8'),
  /WHERE status='paid' AND vnd_amount>=5000/,
  'Server must exclude paid withdrawals below configured current min from public carousel');
 console.log('PASS: legacy 1.000 VND transaction kept for audit but excluded from public 5.000 VND-minimum payment ticker.');
+
+const paymentAutoClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const paymentAutoSrc=paymentAutoClient.slice(
+ paymentAutoClient.indexOf('function paidAnnouncementSignature('),
+ paymentAutoClient.indexOf('const BANK_LIST',paymentAutoClient.indexOf('function paidAnnouncementSignature('))
+);
+assert.match(paymentAutoSrc,/api\('\\/api\\/public-paid-announcements'\)/,
+ 'New payments must poll their lightweight endpoint without a manual update');
+assert.match(paymentAutoSrc,/paidRefreshTimer=setInterval\(refreshPaidRotation,15000\)/,
+ 'Members check fresh paid transactions every 15 seconds while viewing');
+assert.match(paymentAutoSrc,/document.addEventListener\('visibilitychange'/,
+ 'iPhone tab resume must refresh new paid transactions right away');
+assert.match(paymentAutoSrc,/displayPaidRotation\(Number\(box.dataset.active\|\|0\)\+1\)/,
+ 'Successive slides must automatically rotate in chronological order');
+assert.match(paymentAutoClient,/const signature=paidAnnouncementSignature\(payments\)/,
+ 'Initial dashboard and refresh must compare identical signatures');
+console.log('PASS: public paid ticker cycles old -> new, polls automatically every 15 seconds and refreshes after iPhone tab resume.');
+
