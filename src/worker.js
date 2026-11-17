@@ -1267,10 +1267,10 @@ async function handler(req, env) {
     // có thể mở lại trong phiên để người dùng thật không mất lượt vì reload.
     if(attempt.available_at>=0){
       if(hasAnswer)
-        fail(409,'Chưa ghi nhận lượt quay về. Hãy mở trang đích qua nhiệm vụ trước khi xác minh.');
+        fail(409,'Chưa xác nhận được phiên thực hiện. Hãy bắt đầu nhiệm vụ từ Trạm Có Lúa rồi làm theo hướng dẫn.');
       const perTaskLimit=await linkTaskPerAccountLimit(env,task);
       if(await linkReturnUsage(env,me.id,task.id)>=perTaskLimit)
-        fail(429,'Bạn đã dùng hết lượt quay về của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+        fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
       const arrivedAt=now();
       const mark=await env.DB.prepare(
         'UPDATE task_attempts SET available_at=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
@@ -1332,9 +1332,9 @@ async function handler(req, env) {
         clientIP(req),await deviceCode(req,env),attempt.id,me.id,completionId)
     ]);
     if (!batch[0].meta?.changes || !batch[1].meta?.changes)
-      fail(409, 'Lượt quay về đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
+      fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
     return json({ok:true,status:'pending',
-      message:'Đã ghi nhận quay về Trạm Có Lúa. Đang chờ Admin đối soát; chưa cộng Lúa.'});
+      message:'Đã nhận yêu cầu xác minh. Đang chờ Admin đối soát; chưa cộng Lúa.'});
   }
   const startMatch = p.match(/^\/api\/tasks\/([^/]+)\/start$/);
   if (m === 'POST' && startMatch) {
@@ -1351,7 +1351,7 @@ async function handler(req, env) {
     await linkIPQuota(env,req,me.id,task,settings);
     await linkBrowserQuota(env,req,me.id,task,settings);
     if(task.category==='link'&&await linkReturnUsage(env,me.id,task.id)>=await linkTaskPerAccountLimit(env,task))
-      fail(429,'Bạn đã dùng hết lượt quay về của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+      fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
     const startedNow=now();
