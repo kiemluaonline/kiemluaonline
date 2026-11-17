@@ -1424,4 +1424,15 @@ assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/S
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/async function processLinkReturn/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/renderLinkReturnModal/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/link-return-captcha/);
+const linkOpenClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+const linkStartCode=linkOpenClient.slice(linkOpenClient.indexOf('async function startTask('),linkOpenClient.indexOf('function renderAttemptModal('));
+assert.match(linkStartCode,/data\.category==='link'&&data\.review_mode==='manual'/,
+ 'Chỉ nhiệm vụ Link với Admin duyệt được đi thẳng, các loại nhiệm vụ cũ giữ nguyên');
+assert.match(linkStartCode,/location\.assign\(url\)/,
+ 'Nút Bắt đầu phải mở thẳng link trong cùng tab iPhone');
+assert.ok(linkStartCode.indexOf('location.assign(url)')<linkStartCode.indexOf('renderAttemptModal()'),
+ 'Không hiển thị phép tính / bằng chứng trước khi mở Link');
+assert.match(linkOpenClient,/data-form="link-return-captcha"/,
+ 'CAPTCHA chỉ cần hiển thị khi người xem đã quay về trang đích');
+
 console.log('PASS: link destination return records pending evidence, blocks duplication, requires Admin reconciliation, and never auto-credits wallet.');
