@@ -1,0 +1,282 @@
+/* Trạm Có Lúa — COMPACT 2026-11-17.
+   Áp dụng trên giao diện đã đăng nhập của thành viên & Admin.
+   Chỉ chỉnh khoảng cách/kích thước; không thay đổi trạng thái ẩn, dữ liệu hoặc luồng thanh toán.
+   Nút quan trọng và ô nhập vẫn đạt tối thiểu 44px trên điện thoại. */
+
+/* Nhịp dọc chung: bớt phải vuốt nhưng giữ chữ dễ đọc. */
+.layout .content{padding:20px 24px 34px}
+.layout .page-head{margin-bottom:13px;gap:8px}
+.layout .page-head h2{font-size:21px;line-height:1.23;letter-spacing:-.45px}
+.layout .page-head p{margin:4px 0 0;font-size:12px;line-height:1.45}
+.layout .eyebrow{font-size:10px;letter-spacing:1.2px}
+.layout .content .card{padding:16px 17px;border-radius:16px}
+.layout .content .card h3{font-size:16px;margin-bottom:9px}
+.layout .content .card p{line-height:1.46}
+.layout .content .grid,.layout .content .grid.two,.layout .content .grid.four{gap:12px}
+.layout .content .info-split{gap:12px}
+.layout .content .section{margin-top:15px}
+.layout .content .separator{margin:12px 0}
+.layout .content .metric{font-size:25px;margin:8px 0 3px}
+.layout .content .metric-label{font-size:12px}
+.layout .content .callout{padding:10px 12px;border-radius:11px;font-size:12px;line-height:1.45}
+.layout .content .empty{padding:22px 12px}
+.layout .content .field{gap:5px;margin:10px 0}
+.layout .content .field input,.layout .content .field select,.layout .content .field textarea{
+ padding:9px 11px;min-height:44px;border-radius:10px
+}
+.layout .content .field textarea{min-height:72px}
+.layout .content .form-row{gap:10px}
+.layout .content .btn{min-height:44px;padding:8px 13px;white-space:normal;line-height:1.35}
+.layout .content .btn.sm{min-height:44px;padding:8px 10px}
+.layout .content .btn-row{gap:7px}
+.layout .content .chip{padding:4px 8px;line-height:1.35}
+.layout .content .note{line-height:1.45}
+.layout .content th,.layout .content td{padding:9px 10px}
+.layout .content .table-wrap{border-radius:11px}
+.layout .content .hero{min-height:140px;gap:10px}
+.layout .content .hero h2{font-size:23px;margin-bottom:5px}
+.layout .content .hero-icon{font-size:43px}
+
+/* Thẻ thanh toán luôn quay vòng như trước (JS), chỉ thu chiều cao. */
+.layout .global-payment-wrap:not([hidden]){margin-bottom:11px}
+.layout .global-payment-wrap>.task-payment{
+ padding:12px 15px 16px;border-radius:17px
+}
+.layout .task-payment .paid-slide{min-height:82px}
+.layout .task-payment .paid-status-line{gap:7px}
+.layout .task-payment .paid-status-line strong{font-size:11px;letter-spacing:.12px}
+.layout .task-payment .paid-status-dot{width:8px;height:8px;flex-basis:8px}
+.layout .task-payment .paid-highlight{
+ font-size:23px;margin:5px 0 3px!important;line-height:1.08
+}
+.layout .task-payment .paid-highlight span{font-size:13px}
+.layout .task-payment .paid-bank-line{font-size:12px;margin:2px 0 4px;line-height:1.4}
+.layout .task-payment .paid-disclaimer{font-size:10px;line-height:1.4}
+.layout .task-payment.has-paid-rotation .paid-slide-progress{bottom:-13px;height:3px}
+
+/* 4 ô thống kê & khối bảo vệ: giữ đủ thông tin nhưng tiết kiệm khoảng trống. */
+.layout .task-dashboard{gap:10px;margin:6px 0 16px}
+.layout .task-stats{gap:9px}
+.layout .content .task-stat{min-height:76px;padding:11px 12px;border-radius:14px}
+.layout .task-stat span{font-size:11px;line-height:1.35;letter-spacing:0}
+.layout .task-stat strong{font-size:19px;line-height:1.2;margin-top:6px}
+.layout .content .task-security-compact.card{padding:12px 14px;border-radius:14px}
+.layout .task-security-compact .task-security-title{font-size:15px;margin:0 0 7px;line-height:1.3}
+.layout .task-security-ip,.layout .task-security-id{font-size:12px;line-height:1.4;gap:3px 6px}
+.layout .task-security-ip strong{font-size:15px}
+.layout .task-security-id code{font-size:11px;letter-spacing:0}
+.layout .task-security-compact p.task-security-policy{
+ margin:6px 0;padding:7px 9px;font-size:11px;line-height:1.4;border-radius:8px
+}
+.layout .task-security-quotas{margin-top:7px;padding-top:6px;font-size:10.5px;line-height:1.4}
+.layout .task-security-details{margin-top:4px}
+.layout .task-security-details>summary{display:list-item;min-height:40px;padding:10px 0 6px;font-size:12px}
+.layout .task-security-details .task-ip-btn{min-height:44px}
+
+/* Thẻ nhiệm vụ, bộ lọc và nút: thông tin gọn nhưng vùng chạm >=44px. */
+.layout .task-list-heading{margin:15px 0 9px;font-size:18px}
+.layout .content .task-card-modern-grid{gap:11px}
+.layout .content .task-card-modern{padding:14px 14px 13px;border-radius:17px}
+.layout .content .task-card-modern-head{gap:9px}
+.layout .content .task-card-modern-icon{width:43px;height:43px;border-radius:12px;font-size:20px}
+.layout .content .task-card-modern-type{font-size:10px;margin-bottom:2px}
+.layout .content .task-card-modern h3{font-size:16px;margin-bottom:6px;line-height:1.25}
+.layout .content .task-card-modern-chips{gap:5px}
+.layout .content .task-card-modern-timing,.layout .content .task-card-modern-reward{
+ font-size:11px;padding:4px 6px;border-radius:7px
+}
+.layout .content .task-card-modern-count{min-width:40px;max-width:53px;padding:4px 5px;border-radius:9px}
+.layout .content .task-card-modern-count strong{font-size:15px}
+.layout .content .task-card-modern-description{font-size:12px;line-height:1.4;margin:9px 0 8px}
+.layout .content .task-card-modern-bottom{gap:8px;padding-top:8px}
+.layout .content .task-card-modern-quota{font-size:12px;gap:5px;line-height:1.3}
+.layout .content .task-card-modern-track{height:5px}
+.layout .content .task-card-modern .task-link-blocked{padding:8px 10px;font-size:11px;line-height:1.4}
+.layout .content .task-card-modern-action{min-height:46px;border-radius:11px;font-size:14px;margin-top:1px}
+.layout .content .task-card-modern-completed{min-height:44px;padding:7px 9px}
+.layout .content .task-card-modern-section-head{margin:15px 0 8px}
+.layout .content .task-card-modern-section-head h3{font-size:18px}
+
+/* Rút tiền & lưu tài khoản ngân hàng: giảm chiều cao, không giấu phí hay lưu ý. */
+.layout .withdraw-amount-wrap{gap:7px;margin-bottom:4px}
+.layout .withdraw-max-btn{min-height:44px;padding:8px 10px}
+.layout .withdraw-fee-preview,.layout .cards-fee-preview{
+ gap:6px;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.42
+}
+.layout .withdraw-fee-preview>strong,.layout .cards-fee-preview>strong{font-size:13px;margin:0}
+.layout .withdraw-fee-preview .note,.layout .cards-fee-preview .cards-note{
+ font-size:11px;line-height:1.42;margin:0
+}
+.layout .withdraw-fee-preview .withdraw-fee-total,
+.layout .cards-fee-preview .cards-fee-total{
+ margin-top:1px;padding-top:7px;font-size:13px
+}
+.layout .withdraw-saved-picker{padding:10px 11px;margin:9px 0;gap:6px;border-radius:12px}
+.layout .withdraw-saved-picker select{min-height:44px}
+.layout .withdraw-account-manager{padding:12px 14px}
+.layout .withdraw-account-manager>summary{min-height:44px;display:list-item;padding:11px 0}
+.layout .withdraw-history-list{gap:9px;margin-top:9px}
+.layout .withdraw-history-item{padding:11px 12px;border-radius:13px}
+.layout .withdraw-history-value{font-size:18px;margin:6px 0 3px}
+.layout .withdraw-history-meta{line-height:1.45;margin:4px 0}
+.layout .saved-payout-list,.layout .saved-payout-form{padding:13px 14px}
+.layout .saved-payout-item{padding:10px 11px;margin-top:9px}
+.layout .saved-payout-actions{margin-top:8px}
+.layout .saved-payout-actions .btn{min-height:44px}
+
+/* Gian hàng: khối giới thiệu ít cao, danh sách sản phẩm vẫn dễ xem. */
+.layout .shop-hero{min-height:220px;border-radius:18px}
+.layout .shop-hero-copy{padding:22px}
+.layout .shop-hero h2{font-size:clamp(23px,3.1vw,38px);margin:10px 0;line-height:1.16}
+.layout .shop-hero p{line-height:1.48;font-size:12px}
+.layout .shop-hero-actions{gap:9px;margin-top:15px}
+.layout .shop-primary-link,.layout .shop-chips button{min-height:44px}
+.layout .shop-primary-link{gap:10px;padding:9px 12px}
+.layout .shop-trust-strip{padding:10px 8px;gap:8px;font-size:11px}
+.layout .shop-section{margin-top:23px}
+.layout .shop-section-top{gap:8px;margin-bottom:11px}
+.layout .shop-section h2,.layout .shop-request-section h2,.layout .shop-admin-section h2{font-size:21px}
+.layout .shop-section-top p{line-height:1.45;margin-top:4px}
+.layout .shop-chips{gap:6px;padding-bottom:8px}
+.layout .shop-chips button{padding:8px 11px}
+.layout .shop-products{gap:11px}
+.layout .shop-product-card{border-radius:15px}
+.layout .shop-guide-admin{padding:13px!important;margin:13px 0!important}
+.layout .shop-guide-admin-grid{gap:9px;margin:10px 0}
+.layout .shop-guide-upload{padding:10px}
+.layout .shop-guide-image-details summary{min-height:44px;display:list-item;align-content:center}
+
+/* Đơn mua: khối trạng thái và lịch sử bớt chiều cao. */
+.layout .sorder-summary{gap:9px;margin-bottom:13px}
+.layout .sorder-summary-card{padding:12px 14px;border-radius:14px;gap:5px}
+.layout .sorder-summary-card strong{font-size:23px}
+.layout .sorder-intro{padding:13px 15px;gap:10px;margin-bottom:13px;border-radius:15px}
+.layout .sorder-intro p{line-height:1.45;margin-top:5px}
+.layout .sorder-notice{padding:9px 11px;margin-bottom:12px;line-height:1.45}
+.layout .sorder-section-heading{margin:16px 0 10px}
+.layout .sorder-section-heading h2{font-size:19px}
+.layout .sorder-list,.layout .sorder-admin-list{gap:10px}
+.layout .sorder-card,.layout .sorder-admin-card{padding:13px 14px;border-radius:15px}
+.layout .sorder-product{margin:10px 0;padding:9px;gap:9px}
+.layout .sorder-steps{padding-bottom:8px}
+.layout .sorder-step{gap:5px}
+.layout .sorder-wait,.layout .sorder-rejection{padding:9px 10px;line-height:1.45}
+.layout .sorder-award{padding:9px 10px;margin-top:8px}
+.layout .sorder-timeline{margin-top:11px;padding-top:10px}
+.layout .sorder-timeline summary{min-height:44px;align-items:center}
+
+/* Đổi thẻ cào và quản lý Admin: ít scroll nhưng giữ lịch sử và hành động. */
+.layout .cards-hero{padding:16px 18px;margin:10px 0 13px;border-radius:16px}
+.layout .cards-hero h2{font-size:22px;margin:5px 0}
+.layout .cards-hero-icon{font-size:40px}
+.layout .cards-warning{padding:9px 11px;margin:9px 0}
+.layout .cards-columns{gap:12px}
+.layout .cards-exchange-form,.layout .cards-howto{padding:14px}
+.layout .cards-howto ol{gap:9px}
+.layout .cards-section-head{margin:16px 0 9px}
+.layout .cards-history{gap:10px}
+.layout .cards-item,.layout .cards-admin-item{padding:12px 13px}
+.layout .cards-meta{margin:8px 0;line-height:1.4}
+.layout .cards-balance{padding:9px 11px}
+.layout .cards-primary,.layout .cards-settings-row .btn{min-height:44px}
+.layout .admin-tasks-panel table td .small{margin-top:3px}
+.layout .admin-tasks-panel table td .btn{margin-top:5px;min-height:44px}
+.layout .admin-link-task-hint{margin:10px 0;line-height:1.45}
+.layout .admin-link-task-hint .note{line-height:1.45}
+
+/* Mobile-first: gọn rõ trên iPhone/Android, không gây Safari auto-zoom. */
+@media(max-width:730px){
+ .layout .topbar{height:60px;padding:8px 11px;gap:7px}
+ .layout .topbar-leading{gap:7px}
+ .layout .topbar h1{font-size:16px}
+ .layout .menu-toggle{width:42px;height:44px;flex-basis:42px;font-size:23px}
+ .layout .topbar .top-right{gap:5px}
+ .layout .topbar .header-icon-button,.layout .topbar .header-avatar{
+  width:40px;height:44px;flex-basis:40px;min-width:40px;border-radius:50%
+ }
+ .layout .topbar .balance-pill{padding:7px 8px;font-size:12px;border-radius:12px}
+ .layout .content{padding:12px 12px 25px}
+ .layout .page-head{margin-bottom:10px}
+ .layout .page-head h2{font-size:19px}
+ .layout .page-head p{font-size:12px;line-height:1.35;margin-top:3px}
+ .layout .content .card{padding:12px 13px;border-radius:14px}
+ .layout .content .card h3{font-size:15px;margin-bottom:7px}
+ .layout .content .grid,.layout .content .grid.two,.layout .content .grid.four{gap:9px}
+ .layout .content .section{margin-top:12px}
+ .layout .global-payment-wrap:not([hidden]){margin-bottom:9px}
+ .layout .global-payment-wrap>.task-payment{padding:11px 13px 14px;border-radius:14px}
+ .layout .task-payment .paid-slide{min-height:79px}
+ .layout .task-payment .paid-status-line strong{font-size:11px}
+ .layout .task-payment .paid-highlight{font-size:22px;margin:4px 0 2px!important}
+ .layout .task-payment .paid-bank-line{font-size:12px;margin:2px 0 3px}
+ .layout .task-payment .paid-disclaimer{font-size:10px;line-height:1.3}
+ .layout .task-dashboard{gap:9px;margin:4px 0 12px}
+ .layout .task-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .layout .content .task-stat{min-height:72px;padding:9px 10px;border-radius:12px}
+ .layout .task-stat span{font-size:10px;line-height:1.28}
+ .layout .task-stat strong{font-size:18px;margin-top:5px;line-height:1.15}
+ .layout .content .task-security-compact.card{padding:10px 12px;border-radius:12px}
+ .layout .task-security-compact .task-security-title{font-size:14px;margin-bottom:6px}
+ .layout .task-security-ip,.layout .task-security-id{font-size:12px}
+ .layout .task-security-ip strong{font-size:14px}
+ .layout .task-security-compact p.task-security-policy{
+  padding:6px 8px;margin:6px 0;font-size:11px;line-height:1.35
+ }
+ .layout .task-security-quotas{font-size:10px;margin-top:6px;padding-top:6px}
+ .layout .task-security-details>summary{min-height:44px}
+ .layout .task-list-heading{font-size:17px;margin:12px 0 8px}
+ .layout .content .task-card-modern{padding:12px 12px 11px;border-radius:14px}
+ .layout .content .task-card-modern-icon{width:41px;height:41px;font-size:19px}
+ .layout .content .task-card-modern h3{font-size:15px;margin-bottom:5px}
+ .layout .content .task-card-modern-description{font-size:12px;margin:7px 0}
+ .layout .content .task-card-modern-action{min-height:46px;font-size:14px}
+ .layout .content .task-card-modern-section-head{margin:12px 0 8px}
+ .layout .content .task-card-modern-section-head h3{font-size:17px}
+ .layout .content .field input,.layout .content .field select,.layout .content .field textarea{
+  font-size:16px;min-height:44px
+ }
+ .layout .content input[type="number"],.layout .content input[type="text"],
+ .layout .content input[type="email"],.layout .content input[type="tel"],
+ .layout .content input[type="url"],.layout .content select,.layout .content textarea{
+  font-size:16px
+ }
+ .layout .content .btn,.layout .content .btn.sm{min-height:44px}
+ .layout .content .form-row{gap:6px}
+ .layout .content .callout{font-size:12px;padding:9px 10px}
+ .layout .content .withdraw-fee-preview,.layout .content .cards-fee-preview{padding:9px 10px;gap:6px}
+ .layout .content .withdraw-history-item{padding:10px 11px}
+ .layout .shop-hero{display:block;min-height:0;border-radius:15px}
+ .layout .shop-hero-copy{padding:17px 16px}
+ .layout .shop-hero h2{font-size:24px;margin:8px 0}
+ .layout .shop-hero-visual{display:none}
+ .layout .shop-hero-actions{margin-top:12px}
+ .layout .shop-trust-strip{padding:9px 4px}
+ .layout .shop-section{margin-top:16px}
+ .layout .shop-section h2,.layout .shop-request-section h2,.layout .shop-admin-section h2{font-size:19px}
+ .layout .shop-section-top{margin-bottom:9px}
+ .layout .shop-products{gap:9px}
+ .layout .sorder-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .layout .sorder-summary-card{padding:10px 11px}
+ .layout .sorder-summary-card strong{font-size:19px}
+ .layout .sorder-intro{padding:11px 12px}
+ .layout .sorder-list,.layout .sorder-admin-list{grid-template-columns:1fr;gap:9px}
+ .layout .cards-hero{padding:13px 14px}
+ .layout .cards-hero-icon{font-size:30px}
+ .layout .cards-exchange-form,.layout .cards-howto{padding:12px}
+ .layout .cards-item,.layout .cards-admin-item{padding:11px 12px}
+ .layout .saved-payout-form input:not([type="checkbox"]),
+ .layout .saved-payout-form select,.layout .cards-exchange-form select,
+ .layout .cards-settings-row select,.layout .cards-deliver-form input{
+  font-size:16px;min-height:44px
+ }
+ .layout .content .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+ .layout .content th,.layout .content td{padding:8px 9px}
+ .layout .content .modal{max-width:100%}
+}
+@media(max-width:380px){
+ .layout .topbar{padding-left:8px;padding-right:8px}
+ .layout .content{padding-left:10px;padding-right:10px}
+ .layout .topbar .balance-pill{padding:6px 7px;font-size:11px}
+ .layout .task-stat strong{font-size:16px}
+ .layout .content .task-card-modern-count{min-width:37px}
+}
