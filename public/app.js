@@ -1191,6 +1191,16 @@ async function adminSettings(){
 }
 async function startTask(taskId){
  const data=await api(`/api/tasks/${encodeURIComponent(taskId)}/start`,'POST',{});
+ // Link rút gọn có Admin duyệt: mở thẳng link trong CÙNG tab.
+ // Chỉ sau khi nhà cung cấp chuyển về trang đích, khách mới giải phép tính.
+ // Không yêu cầu bằng chứng/giải CAPTCHA trước khi mở link.
+ if(data.category==='link'&&data.review_mode==='manual'){
+  const url=String(data.task_url||'');
+  if(!/^https:\/\//i.test(url))throw new Error('Admin chưa cài liên kết HTTPS hợp lệ cho nhiệm vụ này.');
+  state.attempt=null;
+  location.assign(url);
+  return;
+ }
  state.attempt={...data,taskId};renderAttemptModal();
 }
 function renderAttemptModal(){
