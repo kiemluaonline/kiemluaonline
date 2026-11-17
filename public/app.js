@@ -1213,7 +1213,7 @@ function showTaskRules(taskId){
    <li><span class="task-rules-rule-icon" aria-hidden="true">⊘</span><span>Không dùng tool, script, auto hay bất kỳ hành vi gian lận nào.</span></li>
    <li><span class="task-rules-rule-icon" aria-hidden="true">◎</span><span>Không dùng VPN, proxy hay trình duyệt ẩn danh khi làm nhiệm vụ.</span></li>
    <li><span class="task-rules-rule-icon" aria-hidden="true">♧</span><span>Không tạo nhiều tài khoản trên cùng một thiết bị để nhận thưởng.</span></li>
-   <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Không lấy kết quả nhiệm vụ từ website khác rồi gửi nhận Lúa tại Trạm Có Lúa.</span></li>
+   <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Chỉ thực hiện nhiệm vụ thông qua nút “Bắt đầu” tại Trạm Có Lúa. Không sử dụng link của người khác hoặc tự truy cập trang xác minh để nhận thưởng.</span></li>
   </ul>
   <p class="task-rules-note">${task.review_mode==='manual'?'Lượt quay về và phép tính không xác nhận doanh thu. Chỉ cộng Lúa sau khi Admin kiểm tra và duyệt nhiệm vụ hợp lệ theo điều kiện đối tác.':'Thưởng chỉ được ghi nhận khi nhiệm vụ vượt qua các bước xác minh của hệ thống và đáp ứng điều kiện áp dụng.'}</p>
   <div class="task-rules-actions">
