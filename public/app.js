@@ -1421,6 +1421,23 @@ async function startTask(taskId){
   throw error;
  }
 }
+function renderAttemptModal(){
+ const a=state.attempt;if(!a)return;
+ const remain=a.category==='video'?Math.max(0,Math.ceil((a.available_at-Date.now())/1000)):0;
+ const root=document.getElementById('modal-root');
+ root.innerHTML=`<div class="modal-cover"><section class="modal"><button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
+ <span class="eyebrow">KIỂM TRA THỰC HIỆN</span><h3>Hoàn thành nhiệm vụ</h3>
+ ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
+ ${a.category==='link'?'<p class="note">Nếu link được cấu hình quay về Trạm Có Lúa, hệ thống tự ghi nhận Chờ đối soát khi đến trang đích. Không cần nhập lại mã trên website. Chỉ Admin xác minh nguồn thu hợp lệ mới duyệt thưởng.</p>':''}
+ <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
+ ${a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
+ <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
+ ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
+ ${a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
+ <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
+ ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
+}
+
 // Chrome Android / Safari iPhone: vuốt quay lại từ website nhiệm vụ có thể
 // khôi phục trang cũ từ back-forward cache (BFCache), giữ cả popup "Đang chuyển".
 // Chỉ tải lại khi tài liệu THỰC SỰ đã rời khỏi trang Nhiệm vụ rồi quay về.
@@ -1446,23 +1463,6 @@ document.addEventListener('visibilitychange',()=>{
  // Trình duyệt trên điện thoại có thể kích hoạt visibilitychange trước pageshow.
  if(!document.hidden)reloadTaskPageOnHistoryReturn();
 });
-function renderAttemptModal(){
- const a=state.attempt;if(!a)return;
- const remain=a.category==='video'?Math.max(0,Math.ceil((a.available_at-Date.now())/1000)):0;
- const root=document.getElementById('modal-root');
- root.innerHTML=`<div class="modal-cover"><section class="modal"><button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button>
- <span class="eyebrow">KIỂM TRA THỰC HIỆN</span><h3>Hoàn thành nhiệm vụ</h3>
- ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
- ${a.category==='link'?'<p class="note">Nếu link được cấu hình quay về Trạm Có Lúa, hệ thống tự ghi nhận Chờ đối soát khi đến trang đích. Không cần nhập lại mã trên website. Chỉ Admin xác minh nguồn thu hợp lệ mới duyệt thưởng.</p>':''}
- <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
- ${a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
- <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
- ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
- ${a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
- <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
- ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
-}
-
 async function shrinkAppProof(file) {
  if (!file || !file.size) throw new Error('Bạn cần chọn ảnh chụp màn hình trước khi gửi.');
  if (file.size > 20*1024*1024) throw new Error('Ảnh gốc vượt 20 MB. Hãy chọn ảnh chụp màn hình nhỏ hơn.');
