@@ -32,37 +32,56 @@ function displayPaidRotation(index){
  slides.forEach((slide,i)=>{slide.hidden=i!==next;});
  box.dataset.active=String(next);
 }
+function paidAnnouncementSignature(records){
+ return records.map(p=>[p.id||'',p.vnd_amount||'',p.at||''].join(':')).join('|');
+}
+let paidRefreshInFlight=false;
+async function refreshPaidRotation(){
+ const box=document.getElementById('paid-rotation');
+ if(!box||!box.isConnected||state.me?.user?.role!=='member'||document.hidden||paidRefreshInFlight)return;
+ paidRefreshInFlight=true;
+ try{
+  // Endpoint nhỏ chỉ đọc giao dịch thật đã được Admin chuyển khoản, không tải lại
+  // toàn bộ thống kê nhiệm vụ sau mỗi lần kiểm tra.
+  const r=await api('/api/public-paid-announcements');
+  if(!box.isConnected||document.getElementById('paid-rotation')!==box||
+     state.me?.user?.role!=='member')return;
+  const records=r.recent_payments||[];
+  const signature=paidAnnouncementSignature(records);
+  if(signature===box.dataset.signature)return;
+  const slidesHost=box.querySelector('.paid-rotation-slides');
+  if(!slidesHost)return;
+  slidesHost.innerHTML=records.length?paymentSlides(records):
+   '<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút từ 5.000đ nào được Admin xác nhận đã chuyển.</p>';
+  box.dataset.signature=signature;
+  box.classList.toggle('has-paid-rotation',records.length>1);
+  // Giao dịch mới của Admin xuất hiện tự động: chạy lại theo thứ tự cũ -> mới.
+  displayPaidRotation(0);
+  startPaidRotation();
+ }catch{
+  // Lỗi mạng không được tạo giao dịch giả hoặc xóa dữ liệu đang hiển thị.
+ }finally{paidRefreshInFlight=false;}
+}
 function startPaidRotation(){
  stopPaidRotation();
  const box=document.getElementById('paid-rotation');if(!box)return;
  const slides=box.querySelectorAll('.paid-slide');
+ // Tự động chạy từ giao dịch cũ -> mới rồi quay lại giao dịch cũ.
+ // Nếu chỉ có 1 giao dịch thật từ 5.000đ, giữ nguyên; không nhân bản giao dịch.
  if(slides.length>1&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
   paidRotationTimer=setInterval(()=>{
    if(!box.isConnected||state.me?.user?.role!=='member'){stopPaidRotation();return;}
    if(!document.hidden)displayPaidRotation(Number(box.dataset.active||0)+1);
   },6000);
  }
- // Nhận thêm các giao dịch mới được Admin đánh dấu "Đã thanh toán" khi vẫn mở trang.
- paidRefreshTimer=setInterval(async()=>{
-  if(!box.isConnected||state.me?.user?.role!=='member'){stopPaidRotation();return;}
-  if(document.hidden)return;
-  try{
-   const r=await api('/api/task-dashboard');
-   if(!box.isConnected||state.me?.user?.role!=='member')return;
-   const records=r.recent_payments||[];
-   const signature=records.map(x=>x.id).join('|');
-   if(signature!==box.dataset.signature){
-    box.dataset.signature=signature;
-    const slidesHost=box.querySelector('.paid-rotation-slides');
-    if(slidesHost)slidesHost.innerHTML=records.length?paymentSlides(records):
-     '<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p>';
-    box.classList.toggle('has-paid-rotation',records.length>1);
-    displayPaidRotation(0);
-    startPaidRotation();
-   }
-  }catch{ /* Mất kết nối tạm thời: giữ danh sách thanh toán đã tải, không hiện giao dịch giả. */ }
- },90000);
+ // Luôn theo dõi giao dịch mới kể cả lúc chỉ có 0/1 khoản thanh toán.
+ // Khi Admin xác nhận Đã thanh toán, mọi thẻ đang mở sẽ cập nhật trong ~15 giây.
+ paidRefreshTimer=setInterval(refreshPaidRotation,15000);
 }
+// iPhone tạm dừng timer khi chuyển tab: tự kiểm tra ngay lúc mở website trở lại.
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden)refreshPaidRotation();
+});
 const BANK_LIST = [
   ['','-- Chọn ngân hàng nhận tiền --'],
   ['BVBank','BVBank (hỗ trợ số tài khoản liên kết ZaloPay 99ZP)'],['Vietcombank','Vietcombank'],['BIDV','BIDV'],['VietinBank','VietinBank'],
@@ -710,7 +729,7 @@ const adminIP = (ip,observed=null) => {
 
 function taskPaymentCard(d){
  const payments=d.recent_payments|| (d.latest_payment?[d.latest_payment]:[]);
- const signature=payments.map(p=>p.id||p.at).join('|');
+ const signature=paidAnnouncementSignature(payments);
  const payment=payments.length?paymentSlides(payments)
   :'<strong>↗ THÔNG BÁO THANH TOÁN</strong><p>Chưa có khoản rút nào được Admin xác nhận đã chuyển.</p><small>Không sử dụng giao dịch minh họa.</small>';
  return `<section class="card task-payment ${payments.length>1?'has-paid-rotation':''}" id="paid-rotation" data-active="0" data-signature="${esc(signature)}" aria-label="Các giao dịch đã thanh toán">
