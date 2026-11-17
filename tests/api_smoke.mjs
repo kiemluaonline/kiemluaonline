@@ -1913,6 +1913,11 @@ assert.match(paymentAutoSrc,/document.addEventListener\('visibilitychange'/,
  'iPhone tab resume must refresh new paid transactions right away');
 assert.match(paymentAutoSrc,/displayPaidRotation\(Number\(box.dataset.active\|\|0\)\+1\)/,
  'Successive slides must automatically rotate in chronological order');
+assert.match(paymentAutoSrc,/if\(slides.length>1\)\{/,
+ 'Multiple eligible payments rotate automatically on every iPhone');
+assert.doesNotMatch(paymentAutoSrc,/matchMedia\('prefers-reduced-motion/,
+ 'Reduce Motion should disable visual animation, not freeze the payment list');
+
 assert.match(paymentAutoClient,/const signature=paidAnnouncementSignature\(payments\)/,
  'Initial dashboard and refresh must compare identical signatures');
 console.log('PASS: public paid ticker cycles old -> new, polls automatically every 15 seconds and refreshes after iPhone tab resume.');
