@@ -66,9 +66,10 @@ function startPaidRotation(){
  stopPaidRotation();
  const box=document.getElementById('paid-rotation');if(!box)return;
  const slides=box.querySelectorAll('.paid-slide');
- // Tự động chạy từ giao dịch cũ -> mới rồi quay lại giao dịch cũ.
+ // Tự chuyển giữa các giao dịch cũ -> mới, kể cả khi bật Giảm chuyển động trên iPhone.
+ // Nếu chọn Giảm chuyển động, CSS sẽ tắt hiệu ứng nhưng vẫn cập nhật nội dung.
  // Nếu chỉ có 1 giao dịch thật từ 5.000đ, giữ nguyên; không nhân bản giao dịch.
- if(slides.length>1&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+ if(slides.length>1){
   paidRotationTimer=setInterval(()=>{
    if(!box.isConnected||state.me?.user?.role!=='member'){stopPaidRotation();return;}
    if(!document.hidden)displayPaidRotation(Number(box.dataset.active||0)+1);
