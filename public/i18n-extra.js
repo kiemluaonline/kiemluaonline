@@ -355,6 +355,7 @@ window.TramExtraTranslations = {
   "Xem đơn →": "Saib daim xaj →",
   "Nhấn để xem liên kết mua hàng trong gian hàng Trạm Có Lúa.": "Nias kom saib link yuav khoom hauv Trạm Có Lúa lub khw.",
   "Sao chép": "Luam",
+  "Quota chặn theo mã thiết bị và địa chỉ IP - đổi IP/VPN/4G không giúp vượt giới hạn.": "Qhov txwv raug xyuas raws tus lej cim browser thiab IP - hloov IP/VPN/4G tsis pab hla qhov txwv.",
   "Hạn mức nhiệm vụ được đặt lại lúc 00:00 (giờ Việt Nam).": "Cov kev txwv haujlwm rov pib thaum 00:00 (sijhawm Nyab Laj).",
   "Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.": "Sau npe as khauj tshiab hauv app, sau tus lej kom raug, ces xa daim duab rau Admin. Tsuas tau Lúa thaum pom zoo.",
   "Ví ZaloPay phải thuộc số điện thoại người nhận. Admin sẽ chuyển tiền và đối chiếu thủ công.": "ZaloPay yuav tsum siv tus xov tooj ntawm tus txais nyiaj. Admin yuav xa nyiaj thiab kuaj nws tus kheej.",
