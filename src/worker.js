@@ -1464,12 +1464,23 @@ async function handler(req, env) {
         pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n });
     }
     if (m === 'GET' && p === '/api/admin/tasks') {
-      const [rows,settings]=await Promise.all([
+      const [rows,settings,activity]=await Promise.all([
         env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
-        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all()
+        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all(),
+        env.DB.prepare(`SELECT task_id,COUNT(*) AS submitted_today,
+          SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_today
+          FROM task_completions WHERE date(created_at,'+7 hours')=date('now','+7 hours')
+          GROUP BY task_id`).all()
       ]);
       const limits=new Map(settings.results.map(r=>[r.key,int(r.value,1)]));
-      return json({tasks:rows.results.map(t=>{const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);return {...t,category:t.category==='other'&&appCode?'app':t.category,link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode};})});
+      const dailyActivity=new Map(activity.results.map(r=>[r.task_id,r]));
+      return json({tasks:rows.results.map(t=>{
+        const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
+        const usage=dailyActivity.get(t.id);
+        return {...t,category:t.category==='other'&&appCode?'app':t.category,
+          link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,
+          submitted_today:Number(usage?.submitted_today||0),pending_today:Number(usage?.pending_today||0)};
+      })});
     }
     if (m === 'POST' && p === '/api/admin/tasks') {
       const t = validateTaskBody(await readBody(req)), taskId = id();
