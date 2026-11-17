@@ -1379,6 +1379,13 @@ const memberBefore=(await call('/api/me','GET',undefined,returnMember.cookie,ret
 const startedReturn=await call('/api/tasks/'+returnTask.data.id+'/start','POST',{},
  returnMember.cookie,returnIP,returnDevice);
 assert.equal(startedReturn.status,200,JSON.stringify(startedReturn));
+const startedReturnAgain=await call('/api/tasks/'+returnTask.data.id+'/start','POST',{},
+ returnMember.cookie,returnIP,returnDevice);
+assert.equal(startedReturnAgain.status,200,'Bắt đầu lại tạo một phiên Link mới');
+const returnMemberId=sqlite.prepare("SELECT id FROM users WHERE email='link-return-test@example.com'").get().id;
+assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>?')
+ .get(returnMemberId,returnTask.data.id,Date.now()).n,1,
+ 'Bắt đầu lại phải vô hiệu hóa các phiên Link cũ');
 assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,
  '55555555-3333-4333-8444-555555555555')).status,409,'Sai mã trình duyệt không được ghi nhận');
 assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
@@ -1386,6 +1393,8 @@ assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.25
 const challenge=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
 assert.equal(challenge.status,200,JSON.stringify(challenge));
 assert.equal(challenge.data.challenge,true,'Khi quay về phải hiện phép tính, chưa ghi lượt');
+assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast'")
+ .get(returnMemberId).n,1,'Quay về ngay sau khi bắt đầu phải ghi cảnh báo rủi ro');
 assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(returnTask.data.id).n,0,
  'Chưa giải phép tính thì chưa được ghi nhận nhiệm vụ');
 const wrongReturn=await call(returnPath,'POST',{answer:'999'},
@@ -1413,6 +1422,8 @@ assert.equal(adminReturnTask.submitted_today,1,'Admin today count is from actual
 assert.equal(adminReturnTask.pending_today,1,'Admin pending count must include returned-link review');
 
 assert.match(returnRow.evidence,/\[LINK_RETURN_V1\]/);
+assert.match(returnRow.evidence,/\[LINK_RETURN_FAST_V1\]/,
+ 'Ghi cờ quay về nhanh trong bằng chứng để Admin kiểm tra');
 assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?")
  .get(returnRow.id).n,0,'Chưa có giao dịch Lúa khi chưa đối soát');
 assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice)).status,409,
@@ -1421,7 +1432,13 @@ assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{status:'appr
  'Để duyệt tín hiệu quay về, Admin phải xác nhận đã tự đối soát nguồn thu');
 assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
  status:'approved',revenue_confirmed:true
+},admCookie)).status,400,'Lượt quay về quá nhanh phải có ghi chú đối soát độc lập');
+assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
+ status:'approved',revenue_confirmed:true,
+ risk_override_reason:'Đã đối chiếu độc lập kết quả với báo cáo đối tác hợp lệ.'
 },admCookie)).status,200);
+assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND event_type='link_fast_return_approved'")
+ .get(returnMemberId).n,1,'Lưu nhật ký về quyết định Admin duyệt lượt có cảnh báo');
 assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance,
  memberBefore+77,'Chỉ ghi Lúa sau khi Admin chủ động xác nhận nguồn thu và duyệt');
 assert.equal((await call('/api/admin/reviews/'+returnRow.id,'POST',{
@@ -1573,3 +1590,17 @@ assert.match(cleanedHelper,/window\.history\.replaceState\(null,'',location\.pat
 assert.match(cleanedReturnClient,/\+encodeURIComponent\(c\.taskId\)\+'\/return'/,
  'CAPTCHA submission must still use the captured task ID from in-memory state');
 console.log('PASS: shortlink destination query is removed from address bar without breaking CAPTCHA verification.');
+
+const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
+assert.match(linkFraudWorkerSource,/LINK_RETURN_FAST_SECONDS = 20/);
+assert.match(linkFraudWorkerSource,/event\(env,req,'link_return_too_fast'/);
+assert.match(linkFraudWorkerSource,/UPDATE task_attempts SET expires_at=\?/,
+ 'Re-starting a link must expire older active attempts');
+assert.match(linkFraudWorkerSource,/risk_override_reason/);
+assert.match(linkFraudWorkerSource,/link_fast_return_approved/);
+const reviewFraudClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+assert.match(reviewFraudClient,/Lượt quay về dưới 20 giây/);
+assert.match(reviewFraudClient,/data-fast-return/);
+assert.match(reviewFraudClient,/Cần ít nhất 20 ký tự ghi rõ căn cứ đối soát/);
+assert.match(reviewFraudClient,/admin-link-risk-warning/);
+console.log('PASS: anti-fraud flags very fast returns, allows only one active Link attempt, requires Admin override evidence, and preserves manual reward approval.');
