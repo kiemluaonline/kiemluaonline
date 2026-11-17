@@ -1509,7 +1509,7 @@ assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/r
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/link-return-captcha/);
 const linkOpenClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const linkStartCode=linkOpenClient.slice(linkOpenClient.indexOf('async function startTask('),linkOpenClient.indexOf('function renderAttemptModal('));
-assert.match(linkStartCode,/data\.category==='link'&&data\.review_mode==='manual'/,
+assert.match(linkStartCode,/const autoOpenLink=data.category==='link'&&data.review_mode==='manual'/,
  'Chỉ nhiệm vụ Link với Admin duyệt được đi thẳng, các loại nhiệm vụ cũ giữ nguyên');
 assert.match(linkStartCode,/location\.assign\(url\)/,
  'Nút Bắt đầu phải mở thẳng link trong cùng tab iPhone');
@@ -1541,7 +1541,7 @@ assert.match(rulesSource,/if\(act==='confirm-task-rules'\)/);
 assert.match(rulesSource,/await startTask\(taskId\)/,
  'Chỉ bắt đầu phiên nhiệm vụ khi thành viên xác nhận');
 assert.match(rulesSource,/if\(act==='cancel-task-rules'\)/);
-assert.match(rulesSource,/if\(data.category==='link'&&data.review_mode==='manual'\)/,
+assert.match(rulesSource,/const autoOpenLink=data.category==='link'&&data.review_mode==='manual'/,
  'Sau xác nhận, Link được mở trực tiếp mà không có hộp nộp bằng chứng cũ');
 const rulesCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
 assert.match(rulesCss,/\.task-rules-modal/);
