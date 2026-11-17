@@ -770,6 +770,20 @@ async function linkTaskPerAccountLimit(env,task){
 // Lượt đã đến trang đích nhưng chưa nộp CAPTCHA được đánh dấu bằng
 // available_at < 0 trên phiên Link (dấu âm biểu thị thời điểm quay về, ms).
 // Không thay đổi cấu trúc D1, và không ảnh hưởng available_at của Video.
+// Dữ liệu duy nhất cho thẻ thanh toán: các giao dịch thực đã được Admin đánh
+// dấu Đã thanh toán, từ 5.000đ trở lên. Lấy 24 khoản mới nhất rồi đảo sang
+// thứ tự CŨ -> MỚI để chạy từ đầu tới cuối theo đúng thời gian thực.
+async function publicPaidAnnouncements(env){
+ const rows=await env.DB.prepare(
+  "SELECT id,bank_account,vnd_amount,COALESCE(reviewed_at,created_at) AS paid_at " +
+  "FROM withdrawals WHERE status='paid' AND vnd_amount>=5000 " +
+  "ORDER BY COALESCE(reviewed_at,created_at) DESC,id DESC LIMIT 24"
+ ).all();
+ return rows.results.slice().reverse().map(w=>({
+  id:w.id,masked_account:maskedAccount(w.bank_account),
+  vnd_amount:w.vnd_amount,at:w.paid_at
+ }));
+}
 async function linkReturnUsage(env,userId,taskId){
  const row=await env.DB.prepare(`SELECT
   (SELECT COUNT(*) FROM task_completions
@@ -1223,13 +1237,18 @@ async function handler(req, env) {
       browser_quota:{limit:browserLimit,used:browserUsed.total,blocked:browserDenied,
         exclusive:settings.quota_link_device_exclusive!=='0',reset_timezone:'Asia/Ho_Chi_Minh',reset_at_hour:0}});
   }
+  if (m === 'GET' && p === '/api/public-paid-announcements') {
+    await auth(req,env);
+    // Nạp nhẹ để thẻ thanh toán tự cập nhật; chỉ giao dịch đã thanh toán >= 5.000đ.
+    return json({recent_payments:await publicPaidAnnouncements(env)});
+  }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
-    const [todayLua,linkLua,submittedToday,recent] = await Promise.all([
+    const [todayLua,linkLua,submittedToday,paidAnnouncements] = await Promise.all([
       env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS n FROM wallet_entries WHERE user_id=? AND amount>0 AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
-      env.DB.prepare("SELECT COALESCE(SUM(c.reward),0) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=? AND c.status='approved' AND t.category='link'").bind(me.id).first(),
+      env.DB.prepare("SELECT COALESCE(SUM(c.reward),0) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=? AND status='approved' AND t.category='link'").bind(me.id).first(),
       env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=?").bind(me.id,today).first(),
-      env.DB.prepare("SELECT id,bank_account,vnd_amount,COALESCE(reviewed_at,created_at) AS paid_at FROM withdrawals WHERE status='paid' AND vnd_amount>=5000 ORDER BY COALESCE(reviewed_at,created_at) DESC,id DESC LIMIT 12").all()
+      publicPaidAnnouncements(env)
     ]);
     return json({
       today_lua:todayLua.n,link_lua:linkLua.n,submitted_today:submittedToday.n,
@@ -1238,10 +1257,12 @@ async function handler(req, env) {
       // Thẻ thanh toán chỉ công khai khoản đã chi từ 5.000đ trở lên để đúng mức rút tối thiểu hiện hành.
       // Giữ nguyên lịch sử giao dịch cũ (kể cả dưới 5.000đ) trong D1 và màn hình đối soát Admin.
       // Không công khai user_id hoặc số TK đầy đủ.
-      recent_payments:recent.results.map(w=>({id:w.id,masked_account:maskedAccount(w.bank_account),
-        vnd_amount:w.vnd_amount,at:w.paid_at})),
-      latest_payment:recent.results[0]?{masked_account:maskedAccount(recent.results[0].bank_account),
-        vnd_amount:recent.results[0].vnd_amount,at:recent.results[0].paid_at}:null
+      recent_payments:paidAnnouncements,
+      latest_payment:paidAnnouncements.length?{
+        masked_account:paidAnnouncements[paidAnnouncements.length-1].masked_account,
+        vnd_amount:paidAnnouncements[paidAnnouncements.length-1].vnd_amount,
+        at:paidAnnouncements[paidAnnouncements.length-1].at
+      }:null
     });
   }
   // Trang đích của link tĩnh: /?link_return=<task_id>.
