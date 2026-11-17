@@ -187,6 +187,10 @@ async function processLinkReturn(){
   const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',{});
   if(!result.challenge)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
   state.returnChallenge={taskId,a:result.a,b:result.b};
+  // URL của trang đích Link4M là công khai. Sau khi nhận phiên và phép tính,
+  // xóa mã nhiệm vụ khỏi thanh địa chỉ bằng replaceState (không tạo trang lịch sử mới).
+  // Mã vẫn được giữ trong bộ nhớ của trang để xác minh mà không cần URL query.
+  clearLinkReturnQuery();
   await navigate('tasks');
   renderLinkReturnModal();
  }catch(error){
