@@ -1922,3 +1922,38 @@ assert.match(paymentAutoClient,/const signature=paidAnnouncementSignature\(payme
  'Initial dashboard and refresh must compare identical signatures');
 console.log('PASS: public paid ticker cycles old -> new, polls automatically every 15 seconds and refreshes after iPhone tab resume.');
 
+
+
+// Giao diện compact dùng chung: được nạp SAU các stylesheet cũ để thay đổi
+// khoảng trắng mà không sửa dữ liệu, điều kiện xét thưởng hay API.
+const compactStyle=readFileSync(new URL('../public/compact.css',import.meta.url),'utf8');
+const compactLink='/compact.css?v=20261117-mobile-global-compact-v1';
+assert.ok(publicHomepage.includes(compactLink),'Compact CSS must be loaded on the public app shell');
+assert.ok(publicHomepage.indexOf(compactLink)>publicHomepage.indexOf('/payout-accounts.css?'),
+ 'Compact stylesheet must load last to override member/Admin page styles');
+for(const section of [
+ '.layout .global-payment-wrap:not([hidden])',
+ '.layout .task-stats',
+ '.layout .task-security-compact',
+ '.layout .content .task-card-modern',
+ '.layout .withdraw-fee-preview',
+ '.layout .shop-hero',
+ '.layout .sorder-summary',
+ '.layout .cards-hero',
+ '.layout .admin-tasks-panel'
+]){
+ assert.ok(compactStyle.includes(section),'Missing compact styling for '+section);
+}
+assert.match(compactStyle,/@media\(max-width:730px\)/,
+ 'Compact layout must have dedicated mobile styles');
+assert.match(compactStyle,/min-height:44px/,
+ 'Mobile forms and buttons must retain 44px touch height');
+assert.match(compactStyle,/font-size:16px;min-height:44px/,
+ 'Form controls must avoid iPhone Safari input auto zoom');
+assert.match(compactStyle,/\.layout \.task-payment \.paid-slide\{min-height:79px\}/,
+ 'Paid ticker must retain its rotating slides while reducing vertical height');
+assert.doesNotMatch(compactStyle,/\.task-payment\s*\{[^}]*display\s*:\s*none/,
+ 'Compact mode must not hide the paid notification carousel');
+assert.doesNotMatch(compactStyle,/\.layout\s+\.task-security-compact\s*\{[^}]*display\s*:\s*none/,
+ 'Fraud prevention information must remain visible');
+console.log('PASS: unified compact responsive UI loaded last for tasks, payout, shopping, cards and admin; mobile tap targets retained.');
