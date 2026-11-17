@@ -494,13 +494,33 @@ assert.equal((await call('/api/admin/withdrawals/'+oldPaidID,'POST',{status:'pai
 const legacyPaid=(await call('/api/history','GET',undefined,cookie)).data.withdrawals.find(w=>w.id===oldPaidID);
 assert.equal(legacyPaid.status,'paid');
 assert.equal(legacyPaid.payment_method,'zalopay');
+// Giao dịch lịch sử dưới mức rút hiện hành vẫn tồn tại cho Admin và thành viên
+// tự kiểm tra, nhưng KHÔNG được xuất hiện trên thẻ thông báo công khai.
+const legacyOneThousandID='00000000-0000-4000-8000-0000000000ac';
+sqlite.prepare(`INSERT INTO withdrawals
+  (id,user_id,amount,vnd_amount,rate_lua_per_vnd,bank_name,bank_account,bank_owner,status)
+  VALUES(?,?,10000,1000,10,'Vietcombank','555544443333','TEST MEMBER','paid')`)
+  .run(legacyOneThousandID,legacyUser);
 const rotatingPaid=await call('/api/task-dashboard','GET',undefined,cookie);
-assert.equal(rotatingPaid.data.recent_payments.length,2,'Multiple truly paid requests become ticker slides');
-assert.ok(rotatingPaid.data.recent_payments.some(x=>x.id===oldPaidID));
-assert.ok(rotatingPaid.data.recent_payments.some(x=>x.id===w2.data.id));
-// SQLite reviewed_at chỉ chính xác đến giây; nhiều khoản trong cùng giây sẽ xếp theo ID.
-assert.ok(rotatingPaid.data.recent_payments[0].at>=rotatingPaid.data.recent_payments[1].at);
+assert.equal(rotatingPaid.status,200);
+assert.equal(rotatingPaid.data.recent_payments.length,1,
+ 'Only payouts meeting current 5.000 VND minimum are public');
+assert.equal(rotatingPaid.data.recent_payments[0].id,w2.data.id);
+assert.equal(rotatingPaid.data.latest_payment.vnd_amount,5000,
+ 'Most recent eligible payment must be at least 5.000 VND');
+assert.ok(rotatingPaid.data.recent_payments.every(x=>x.vnd_amount>=5000),
+ 'Amounts under 5.000 VND, including 1.000 VND, never appear on the public ticker');
+assert.ok(!rotatingPaid.data.recent_payments.some(x=>x.id===oldPaidID||x.id===legacyOneThousandID));
 assert.ok(rotatingPaid.data.recent_payments.every(x=>!('bank_account' in x)&&!('user_id' in x)));
+const legacyAdminPaid=(await call('/api/admin/withdrawals','GET',undefined,admCookie)).data.withdrawals;
+assert.equal(legacyAdminPaid.find(x=>x.id===legacyOneThousandID).vnd_amount,1000,
+ 'Admin audit still retains the historical 1.000 VND paid transaction');
+assert.equal(legacyAdminPaid.find(x=>x.id===oldPaidID).status,'paid');
+const legacyMemberPaid=(await call('/api/history','GET',undefined,cookie)).data.withdrawals;
+assert.equal(legacyMemberPaid.find(x=>x.id===legacyOneThousandID).status,'paid',
+ 'Member own withdrawal history is not deleted by public display filter');
+assert.equal(legacyMemberPaid.find(x=>x.id===oldPaidID).status,'paid',
+ 'Historic low-value ZaloPay payments stay in member history');
 assert.equal(rotatingPaid.data.latest_payment.masked_account,rotatingPaid.data.recent_payments[0].masked_account);
 
 assert.equal((await call('/api/me','GET',undefined,cookie)).data.balance,105);
@@ -1837,3 +1857,7 @@ assert.match(memberSafeHmoob,/"Đã nhận yêu cầu xác minh\. Nhiệm vụ �
 const memberSafeI18n=readFileSync(new URL('../public/i18n.js',import.meta.url),'utf8');
 assert.match(memberSafeI18n,/Đã sử dụng/);
 console.log('PASS: member task quota avoids destination-link jargon while preserving Admin destination copy and security limits.');
+assert.match(readFileSync(new URL('../src/worker.js',import.meta.url),'utf8'),
+ /WHERE status='paid' AND vnd_amount>=5000/,
+ 'Server must exclude paid withdrawals below configured current min from public carousel');
+console.log('PASS: legacy 1.000 VND transaction kept for audit but excluded from public 5.000 VND-minimum payment ticker.');
