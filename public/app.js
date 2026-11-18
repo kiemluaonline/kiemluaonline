@@ -1002,7 +1002,7 @@ function renderMemberTaskCard(t){
    `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> Làm nhiệm vụ <span aria-hidden="true">›</span></button>`;
  return `<article class="card task-card task-card-modern">
   <div class="task-card-modern-head">
-   <span class="task-card-modern-icon" aria-hidden="true">${symbol}</span>
+   <span class="task-card-modern-icon" aria-hidden="true">${t.category==='app'&&/^data:image\\/(?:webp|jpeg|png);base64,/.test(t.app_logo||'')?`<img src="${esc(t.app_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:14px">`:symbol}</span>
    <div class="task-card-modern-identity">
     <span class="task-card-modern-type">${name}</span>
     <h3>${esc(t.title)}</h3>
@@ -1126,6 +1126,22 @@ async function adminOverview(){
  <article class="card"><h3>🛡️ Hoạt động chống gian lận</h3><div class="metric">${fmt(d.risk_events_today)}</div><p>Sự kiện được ghi nhận hôm nay, giờ Việt Nam.</p><button data-go="admin-security" class="btn alt">Kiểm tra sự kiện →</button></article></section>
  <div class="callout section">Để có dữ liệu thật, hãy tạo nhiệm vụ, cấu hình chính sách thưởng và quy đổi. Trạng thái chi trả chỉ được cập nhật sau khi đã chuyển khoản thật.</div>`;
 }
+async function shrinkAppLogo(file){
+ if(!file || !file.type.startsWith('image/'))throw new Error('Vui lòng chọn ảnh logo.');
+ if(file.size>5*1024*1024)throw new Error('Ảnh logo gốc tối đa 5 MB.');
+ const image=await createImageBitmap(file);
+ try{
+  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
+  const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Không thể xử lý ảnh.');
+  const scale=Math.min(128/image.width,128/image.height);
+  ctx.clearRect(0,0,128,128);
+  ctx.drawImage(image,(128-image.width*scale)/2,(128-image.height*scale)/2,image.width*scale,image.height*scale);
+  let logo=canvas.toDataURL('image/webp',0.72);
+  if(!logo.startsWith('data:image/webp;'))logo=canvas.toDataURL('image/png');
+  if(logo.length>24000)throw new Error('Logo quá phức tạp, hãy chọn ảnh đơn giản hơn.');
+  return logo;
+ }finally{image.close();}
+}
 function taskForm(task={}){
  const linkHint=task.category==='link'?'':'hidden';
  return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa nhiệm vụ':'Tạo nhiệm vụ thật'}</h3>
@@ -1140,6 +1156,7 @@ function taskForm(task={}){
  </div>
  ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
+ <div class="field"><label for="app-logo-file">🖼️ Logo nhiệm vụ App (chọn từ iPhone)</label><input id="app-logo-file" type="file" accept="image/*"><p class="note">Logo được thu nhỏ trước khi lưu. Chọn ảnh mới để thay logo.</p><label><input type="checkbox" id="app-logo-remove"> Xóa logo hiện tại</label>${task.app_logo?`<img src="${esc(task.app_logo)}" alt="Logo hiện tại" style="display:block;width:64px;height:64px;object-fit:contain;border-radius:12px">`:''}</div>
  <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
  ${field('link_24h_limit','Lượt link rút gọn này / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
  <p class="note">Chỉ áp dụng loại Link rút gọn. Nhập 1 giữ chính sách lặp đang chọn; từ 2 trở lên là số lượt mỗi ngày, đặt lại lúc 00:00 giờ Việt Nam. Không giới hạn tổng lượt trên toàn bộ danh sách link.</p>
@@ -1969,8 +1986,14 @@ app.addEventListener('submit',async e=>{
     if(b.category==='link'&&b.review_mode!=='manual')
       throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');
     const data={...b,reward:Number(b.reward),min_seconds:Number(b.min_seconds),is_active:b.is_active==='1'};
+    const logoFile=document.getElementById('app-logo-file')?.files?.[0];
+    const removeLogo=document.getElementById('app-logo-remove')?.checked;
     if(data.id)await api('/api/admin/tasks/'+encodeURIComponent(data.id),'PATCH',data);
-    else await api('/api/admin/tasks','POST',data);
+    else {const created=await api('/api/admin/tasks','POST',data);data.id=created.id;}
+    if(data.category==='app'&&(logoFile||removeLogo)){
+      const logo=logoFile?await shrinkAppLogo(logoFile):'';
+      await api('/api/admin/tasks/'+encodeURIComponent(data.id)+'/logo','PUT',{logo});
+    }
     state.taskEdit=null;toast('Đã lưu nhiệm vụ vào cơ sở dữ liệu.');await navigate('admin-tasks');
   }
   if(kind==='task-claim'){
