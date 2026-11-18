@@ -1232,7 +1232,7 @@ async function adminReviews(){
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
   </details>
  </div></td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:c.has_evidence||c.status==='rejected'&&c.category==='app'?`<div class="btn-row section">${c.status==='rejected'&&c.category==='app'&&!String(c.period_key||'').startsWith('app_retry_rejected:')?`<button class="btn alt sm" data-action="allow-app-retry" data-id="${esc(c.id)}">↻ Cho làm lại</button>`:''}${c.has_evidence?`<button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button>`:''}</div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
@@ -1886,6 +1886,11 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
     status:el.dataset.status,...(el.dataset.app==='1'&&el.dataset.status==='rejected'?{retry_allowed:retryAllowed}:{}),...(selectedReward?{reward:selectedReward}:{}),...(isReturnApproval?{revenue_confirmed:true}:{}),
     ...(riskReason?{risk_override_reason:riskReason}:{})
    });toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
+  }
+  if(act==='allow-app-retry'){
+    if(!localizedConfirm('Cho phép thành viên gửi lại nhiệm vụ App đã từ chối? Lịch sử từ chối được giữ nguyên, chưa cộng Lúa.'))return;
+    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id)+'/allow-retry','POST',{});
+    toast('Đã cho phép làm lại nhiệm vụ App.');await afterAction('admin-reviews');return;
   }
   if(act==='erase-evidence'){
     if(!localizedConfirm('Bạn muốn XÓA VĨNH VIỄN ảnh/nội dung bằng chứng đã duyệt hoặc từ chối này? Không thể khôi phục bằng chứng. Lịch sử nhiệm vụ và Lúa của khách vẫn được giữ nguyên.'))return;
