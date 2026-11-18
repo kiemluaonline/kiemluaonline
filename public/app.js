@@ -1128,18 +1128,21 @@ async function adminOverview(){
 }
 async function shrinkAppLogo(file){
  if(!file || !file.type.startsWith('image/'))throw new Error('Vui lòng chọn ảnh logo.');
- if(file.size>5*1024*1024)throw new Error('Ảnh logo gốc tối đa 5 MB.');
+ if(file.size>12*1024*1024)throw new Error('Ảnh logo gốc tối đa 12 MB.');
  const image=await createImageBitmap(file);
  try{
-  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
-  const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Không thể xử lý ảnh.');
-  const scale=Math.min(128/image.width,128/image.height);
-  ctx.clearRect(0,0,128,128);
-  ctx.drawImage(image,(128-image.width*scale)/2,(128-image.height*scale)/2,image.width*scale,image.height*scale);
-  let logo=canvas.toDataURL('image/webp',0.72);
-  if(!logo.startsWith('data:image/webp;'))logo=canvas.toDataURL('image/png');
-  if(logo.length>24000)throw new Error('Logo quá phức tạp, hãy chọn ảnh đơn giản hơn.');
-  return logo;
+  for(const size of [128,112,96,80,64]){
+   const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+   const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Không thể xử lý ảnh.');
+   const scale=Math.min(size/image.width,size/image.height);
+   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,size,size);
+   ctx.drawImage(image,(size-image.width*scale)/2,(size-image.height*scale)/2,image.width*scale,image.height*scale);
+   for(const quality of [0.72,0.55,0.38,0.24]){
+    const logo=canvas.toDataURL('image/jpeg',quality);
+    if(logo.length<=24000)return logo;
+   }
+  }
+  throw new Error('Không thể nén ảnh logo. Hãy thử ảnh khác.');
  }finally{image.close();}
 }
 function taskForm(task={}){
