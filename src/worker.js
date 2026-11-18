@@ -406,6 +406,8 @@ async function readBody(req, limit = 12000) {
 }
 
 const APP_PHOTO_PREFIX = 'APP_PHOTO_V1|';
+const APP_LOGO_PREFIX = 'app_logo:';
+const validAppLogo = value => typeof value === 'string' && (value === '' || (/^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && value.length <= 24000));
 const COLOR_SORT_NO_PHOTO = 'COLOR_SORT_NO_PHOTO_V1';
 async function isColorSortReferralTask(env, task) {
   if (task.category !== 'app' || !/color\s*sort/i.test(String(task.title || ''))) return false;
@@ -1223,7 +1225,7 @@ async function handler(req, env) {
       if(!seen)await event(env,req,conflict,me.id,(denied==='link_owner'?'link_owner':'link_browser_owner')+':list');
     }
     const [overrides,counts,linkReturnCounts]=await Promise.all([
-      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all(),
+      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%'").all(),
       env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id").bind(me.id).all(),
       // Một lượt đến link đích được tính ngay khi quay về, kể cả chưa giải phép tính;
       // lượt đã gửi (kể cả bị từ chối) tính một lần, không đếm lại phiên đã tiêu thụ.
@@ -1247,7 +1249,7 @@ async function handler(req, env) {
       const entry=done.get(t.id)||{n:0,pending:0};
       const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
       const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||denied)):null;
-      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
+      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
@@ -1590,7 +1592,7 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings,activity]=await Promise.all([
         env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
-        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%'").all(),
+        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%'").all(),
         env.DB.prepare(`SELECT task_id,COUNT(*) AS submitted_today,
           SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_today
           FROM task_completions WHERE date(created_at,'+7 hours')=date('now','+7 hours')
@@ -1602,7 +1604,7 @@ async function handler(req, env) {
         const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
         const usage=dailyActivity.get(t.id);
         return {...t,category:t.category==='other'&&appCode?'app':t.category,
-          link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,
+          link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
           submitted_today:Number(usage?.submitted_today||0),pending_today:Number(usage?.pending_today||0)};
       })});
     }
@@ -1615,6 +1617,16 @@ async function handler(req, env) {
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode)
       ]);
       return json({ ok: true, id: taskId }, 201);
+    }
+    const taskLogo = p.match(/^\/api\/admin\/tasks\/([^/]+)\/logo$/);
+    if (m === 'PUT' && taskLogo) {
+      const body = await readBody(req, 30000);
+      if (!validAppLogo(body.logo)) fail(400,'Logo không hợp lệ hoặc vượt quá dung lượng cho phép.');
+      const task = await env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(taskLogo[1]).first();
+      if (!task || await resolveTaskCategory(env,task) !== 'app') fail(404,'Không tìm thấy nhiệm vụ App.');
+      await env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+        .bind(APP_LOGO_PREFIX+task.id,body.logo).run();
+      return json({ok:true});
     }
     const taskEdit = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
     if (m === 'PATCH' && taskEdit) {
