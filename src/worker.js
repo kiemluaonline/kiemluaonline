@@ -1801,6 +1801,20 @@ async function handler(req, env) {
         'Content-Disposition':'inline; filename="tram-lua-app-proof.jpg"',
         'Cache-Control':'private, no-store' } });
     }
+    const appRetry = p.match(/^\/api\/admin\/reviews\/([^/]+)\/allow-retry$/);
+    if(m==='POST' && appRetry){
+      const c=await env.DB.prepare('SELECT * FROM task_completions WHERE id=?').bind(appRetry[1]).first();
+      if(!c||c.status!=='rejected')fail(409,'Chỉ có thể mở lại yêu cầu App đã bị từ chối.');
+      const task=await env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(c.task_id).first();
+      if(!task||await resolveTaskCategory(env,task)!=='app')fail(400,'Chỉ áp dụng nhiệm vụ App.');
+      const other=await env.DB.prepare("SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND status IN ('pending','approved') LIMIT 1")
+        .bind(c.user_id,c.task_id).first();
+      if(other)fail(409,'Thành viên đã có yêu cầu chờ duyệt hoặc đã nhận thưởng.');
+      const result=await env.DB.prepare("UPDATE task_completions SET period_key='app_retry_rejected:'||id WHERE id=? AND status='rejected' AND period_key NOT LIKE 'app_retry_rejected:%'")
+        .bind(c.id).run();
+      if(!result.meta?.changes)fail(409,'Yêu cầu đã được mở lại trước đó.');
+      return json({ok:true});
+    }
     const review = p.match(/^\/api\/admin\/reviews\/([^/]+)$/);
     if (m === 'POST' && review) {
       const b = await readBody(req);
