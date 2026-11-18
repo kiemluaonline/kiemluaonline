@@ -1477,7 +1477,7 @@ const deviceAuditReview=await call('/api/admin/reviews','GET',undefined,admCooki
 assert.equal(deviceAuditReview.status,200,JSON.stringify(deviceAuditReview.data));
 const deviceAuditRow=deviceAuditReview.data.reviews.find(c=>c.id===returnRow.id);
 assert.ok(deviceAuditRow,'The returned link remains in Admin review history.');
-assert.equal(deviceAuditRow.attempt_id,startedReturn.data.attempt_id);
+assert.equal(deviceAuditRow.attempt_id,startedReturnAgain.data.attempt_id);
 assert.equal(deviceAuditRow.started_ip,returnIP);
 assert.equal(deviceAuditRow.submitted_ip,returnIP);
 assert.equal(deviceAuditRow.started_device,'Thiết bị không rõ · Trình duyệt không rõ');
@@ -1485,7 +1485,7 @@ assert.equal(deviceAuditRow.submitted_device,'Thiết bị không rõ · Trình 
 assert.ok(deviceAuditRow.started_at && deviceAuditRow.submitted_at);
 const taskAuditEvents=sqlite.prepare(
  "SELECT event_type FROM risk_events WHERE detail LIKE ? AND event_type IN ('task_device_start','task_device_submit')"
-).all(startedReturn.data.attempt_id+'|%').map(x=>x.event_type).sort();
+).all(startedReturnAgain.data.attempt_id+'|%').map(x=>x.event_type).sort();
 assert.deepEqual(taskAuditEvents,['task_device_start','task_device_submit']);
 assert.ok(!JSON.stringify((await call('/api/history','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data)
  .includes('task_device_start'),'Members must never see Admin-only audit events.');
