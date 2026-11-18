@@ -1396,13 +1396,21 @@ async function handler(req, env) {
     await linkBrowserQuota(env,req,me.id,task,settings);
     if(task.category==='link'&&await linkReturnUsage(env,me.id,task.id)>=await linkTaskPerAccountLimit(env,task))
       fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+    if(task.category==='app'){
+      const ongoing=await env.DB.prepare('SELECT id,captcha_a,captcha_b,available_at,expires_at FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1')
+        .bind(me.id,task.id,now()).first();
+      if(ongoing)return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,
+        available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),
+        review_mode:task.review_mode,category:task.category,task_url:task.url,
+        app_no_photo:await isColorSortReferralTask(env,task),resumed:true});
+    }
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
     const startedNow=now();
     const a = rand(), b = rand(), attempt = id(), available = startedNow + (task.category === 'video' ? task.min_seconds * 1000 : 0);
     // Khách có thể tìm mã trên Google lâu: Link được phép quay về trong 24 giờ.
     // Video và các nhiệm vụ khác giữ nguyên thời hạn 20 phút.
-    const attemptSeconds=task.category==='link'?86400:1200;
+    const attemptSeconds=(task.category==='link'||task.category==='app')?86400:1200;
     const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
        VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
       clientIP(req), await deviceCode(req, env));
