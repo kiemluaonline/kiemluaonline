@@ -1628,6 +1628,24 @@ async function handler(req, env) {
         .bind(APP_LOGO_PREFIX+task.id,body.logo).run();
       return json({ok:true});
     }
+    const taskDelete = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
+    if (m === 'DELETE' && taskDelete) {
+      const taskId = taskDelete[1];
+      const task = await env.DB.prepare('SELECT id FROM tasks WHERE id=?').bind(taskId).first();
+      if (!task) fail(404,'Không tìm thấy nhiệm vụ.');
+      const [attempts,completions] = await Promise.all([
+        env.DB.prepare('SELECT COUNT(*) AS n FROM task_attempts WHERE task_id=?').bind(taskId).first(),
+        env.DB.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id=?').bind(taskId).first()
+      ]);
+      if (Number(attempts.n)>0 || Number(completions.n)>0)
+        fail(409,'Nhiệm vụ đã có lịch sử thực hiện. Không thể xóa để bảo vệ dữ liệu và Lúa của thành viên; hãy chuyển sang Tắt / nháp.');
+      const result = await env.DB.prepare('DELETE FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM task_attempts WHERE task_id=?) AND NOT EXISTS (SELECT 1 FROM task_completions WHERE task_id=?)')
+        .bind(taskId,taskId,taskId).run();
+      if (!result.meta?.changes) fail(409,'Nhiệm vụ vừa phát sinh lượt thực hiện. Không thể xóa.');
+      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?)")
+        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId).run();
+      return json({ok:true});
+    }
     const taskEdit = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
     if (m === 'PATCH' && taskEdit) {
       const t = validateTaskBody(await readBody(req));
