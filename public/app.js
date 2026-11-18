@@ -1232,7 +1232,7 @@ async function adminReviews(){
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
   </details>
  </div></td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
@@ -1878,11 +1878,12 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
      if(rewardChoice===null)return;
      selectedReward=rewardChoice;
    }
+   const retryAllowed=el.dataset.status==='rejected'&&el.dataset.app==='1'&&el.dataset.retry==='1';
    if(!localizedConfirm(isReturnApproval?
     'Bạn ĐÃ đối soát nguồn thu hợp lệ? Chỉ quay về trang đích KHÔNG chứng minh bên rút gọn đã tính tiền.':
-    el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
+    el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':retryAllowed?'Từ chối yêu cầu này và CHO PHÉP thành viên làm lại?':'Từ chối yêu cầu này và KHÓA lượt làm lại?'))return;
    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id),'POST',{
-    status:el.dataset.status,...(selectedReward?{reward:selectedReward}:{}),...(isReturnApproval?{revenue_confirmed:true}:{}),
+    status:el.dataset.status,...(el.dataset.app==='1'&&el.dataset.status==='rejected'?{retry_allowed:retryAllowed}:{}),...(selectedReward?{reward:selectedReward}:{}),...(isReturnApproval?{revenue_confirmed:true}:{}),
     ...(riskReason?{risk_override_reason:riskReason}:{})
    });toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
   }
