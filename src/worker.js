@@ -2,6 +2,7 @@ import { shopAPI } from './shop.js';
 import { shopOrdersAPI } from './shop-orders.js';
 import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
+import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -503,6 +504,17 @@ async function wallet(env, userId) {
 async function event(env, req, type, userId = null, detail = '') {
   await env.DB.prepare('INSERT INTO risk_events(id,user_id,event_type,detail,ip,device_code) VALUES(?,?,?,?,?,?)')
     .bind(id(), userId, type, str(detail, 500), clientIP(req), await deviceCode(req, env)).run();
+}
+// Audit thiết bị chỉ là mô tả User-Agent để Admin đối chiếu, không phải định danh cứng.
+// Ghi nhật ký vào risk_events đang có: không cần migration, không ảnh hưởng Lúa.
+async function recordTaskDevice(env, req, userId, attemptId, stage) {
+  try {
+    await event(env, req, 'task_device_' + stage, userId,
+      taskDeviceEventDetail(attemptId, req.headers.get('user-agent')));
+  } catch (error) {
+    // Không báo nhiệm vụ thất bại nếu phiên đã ghi thành công nhưng nhật ký phụ lỗi.
+    console.warn('Task device audit unavailable:', String(error?.message || error));
+  }
 }
 async function giveReferral(env, userId, settings) {
   const amount = int(settings.referral_reward);
@@ -1356,6 +1368,7 @@ async function handler(req, env) {
     ]);
     if (!batch[0].meta?.changes || !batch[1].meta?.changes)
       fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
+    await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
     return json({ok:true,status:'pending',
       message:'Đã nhận yêu cầu xác minh. Đang chờ Admin đối soát; chưa cộng Lúa.'});
   }
@@ -1394,6 +1407,7 @@ async function handler(req, env) {
         insertAttempt
       ]);
     }else await insertAttempt.run();
+    await recordTaskDevice(env, req, me.id, attempt, 'start');
     return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: attemptSeconds,
       review_mode: task.review_mode, category: task.category, task_url: task.url });
   }
@@ -1455,6 +1469,7 @@ async function handler(req, env) {
       }
       fail(409,'Nhiệm vụ đã được gửi hoặc nhận thưởng trước đó.');
     }
+    await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
     if (status === 'approved') await giveReferral(env, me.id, await getSettings(env));
     return json({ ok: true, status, reward: task.reward,
       message: status === 'approved' ? 'Đã ghi nhận Lúa vào ví.' : 'Đã gửi bằng chứng, đang chờ Admin duyệt.' });
@@ -1668,14 +1683,29 @@ async function handler(req, env) {
           THEN substr(c.evidence,14,instr(substr(c.evidence,14),'|')-1)
           WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN ''
           ELSE c.evidence END AS evidence,
-        c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email
+        c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email,
+        a.id AS attempt_id,a.created_at AS started_at,a.ip AS started_ip,
+        a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
+        LEFT JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id
         ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 150`).all();
+      // Query only the attempts visible in this Admin page; older records without
+      // User-Agent events remain 'Chưa ghi nhận' instead of being guessed.
+      const attemptIds=[...new Set(rows.results.map(c=>c.attempt_id).filter(Boolean))];
+      const deviceEvents=[];
+      for(let offset=0;offset<attemptIds.length;offset+=75){
+        const group=attemptIds.slice(offset,offset+75);
+        const result=await env.DB.prepare(`SELECT event_type,detail FROM risk_events
+          WHERE event_type IN ('task_device_start','task_device_submit')
+          AND substr(detail,1,36) IN (${group.map(()=>'?').join(',')})
+          ORDER BY created_at DESC LIMIT ${group.length*3+10}`).bind(...group).all();
+        deviceEvents.push(...result.results);
+      }
       const pendingErase = await env.DB.prepare(`SELECT COUNT(*) AS n FROM task_completions
         WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
         .bind(PROOF_REMOVED_MARKER).first();
       return json({
-        reviews: rows.results.map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})),
+        reviews: attachTaskDeviceAudit(rows.results,deviceEvents).map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})),
         processed_evidence_count: Number(pendingErase.n) || 0
       });
     }

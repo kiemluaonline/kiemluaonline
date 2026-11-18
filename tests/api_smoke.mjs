@@ -1472,6 +1472,24 @@ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,
  memberBefore,'Quay về trang đích KHÔNG tự cộng Lúa');
 const returnRow=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(returnTask.data.id);
 assert.equal(returnRow.status,'pending');
+// New Admin-only audit: server logs device stages without changing the existing D1 schema.
+const deviceAuditReview=await call('/api/admin/reviews','GET',undefined,admCookie);
+assert.equal(deviceAuditReview.status,200,JSON.stringify(deviceAuditReview.data));
+const deviceAuditRow=deviceAuditReview.data.reviews.find(c=>c.id===returnRow.id);
+assert.ok(deviceAuditRow,'The returned link remains in Admin review history.');
+assert.equal(deviceAuditRow.attempt_id,startedReturnAgain.data.attempt_id);
+assert.equal(deviceAuditRow.started_ip,returnIP);
+assert.equal(deviceAuditRow.submitted_ip,returnIP);
+assert.equal(deviceAuditRow.started_device,'Thiết bị không rõ · Trình duyệt không rõ');
+assert.equal(deviceAuditRow.submitted_device,'Thiết bị không rõ · Trình duyệt không rõ');
+assert.ok(deviceAuditRow.started_at && deviceAuditRow.submitted_at);
+const taskAuditEvents=sqlite.prepare(
+ "SELECT event_type FROM risk_events WHERE detail LIKE ? AND event_type IN ('task_device_start','task_device_submit')"
+).all(startedReturnAgain.data.attempt_id+'|%').map(x=>x.event_type).sort();
+assert.deepEqual(taskAuditEvents,['task_device_start','task_device_submit']);
+assert.ok(!JSON.stringify((await call('/api/history','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data)
+ .includes('task_device_start'),'Members must never see Admin-only audit events.');
+console.log('PASS: Admin task audit retains start/submission IP, browser labels, timestamps and prior history.');
 const adminLinkTasks=await call('/api/admin/tasks','GET',undefined,admCookie);
 assert.equal(adminLinkTasks.status,200);
 const adminReturnTask=adminLinkTasks.data.tasks.find(t=>t.id===returnTask.data.id);
@@ -1927,7 +1945,7 @@ console.log('PASS: public paid ticker cycles old -> new, polls automatically eve
 // Giao diện compact dùng chung: được nạp SAU các stylesheet cũ để thay đổi
 // khoảng trắng mà không sửa dữ liệu, điều kiện xét thưởng hay API.
 const compactStyle=readFileSync(new URL('../public/compact.css',import.meta.url),'utf8');
-const compactLink='/compact.css?v=20261117-mobile-global-compact-v1';
+const compactLink='/compact.css?v=20261118-admin-device-audit-v1';
 assert.ok(publicHomepage.includes(compactLink),'Compact CSS must be loaded on the public app shell');
 assert.ok(publicHomepage.indexOf(compactLink)>publicHomepage.indexOf('/payout-accounts.css?'),
  'Compact stylesheet must load last to override member/Admin page styles');

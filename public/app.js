@@ -1158,12 +1158,27 @@ async function adminReviews(){
  const d=await api('/api/admin/reviews');
  const pendingReturns=d.reviews.filter(c=>c.status==='pending'&&String(c.evidence||'').startsWith('[LINK_RETURN_V1]')).length;
  const fastReturns=d.reviews.filter(c=>c.status==='pending'&&String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')).length;
- return `${heading('Duyệt bằng chứng','Chỉ khi duyệt thành công, Lúa mới được ghi vào ví thành viên.')}
+ return `${heading('Duyệt bằng chứng','Đối chiếu IP, loại thiết bị và thời gian với thống kê của đối tác trước khi duyệt.')}
  <div class="callout section">🔗 <strong>${fmt(pendingReturns)} lượt quay về đang chờ đối soát</strong> trong danh sách đang tải. <strong>${fmt(fastReturns)} lượt bị đánh dấu quay về quá nhanh.</strong> Đây là tín hiệu cần kiểm tra, không phải bằng chứng gian lận. Khách chưa được cộng Lúa; chỉ duyệt khi có đối soát nguồn thu hợp lệ.</div>
+ <div class="callout section"><strong>Đối chiếu với Lentopone / nhà cung cấp khác:</strong> so cùng nhiệm vụ, IP và mốc giờ Việt Nam; tham khảo loại máy và trình duyệt. Có thể sao chép từng IP. Loại thiết bị lấy từ User-Agent (có thể giả), còn IP chung mạng không chứng minh cùng một người. <strong>Không tự duyệt</strong> chỉ dựa trên các dấu hiệu này hoặc việc quay về trang đích.</div>
  <div class="callout section"><strong>Link tự quay về:</strong> “Đã truy cập trang đích” chỉ là tín hiệu kỹ thuật. Không đọc được mã đã nhập trên dịch vụ rút gọn và không có xác nhận doanh thu. Phải kiểm tra nguồn tiền hợp lệ trước khi duyệt Lúa.</div><div class="callout section"><strong>Quản lý dung lượng bằng chứng:</strong> Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.
  <div class="section">${d.processed_evidence_count>0?`<p class="note"><strong>Có ${fmt(d.processed_evidence_count)} hồ sơ đã xử lý còn bằng chứng.</strong> Thao tác hàng loạt sẽ xóa bằng chứng của TẤT CẢ những hồ sơ đó, kể cả hồ sơ không hiển thị bên dưới.</p><button type="button" class="btn danger sm proof-delete-all" data-action="erase-all-processed-evidence" data-count="${Number(d.processed_evidence_count)}">🗑 Xóa tất cả bằng chứng đã xử lý</button>`:'<p class="note">Hiện không có bằng chứng đã xử lý cần dọn.</p>'}</div></div>
- <section class="card section">${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Kiểm tra','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
- <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div><details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td>${fmt(c.reward)} Lúa</td><td><code>${esc(c.ip)}</code><div class="small muted">${esc(c.device_code)}</div></td>
+ <section class="card section admin-reviews-panel"><div class="admin-review-search-wrap"><label for="admin-review-search">🔎 Tìm nhanh trong danh sách đã tải</label><input id="admin-review-search" type="search" placeholder="Tên, email, nhiệm vụ, IP, loại thiết bị…" autocomplete="off"><p class="small muted">Tối đa 150 hồ sơ mới nhất; hồ sơ đang chờ duyệt được ưu tiên.</p></div>
+ ${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Đối chiếu IP / thiết bị','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
+ <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div><details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td><strong>${fmt(c.reward)} Lúa</strong></td><td><div class="admin-task-audit">
+  <div><strong>📱 Mở:</strong> ${esc(c.started_device)}</div>
+  <div><strong>📱 Gửi:</strong> ${esc(c.submitted_device)}</div>
+  <div><strong>🕒 Bắt đầu:</strong> ${dt(c.started_at)}</div>
+  <div><strong>🕒 Gửi xác minh:</strong> ${dt(c.submitted_at)}</div>
+  <div class="admin-task-ip"><strong>IP bắt đầu:</strong> <code>${esc(c.started_ip||'Chưa ghi nhận')}</code> ${c.started_ip?`<button type="button" class="btn alt sm" data-action="copy-ip" data-value="${esc(c.started_ip)}" aria-label="Sao chép IP lúc bắt đầu">📋</button>`:''}</div>
+  <div class="admin-task-ip"><strong>IP gửi:</strong> <code>${esc(c.submitted_ip||'Chưa ghi nhận')}</code> ${c.submitted_ip?`<button type="button" class="btn alt sm" data-action="copy-ip" data-value="${esc(c.submitted_ip)}" aria-label="Sao chép IP lúc gửi">📋</button>`:''}</div>
+  <details class="admin-task-audit-detail"><summary>Chi tiết phiên / mã trình duyệt</summary>
+    <div class="small"><strong>Mã phiên:</strong> <code>${esc(c.attempt_id||'Chưa ghi nhận')}</code></div>
+    <div class="small"><strong>Mã lúc mở:</strong> <code>${esc(c.started_device_code||'Chưa ghi nhận')}</code></div>
+    <div class="small"><strong>Mã lúc gửi:</strong> <code>${esc(c.device_code||'Chưa ghi nhận')}</code></div>
+    <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
+  </details>
+ </div></td>
  <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
@@ -1601,6 +1616,12 @@ function updateCardPreview(form){
 }
 app.addEventListener('input',e=>{
  if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
+ if(e.target.matches('#admin-review-search')){
+  const needle=e.target.value.trim().toLocaleLowerCase('vi');
+  app.querySelectorAll('.admin-reviews-panel tbody tr').forEach(row=>{
+   row.hidden=!row.textContent.toLocaleLowerCase('vi').includes(needle);
+  });
+ }
 });
 app.addEventListener('change',e=>{
  if(e.target.matches('input[data-shop-image-input]')){
