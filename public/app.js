@@ -1212,7 +1212,7 @@ async function adminReviews(){
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
   </details>
  </div></td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
@@ -1478,10 +1478,10 @@ function renderAttemptModal(){
  ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
  ${a.category==='link'?'<p class="note">Nếu link được cấu hình quay về Trạm Có Lúa, hệ thống tự ghi nhận Chờ đối soát khi đến trang đích. Không cần nhập lại mã trên website. Chỉ Admin xác minh nguồn thu hợp lệ mới duyệt thưởng.</p>':''}
  <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
- ${a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
+ ${a.app_no_photo?'<div class="callout">🎮 Nhập mã giới thiệu Color Sort thành công, sau đó xác nhận. Không cần gửi ảnh. Admin sẽ đối chiếu với ứng dụng và quyết định thưởng 30 hoặc 40 Lúa.</div>':a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
  <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
  ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
- ${a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
+ ${a.app_no_photo?'':a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
  <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
  ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
 }
@@ -1831,11 +1831,18 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
     riskReason=String(localizedPrompt('⚠️ Lượt quay về dưới 20 giây. Chỉ duyệt sau khi tự đối soát độc lập. Hãy nhập bằng chứng/lý do đối soát cụ thể (ít nhất 20 ký tự):','')||'').trim();
     if(riskReason.length<20){toast('Cần ít nhất 20 ký tự ghi rõ căn cứ đối soát; chưa cộng Lúa.',true);return;}
    }
+   let selectedReward;
+   if(el.dataset.status==='approved'&&el.dataset.colorsort==='1'){
+     const value=localizedPrompt('Color Sort: nhập mức thưởng sau khi đối chiếu (30 hoặc 40 Lúa):','30');
+     if(value===null)return;
+     selectedReward=Number(String(value).trim());
+     if(![30,40].includes(selectedReward)){toast('Chỉ chọn 30 hoặc 40 Lúa.',true);return;}
+   }
    if(!localizedConfirm(isReturnApproval?
     'Bạn ĐÃ đối soát nguồn thu hợp lệ? Chỉ quay về trang đích KHÔNG chứng minh bên rút gọn đã tính tiền.':
     el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id),'POST',{
-    status:el.dataset.status,...(isReturnApproval?{revenue_confirmed:true}:{}),
+    status:el.dataset.status,...(selectedReward?{reward:selectedReward}:{}),...(isReturnApproval?{revenue_confirmed:true}:{}),
     ...(riskReason?{risk_override_reason:riskReason}:{})
    });toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
   }
@@ -1955,7 +1962,7 @@ app.addEventListener('submit',async e=>{
   if(kind==='task-claim'){
     const a=state.attempt;
     if(!a)throw new Error('Phiên nhiệm vụ không còn.');
-    const photo=a.category==='app'?await shrinkAppProof(b.photo):'';
+    const photo=a.category==='app'&&!a.app_no_photo?await shrinkAppProof(b.photo):'';
     const r=await api('/api/tasks/'+encodeURIComponent(a.taskId)+'/submit','POST',{
       attempt_id:a.attempt_id,answer:b.answer,evidence:b.evidence||'',...(a.category==='app'?{photo}:{}) });
     state.attempt=null;document.getElementById('modal-root').innerHTML='';
