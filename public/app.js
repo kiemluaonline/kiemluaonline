@@ -1182,7 +1182,7 @@ async function adminTasks(){
    <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
-   <td><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button></td>
+   <td><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">🗑 Xóa</button></div></td>
   </tr>`;
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
@@ -1820,6 +1820,12 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
+  if(act==='delete-task'){
+   if(!localizedConfirm('Xóa nhiệm vụ "'+el.dataset.title+'"? Chỉ xóa được nhiệm vụ chưa có lượt thực hiện. Hành động này không thể hoàn tác.'))return;
+   await api('/api/admin/tasks/'+encodeURIComponent(el.dataset.id),'DELETE');
+   if(state.taskEdit===el.dataset.id)state.taskEdit=null;
+   toast('Đã xóa nhiệm vụ chưa sử dụng.');await navigate('admin-tasks');return;
+  }
   if(act==='change-user'){
    let reason='',evidence='';
    const type=el.dataset.lockType==='confirmed'?'confirmed':'review';
