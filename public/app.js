@@ -1002,7 +1002,7 @@ function renderMemberTaskCard(t){
    `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> Làm nhiệm vụ <span aria-hidden="true">›</span></button>`;
  return `<article class="card task-card task-card-modern">
   <div class="task-card-modern-head">
-   <span class="task-card-modern-icon" aria-hidden="true">${t.category==='app'&&/^data:image\\/(?:webp|jpeg|png);base64,/.test(t.app_logo||'')?`<img src="${esc(t.app_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:14px">`:symbol}</span>
+   <span class="task-card-modern-icon" aria-hidden="true">${t.category==='app'&&/^data:image\/(?:webp|jpeg|png);base64,/.test(t.app_logo||'')?`<img src="${esc(t.app_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:14px">`:symbol}</span>
    <div class="task-card-modern-identity">
     <span class="task-card-modern-type">${name}</span>
     <h3>${esc(t.title)}</h3>
