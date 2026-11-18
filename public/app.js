@@ -1497,12 +1497,12 @@ function renderAttemptModal(){
  <span class="eyebrow">KIỂM TRA THỰC HIỆN</span><h3>Hoàn thành nhiệm vụ</h3>
  ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
  ${a.category==='link'?'<p class="note">Nếu link được cấu hình quay về Trạm Có Lúa, hệ thống tự ghi nhận Chờ đối soát khi đến trang đích. Không cần nhập lại mã trên website. Chỉ Admin xác minh nguồn thu hợp lệ mới duyệt thưởng.</p>':''}
- <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
+ ${a.category==='app'?'<p class="note">Bạn có thể rời website để cài ứng dụng rồi quay lại. Bấm Bắt đầu / Tiếp tục xác nhận để mở lại nhiệm vụ. Báo hoàn thành chỉ gửi yêu cầu chờ Admin xác minh, chưa cộng Lúa.</p>':`<p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>`}
  ${a.app_no_photo?'<div class="callout">🎮 Nhập mã giới thiệu Color Sort thành công, sau đó xác nhận. Không cần gửi ảnh. Admin sẽ đối chiếu với ứng dụng và quyết định thưởng 30 hoặc 40 Lúa.</div>':a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
- <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
- ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
+ <form data-form="task-claim">${a.category==='app'?'':`<div class="captcha">${a.a} + ${a.b} = ?</div>
+ ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}`}
  ${a.app_no_photo?'':a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
- <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
+ <button class="btn" type="submit">${a.category==='app'?'Đã hoàn thành – Báo Admin':remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
  ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
 }
 
@@ -1785,7 +1785,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
   if(act==='filter-tasks'){state.taskFilter=['app','link','other'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
-  if(act==='start-task'){showTaskRules(el.dataset.id);return;}
+  if(act==='start-task'){const t=state.memberTasks.find(x=>x.id===el.dataset.id);if(t?.category==='app'){await startTask(el.dataset.id);return;}showTaskRules(el.dataset.id);return;}
   if(act==='cancel-task-rules'){
    state.pendingTaskRules=null;document.getElementById('modal-root').innerHTML='';return;
   }
