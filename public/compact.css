@@ -280,3 +280,42 @@
  .layout .task-stat strong{font-size:16px}
  .layout .content .task-card-modern-count{min-width:37px}
 }
+
+
+/* Admin đối chiếu nhiệm vụ với thống kê IP/thiết bị của nhà rút gọn. */
+.layout .admin-review-search-wrap{display:grid;gap:7px;margin-bottom:12px}
+.layout .admin-review-search-wrap label{font-weight:700;font-size:13px}
+.layout .admin-review-search-wrap input{
+ width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line,#b2c2b7);
+ border-radius:10px;font-size:16px;background:var(--card,#fff);color:inherit
+}
+.layout .admin-review-search-wrap p{margin:0}
+.layout .admin-task-audit{display:grid;gap:5px;min-width:230px;font-size:12px;line-height:1.45}
+.layout .admin-task-ip{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.layout .admin-task-audit code{overflow-wrap:anywhere;white-space:normal}
+.layout .admin-task-ip .btn.sm{min-height:44px;min-width:44px;padding:5px}
+.layout .admin-task-audit-detail{margin-top:4px;border-top:1px solid #becbbf;padding-top:4px}
+.layout .admin-task-audit-detail summary{min-height:44px;display:list-item;padding:12px 0 6px;cursor:pointer}
+.layout .admin-task-audit-detail .small{padding:3px 0}
+@media(max-width:730px){
+ .layout .admin-reviews-panel .table-wrap{overflow:visible}
+ .layout .admin-reviews-panel table,.layout .admin-reviews-panel tbody{display:block;width:100%}
+ .layout .admin-reviews-panel thead{display:none}
+ .layout .admin-reviews-panel tbody tr{
+  display:grid;grid-template-columns:minmax(0,1fr);gap:3px;
+  margin-bottom:11px;padding:10px 12px;border:1px solid #c6d4c8;
+  border-radius:12px;width:100%;white-space:normal
+ }
+ .layout .admin-reviews-panel tbody tr[hidden]{display:none!important}
+ .layout .admin-reviews-panel tbody td{
+  display:block;width:100%;border:none!important;padding:4px 0!important;
+  max-width:100%!important;min-width:0;white-space:normal
+ }
+ .layout .admin-reviews-panel tbody td:nth-child(1){order:0}
+ .layout .admin-reviews-panel tbody td:nth-child(3){order:1}
+ .layout .admin-reviews-panel tbody td:nth-child(4){order:2}
+ .layout .admin-reviews-panel tbody td:nth-child(2){order:3}
+ .layout .admin-reviews-panel tbody td:nth-child(5){order:4}
+ .layout .admin-task-audit{min-width:0}
+ .layout .admin-task-audit-detail summary{min-height:44px}
+}
