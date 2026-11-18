@@ -1002,7 +1002,7 @@ function renderMemberTaskCard(t){
    `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> Làm nhiệm vụ <span aria-hidden="true">›</span></button>`;
  return `<article class="card task-card task-card-modern">
   <div class="task-card-modern-head">
-   <span class="task-card-modern-icon" aria-hidden="true">${symbol}</span>
+   <span class="task-card-modern-icon" aria-hidden="true">${t.category==='app'&&/^data:image\/(?:webp|jpeg|png);base64,/.test(t.app_logo||'')?`<img src="${esc(t.app_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:14px">`:symbol}</span>
    <div class="task-card-modern-identity">
     <span class="task-card-modern-type">${name}</span>
     <h3>${esc(t.title)}</h3>
@@ -1126,6 +1126,22 @@ async function adminOverview(){
  <article class="card"><h3>🛡️ Hoạt động chống gian lận</h3><div class="metric">${fmt(d.risk_events_today)}</div><p>Sự kiện được ghi nhận hôm nay, giờ Việt Nam.</p><button data-go="admin-security" class="btn alt">Kiểm tra sự kiện →</button></article></section>
  <div class="callout section">Để có dữ liệu thật, hãy tạo nhiệm vụ, cấu hình chính sách thưởng và quy đổi. Trạng thái chi trả chỉ được cập nhật sau khi đã chuyển khoản thật.</div>`;
 }
+async function shrinkAppLogo(file){
+ if(!file || !file.type.startsWith('image/'))throw new Error('Vui lòng chọn ảnh logo.');
+ if(file.size>5*1024*1024)throw new Error('Ảnh logo gốc tối đa 5 MB.');
+ const image=await createImageBitmap(file);
+ try{
+  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
+  const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Không thể xử lý ảnh.');
+  const scale=Math.min(128/image.width,128/image.height);
+  ctx.clearRect(0,0,128,128);
+  ctx.drawImage(image,(128-image.width*scale)/2,(128-image.height*scale)/2,image.width*scale,image.height*scale);
+  let logo=canvas.toDataURL('image/webp',0.72);
+  if(!logo.startsWith('data:image/webp;'))logo=canvas.toDataURL('image/png');
+  if(logo.length>24000)throw new Error('Logo quá phức tạp, hãy chọn ảnh đơn giản hơn.');
+  return logo;
+ }finally{image.close();}
+}
 function taskForm(task={}){
  const linkHint=task.category==='link'?'':'hidden';
  return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa nhiệm vụ':'Tạo nhiệm vụ thật'}</h3>
@@ -1140,6 +1156,7 @@ function taskForm(task={}){
  </div>
  ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
+ <div class="field"><label for="app-logo-file">🖼️ Logo nhiệm vụ App (chọn từ iPhone)</label><input id="app-logo-file" type="file" accept="image/*"><p class="note">Logo được thu nhỏ trước khi lưu. Chọn ảnh mới để thay logo.</p><label><input type="checkbox" id="app-logo-remove"> Xóa logo hiện tại</label>${task.app_logo?`<img src="${esc(task.app_logo)}" alt="Logo hiện tại" style="display:block;width:64px;height:64px;object-fit:contain;border-radius:12px">`:''}</div>
  <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
  ${field('link_24h_limit','Lượt link rút gọn này / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
  <p class="note">Chỉ áp dụng loại Link rút gọn. Nhập 1 giữ chính sách lặp đang chọn; từ 2 trở lên là số lượt mỗi ngày, đặt lại lúc 00:00 giờ Việt Nam. Không giới hạn tổng lượt trên toàn bộ danh sách link.</p>
@@ -1165,7 +1182,7 @@ async function adminTasks(){
    <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
-   <td><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button></td>
+   <td><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">🗑 Xóa</button></div></td>
   </tr>`;
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
@@ -1212,7 +1229,7 @@ async function adminReviews(){
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
   </details>
  </div></td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected">Từ chối</button></div>`:c.has_evidence?`<div class="btn-row section"><button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button></div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
  const [d,riskData]=await Promise.all([api('/api/admin/withdrawals'),api('/api/admin/fraud-scores')]);
@@ -1478,10 +1495,10 @@ function renderAttemptModal(){
  ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
  ${a.category==='link'?'<p class="note">Nếu link được cấu hình quay về Trạm Có Lúa, hệ thống tự ghi nhận Chờ đối soát khi đến trang đích. Không cần nhập lại mã trên website. Chỉ Admin xác minh nguồn thu hợp lệ mới duyệt thưởng.</p>':''}
  <p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>
- ${a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
+ ${a.app_no_photo?'<div class="callout">🎮 Nhập mã giới thiệu Color Sort thành công, sau đó xác nhận. Không cần gửi ảnh. Admin sẽ đối chiếu với ứng dụng và quyết định thưởng 30 hoặc 40 Lúa.</div>':a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
  <form data-form="task-claim"><div class="captcha">${a.a} + ${a.b} = ?</div>
  ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}
- ${a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
+ ${a.app_no_photo?'':a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
  <button class="btn" type="submit">${remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
  ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
 }
@@ -1803,6 +1820,12 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
+  if(act==='delete-task'){
+   if(!localizedConfirm('Xóa nhiệm vụ "'+el.dataset.title+'"? Chỉ xóa được nhiệm vụ chưa có lượt thực hiện. Hành động này không thể hoàn tác.'))return;
+   await api('/api/admin/tasks/'+encodeURIComponent(el.dataset.id),'DELETE');
+   if(state.taskEdit===el.dataset.id)state.taskEdit=null;
+   toast('Đã xóa nhiệm vụ chưa sử dụng.');await navigate('admin-tasks');return;
+  }
   if(act==='change-user'){
    let reason='',evidence='';
    const type=el.dataset.lockType==='confirmed'?'confirmed':'review';
@@ -1831,11 +1854,32 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
     riskReason=String(localizedPrompt('⚠️ Lượt quay về dưới 20 giây. Chỉ duyệt sau khi tự đối soát độc lập. Hãy nhập bằng chứng/lý do đối soát cụ thể (ít nhất 20 ký tự):','')||'').trim();
     if(riskReason.length<20){toast('Cần ít nhất 20 ký tự ghi rõ căn cứ đối soát; chưa cộng Lúa.',true);return;}
    }
+   let selectedReward;
+   if(el.dataset.status==='approved'&&el.dataset.colorsort==='1'){
+     const rewardChoice=await new Promise(resolve=>{
+       const modal=document.getElementById('modal-root');
+       modal.innerHTML=`<div class="modal-cover"><section class="modal" role="dialog" aria-modal="true" aria-label="Chọn thưởng Color Sort">
+         <h3>🎮 Duyệt Color Sort</h3><p class="note">Đối chiếu kết quả trong Color Sort trước khi chọn mức thưởng.</p>
+         <div class="btn-row"><button type="button" class="btn" data-color-sort-reward="30">30 Lúa · Nhập mã</button>
+         <button type="button" class="btn alt" data-color-sort-reward="40">40 Lúa · Nhập mã + Facebook</button></div>
+         <button type="button" class="btn alt section" data-color-sort-cancel>Hủy</button></section></div>`;
+       const onClick=event=>{
+         const button=event.target.closest('[data-color-sort-reward],[data-color-sort-cancel]');
+         if(!button||!modal.contains(button))return;
+         modal.removeEventListener('click',onClick);
+         modal.innerHTML='';
+         resolve(button.hasAttribute('data-color-sort-cancel')?null:Number(button.dataset.colorSortReward));
+       };
+       modal.addEventListener('click',onClick);
+     });
+     if(rewardChoice===null)return;
+     selectedReward=rewardChoice;
+   }
    if(!localizedConfirm(isReturnApproval?
     'Bạn ĐÃ đối soát nguồn thu hợp lệ? Chỉ quay về trang đích KHÔNG chứng minh bên rút gọn đã tính tiền.':
     el.dataset.status==='approved'?'Duyệt và cộng Lúa cho nhiệm vụ?':'Từ chối bằng chứng này?'))return;
    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id),'POST',{
-    status:el.dataset.status,...(isReturnApproval?{revenue_confirmed:true}:{}),
+    status:el.dataset.status,...(selectedReward?{reward:selectedReward}:{}),...(isReturnApproval?{revenue_confirmed:true}:{}),
     ...(riskReason?{risk_override_reason:riskReason}:{})
    });toast('Đã xử lý bằng chứng.');await afterAction('admin-reviews');return;
   }
@@ -1948,14 +1992,20 @@ app.addEventListener('submit',async e=>{
     if(b.category==='link'&&b.review_mode!=='manual')
       throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');
     const data={...b,reward:Number(b.reward),min_seconds:Number(b.min_seconds),is_active:b.is_active==='1'};
+    const logoFile=document.getElementById('app-logo-file')?.files?.[0];
+    const removeLogo=document.getElementById('app-logo-remove')?.checked;
     if(data.id)await api('/api/admin/tasks/'+encodeURIComponent(data.id),'PATCH',data);
-    else await api('/api/admin/tasks','POST',data);
+    else {const created=await api('/api/admin/tasks','POST',data);data.id=created.id;}
+    if(data.category==='app'&&(logoFile||removeLogo)){
+      const logo=logoFile?await shrinkAppLogo(logoFile):'';
+      await api('/api/admin/tasks/'+encodeURIComponent(data.id)+'/logo','PUT',{logo});
+    }
     state.taskEdit=null;toast('Đã lưu nhiệm vụ vào cơ sở dữ liệu.');await navigate('admin-tasks');
   }
   if(kind==='task-claim'){
     const a=state.attempt;
     if(!a)throw new Error('Phiên nhiệm vụ không còn.');
-    const photo=a.category==='app'?await shrinkAppProof(b.photo):'';
+    const photo=a.category==='app'&&!a.app_no_photo?await shrinkAppProof(b.photo):'';
     const r=await api('/api/tasks/'+encodeURIComponent(a.taskId)+'/submit','POST',{
       attempt_id:a.attempt_id,answer:b.answer,evidence:b.evidence||'',...(a.category==='app'?{photo}:{}) });
     state.attempt=null;document.getElementById('modal-root').innerHTML='';
