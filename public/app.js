@@ -1833,10 +1833,24 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    }
    let selectedReward;
    if(el.dataset.status==='approved'&&el.dataset.colorsort==='1'){
-     const value=localizedPrompt('Color Sort: nhập mức thưởng sau khi đối chiếu (30 hoặc 40 Lúa):','30');
-     if(value===null)return;
-     selectedReward=Number(String(value).trim());
-     if(![30,40].includes(selectedReward)){toast('Chỉ chọn 30 hoặc 40 Lúa.',true);return;}
+     const rewardChoice=await new Promise(resolve=>{
+       const modal=document.getElementById('modal-root');
+       modal.innerHTML=`<div class="modal-cover"><section class="modal" role="dialog" aria-modal="true" aria-label="Chọn thưởng Color Sort">
+         <h3>🎮 Duyệt Color Sort</h3><p class="note">Đối chiếu kết quả trong Color Sort trước khi chọn mức thưởng.</p>
+         <div class="btn-row"><button type="button" class="btn" data-color-sort-reward="30">30 Lúa · Nhập mã</button>
+         <button type="button" class="btn alt" data-color-sort-reward="40">40 Lúa · Nhập mã + Facebook</button></div>
+         <button type="button" class="btn alt section" data-color-sort-cancel>Hủy</button></section></div>`;
+       const onClick=event=>{
+         const button=event.target.closest('[data-color-sort-reward],[data-color-sort-cancel]');
+         if(!button||!modal.contains(button))return;
+         modal.removeEventListener('click',onClick);
+         modal.innerHTML='';
+         resolve(button.hasAttribute('data-color-sort-cancel')?null:Number(button.dataset.colorSortReward));
+       };
+       modal.addEventListener('click',onClick);
+     });
+     if(rewardChoice===null)return;
+     selectedReward=rewardChoice;
    }
    if(!localizedConfirm(isReturnApproval?
     'Bạn ĐÃ đối soát nguồn thu hợp lệ? Chỉ quay về trang đích KHÔNG chứng minh bên rút gọn đã tính tiền.':
