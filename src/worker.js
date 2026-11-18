@@ -406,6 +406,12 @@ async function readBody(req, limit = 12000) {
 }
 
 const APP_PHOTO_PREFIX = 'APP_PHOTO_V1|';
+const COLOR_SORT_NO_PHOTO = 'COLOR_SORT_NO_PHOTO_V1';
+async function isColorSortReferralTask(env, task) {
+  if (task.category !== 'app' || !/color\s*sort/i.test(String(task.title || ''))) return false;
+  const setting = await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('app_referral_code:' + task.id).first();
+  return setting?.value === '11493356';
+}
 const PROOF_REMOVED_MARKER = 'EVIDENCE_REMOVED_V1';
 const APP_PHOTO_MAX_BYTES = 180000;
 // Ảnh do trình duyệt thu nhỏ, lưu trong D1 với mức dung lượng nhỏ;
@@ -1409,7 +1415,8 @@ async function handler(req, env) {
     }else await insertAttempt.run();
     await recordTaskDevice(env, req, me.id, attempt, 'start');
     return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: attemptSeconds,
-      review_mode: task.review_mode, category: task.category, task_url: task.url });
+      review_mode: task.review_mode, category: task.category, task_url: task.url,
+      app_no_photo: await isColorSortReferralTask(env, task) });
   }
   const submitMatch = p.match(/^\/api\/tasks\/([^/]+)\/submit$/);
   if (m === 'POST' && submitMatch) {
@@ -1426,7 +1433,8 @@ async function handler(req, env) {
       await event(env, req, 'captcha_wrong', me.id, `task:${task.id}`);
       fail(422, 'Phép tính chưa đúng. Hãy giải phép tính mới.', { a, b });
     }
-    const evidence = task.category === 'app' ? appPhotoEvidence(body.evidence, body.photo) : str(body.evidence, 2000);
+    const colorSortNoPhoto = await isColorSortReferralTask(env, task);
+    const evidence = colorSortNoPhoto ? COLOR_SORT_NO_PHOTO : task.category === 'app' ? appPhotoEvidence(body.evidence, body.photo) : str(body.evidence, 2000);
     if (task.category !== 'app' && task.review_mode === 'manual' && evidence.length < 12) fail(400, 'Nhiệm vụ này cần bằng chứng ít nhất 12 ký tự.');
     if(task.category==='link'&&attempt.ip!==clientIP(req))
       fail(409,'IP mạng thay đổi trong lúc thực hiện link. Hãy mở nhiệm vụ lại trên mạng hiện tại.');
@@ -1759,6 +1767,11 @@ async function handler(req, env) {
       if (!['approved', 'rejected'].includes(b.status)) fail(400, 'Trạng thái không hợp lệ.');
       const c = await env.DB.prepare('SELECT * FROM task_completions WHERE id=?').bind(review[1]).first();
       if (!c || c.status !== 'pending') fail(409, 'Không tìm thấy bằng chứng đang chờ duyệt.');
+      const colorSortNoPhoto = c.evidence === COLOR_SORT_NO_PHOTO;
+      const taskForReview = colorSortNoPhoto ? await env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(c.task_id).first() : null;
+      if (colorSortNoPhoto && (!taskForReview || !(await isColorSortReferralTask(env, {...taskForReview, category:'app'})))) fail(409,'Nhiệm vụ không còn hợp lệ để xét thưởng Color Sort.');
+      const approvedReward = colorSortNoPhoto && b.status === 'approved' ? Number(b.reward) : Number(c.reward);
+      if (colorSortNoPhoto && b.status === 'approved' && ![30,40].includes(approvedReward)) fail(400,'Chọn mức thưởng 30 hoặc 40 Lúa.');
       const isReturn=String(c.evidence||'').startsWith('[LINK_RETURN_V1]');
       const isFastReturn=isReturn&&String(c.evidence).includes('[LINK_RETURN_FAST_V1]');
       if (b.status === 'approved' && isReturn && b.revenue_confirmed !== true)
@@ -1768,13 +1781,13 @@ async function handler(req, env) {
         fail(400, 'Lượt quay về quá nhanh. Cần ghi lý do đối soát độc lập (tối thiểu 20 ký tự) trước khi duyệt.');
       const actionId = id();
       const r = await env.DB.batch([
-        env.DB.prepare("UPDATE task_completions SET status=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
-          .bind(b.status, c.id),
+        env.DB.prepare("UPDATE task_completions SET status=?,reward=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
+          .bind(b.status, approvedReward, c.id),
         env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
           SELECT ?,?,?,'Admin duyệt nhiệm vụ','task',? WHERE ?='approved' AND EXISTS
           (SELECT 1 FROM task_completions WHERE id=? AND status='approved')
           ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
-          .bind(actionId, c.user_id, c.reward, c.id, b.status, c.id)
+          .bind(actionId, c.user_id, approvedReward, c.id, b.status, c.id)
       ]);
       if (!r[0].meta?.changes) fail(409, 'Bằng chứng đã được xử lý.');
       if(b.status==='approved'&&isFastReturn)
