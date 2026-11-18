@@ -1805,6 +1805,10 @@ async function handler(req, env) {
       if (!['approved', 'rejected'].includes(b.status)) fail(400, 'Trạng thái không hợp lệ.');
       const c = await env.DB.prepare('SELECT * FROM task_completions WHERE id=?').bind(review[1]).first();
       if (!c || c.status !== 'pending') fail(409, 'Không tìm thấy bằng chứng đang chờ duyệt.');
+      const reviewTask = await env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(c.task_id).first();
+      const isAppReview = reviewTask && await resolveTaskCategory(env,reviewTask)==='app';
+      if (b.retry_allowed !== undefined && (b.status!=='rejected' || !isAppReview || typeof b.retry_allowed!=='boolean'))
+        fail(400,'Chỉ được chọn cho làm lại khi từ chối nhiệm vụ App.');
       const colorSortNoPhoto = c.evidence === COLOR_SORT_NO_PHOTO;
       const taskForReview = colorSortNoPhoto ? await env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(c.task_id).first() : null;
       if (colorSortNoPhoto && (!taskForReview || !(await isColorSortReferralTask(env, {...taskForReview, category:'app'})))) fail(409,'Nhiệm vụ không còn hợp lệ để xét thưởng Color Sort.');
@@ -1819,8 +1823,8 @@ async function handler(req, env) {
         fail(400, 'Lượt quay về quá nhanh. Cần ghi lý do đối soát độc lập (tối thiểu 20 ký tự) trước khi duyệt.');
       const actionId = id();
       const r = await env.DB.batch([
-        env.DB.prepare("UPDATE task_completions SET status=?,reward=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
-          .bind(b.status, approvedReward, c.id),
+        env.DB.prepare("UPDATE task_completions SET status=?,reward=?,period_key=CASE WHEN ?='rejected' AND ?=1 THEN 'app_retry_rejected:'||id ELSE period_key END,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
+          .bind(b.status, approvedReward, b.status, isAppReview && b.retry_allowed===true ? 1 : 0, c.id),
         env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
           SELECT ?,?,?,'Admin duyệt nhiệm vụ','task',? WHERE ?='approved' AND EXISTS
           (SELECT 1 FROM task_completions WHERE id=? AND status='approved')
