@@ -999,7 +999,7 @@ function renderMemberTaskCard(t){
   `<button class="btn task-card-modern-action is-disabled" type="button" disabled>⛔ Chưa thể bắt đầu</button>`:
   t.my_status?
    `<div class="task-card-modern-completed">${chip(t.my_status)}<span>Trạng thái được cập nhật từ hệ thống.</span></div>`:
-   `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> Làm nhiệm vụ <span aria-hidden="true">›</span></button>`;
+   `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> ${t.category==='app'?'Bắt đầu / Tiếp tục xác nhận':'Làm nhiệm vụ'} <span aria-hidden="true">›</span></button>`;
  return `<article class="card task-card task-card-modern">
   <div class="task-card-modern-head">
    <span class="task-card-modern-icon" aria-hidden="true">${t.category==='app'&&/^data:image\/(?:webp|jpeg|png);base64,/.test(t.app_logo||'')?`<img src="${esc(t.app_logo)}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:14px">`:symbol}</span>
@@ -1480,7 +1480,7 @@ async function startTask(taskId){
    location.assign(url);
    return;
   }
-  state.attempt={...data,taskId};renderAttemptModal();
+  state.attempt={...data,taskId};renderAttemptModal();if(data.resumed)toast('Đã khôi phục phiên App đang làm. Bạn có thể gửi xác nhận.');
  }catch(error){
   // Khi lỗi, trở lại bảng quy tắc để thử lại, không để người dùng mắc kẹt trong spinner.
   const root=document.getElementById('modal-root');
