@@ -1684,7 +1684,8 @@ async function handler(req, env) {
           WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN ''
           ELSE c.evidence END AS evidence,
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email,
-        a.id AS attempt_id,a.created_at AS started_at,a.ip AS started_ip
+        a.id AS attempt_id,a.created_at AS started_at,a.ip AS started_ip,
+        a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         LEFT JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id
         ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 150`).all();
