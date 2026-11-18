@@ -529,6 +529,38 @@ async function collectHeaderNotices(){
  items.sort((a,b)=>noticeDate(b.at)-noticeDate(a.at));
  return items.slice(0,30);
 }
+// Chỉ hiển thị kết quả Admin đã duyệt từ lịch sử máy chủ, không tự ghi thưởng.
+const TASK_APPROVAL_SEEN_PREFIX='tramco-lua.approval-popups.v1.';
+let approvalPopupChecking=false;
+function approvalPopupStoreKey(){return TASK_APPROVAL_SEEN_PREFIX+String(state.me?.user?.id||'guest');}
+function approvalPopupSeen(){
+ try{return new Set(JSON.parse(localStorage.getItem(approvalPopupStoreKey())||'[]'));}catch{return new Set();}
+}
+function markApprovalPopupSeen(id){
+ const seen=approvalPopupSeen();seen.add(String(id));
+ try{localStorage.setItem(approvalPopupStoreKey(),JSON.stringify([...seen].slice(-250)));}catch{}
+}
+async function checkApprovedTaskPopups(){
+ if(approvalPopupChecking||state.me?.user?.role!=='member'||document.visibilityState==='hidden')return;
+ if(document.getElementById('modal-root')?.children.length)return;
+ approvalPopupChecking=true;
+ const userId=state.me.user.id;
+ try{
+  const history=await api('/api/history');
+  if(state.me?.user?.id!==userId||document.getElementById('modal-root')?.children.length)return;
+  const seen=approvalPopupSeen();
+  const approved=(history.completions||[]).filter(c=>c.status==='approved'&&c.reviewed_at)
+   .sort((a,b)=>noticeDate(a.reviewed_at)-noticeDate(b.reviewed_at));
+  const next=approved.find(c=>!seen.has(String(c.id)));
+  if(next){
+   // Đánh dấu khi popup thực sự được hiển thị, không đánh dấu trước khi tải dữ liệu.
+   renderTaskResultModal({status:'approved',reward:next.reward});
+   if(document.getElementById('modal-root')?.querySelector('.task-result-cover'))markApprovalPopupSeen(next.id);
+   refreshMe().catch(()=>{});
+  }
+ }catch{/* Mất mạng không làm gián đoạn trang; thử lại lần sau. */}
+ finally{approvalPopupChecking=false;}
+}
 async function refreshHeaderNotifications(openPanel=false){
  const panel=document.getElementById('header-notification-panel'),
        button=document.getElementById('header-notice-button'),
@@ -611,6 +643,7 @@ function renderShell(){
  setMenuOpen(false);
  if(user.role==='member')initGlobalPaidCard(user.id).catch(()=>{});
  refreshHeaderNotifications(false).catch(()=>{});
+ if(user.role==='member')checkApprovedTaskPopups().catch(()=>{});
 }
 async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderHome();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
 async function navigate(view){
@@ -1755,7 +1788,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    state.returnChallenge=null;document.getElementById('modal-root').innerHTML='';
    clearLinkReturnQuery();return;
   }
-  if(act==='close-task-result'){closeTaskResultModal();return;}
+  if(act==='close-task-result'){closeTaskResultModal();setTimeout(()=>checkApprovedTaskPopups().catch(()=>{}),0);return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
@@ -1945,4 +1978,7 @@ app.addEventListener('submit',async e=>{
    toast(err.message,true);
  }finally{if(button&&button.isConnected)button.disabled=false;}
 });
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkApprovedTaskPopups().catch(()=>{});});
+window.addEventListener('pageshow',()=>checkApprovedTaskPopups().catch(()=>{}));
+window.addEventListener('focus',()=>checkApprovedTaskPopups().catch(()=>{}));
 boot();
