@@ -1729,7 +1729,9 @@ async function handler(req, env) {
           THEN substr(c.evidence,14,instr(substr(c.evidence,14),'|')-1)
           WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN ''
           ELSE c.evidence END AS evidence,
-        c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,u.name,u.email,
+        c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,
+        CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END AS category,
+        u.name,u.email,
         a.id AS attempt_id,a.created_at AS started_at,a.ip AS started_ip,
         a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
