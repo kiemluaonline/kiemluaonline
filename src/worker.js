@@ -1410,7 +1410,7 @@ async function handler(req, env) {
     const a = rand(), b = rand(), attempt = id(), available = startedNow + (task.category === 'video' ? task.min_seconds * 1000 : 0);
     // Khách có thể tìm mã trên Google lâu: Link được phép quay về trong 24 giờ.
     // Video và các nhiệm vụ khác giữ nguyên thời hạn 20 phút.
-    const attemptSeconds=(task.category==='link'||task.category==='app')?86400:1200;
+    const attemptSeconds=task.category==='app'?7*86400:task.category==='link'?86400:1200;
     const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
        VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
       clientIP(req), await deviceCode(req, env));
@@ -1437,7 +1437,7 @@ async function handler(req, env) {
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
     if (!attempt || attempt.consumed_by || attempt.expires_at <= now()) fail(410, 'Phiên nhiệm vụ hết hạn. Vui lòng mở lại nhiệm vụ.');
     if (task.category === 'video' && now() < attempt.available_at) fail(425, 'Chưa đủ thời gian thực hiện nhiệm vụ.', { remaining_seconds: Math.ceil((attempt.available_at - now()) / 1000) });
-    if (Number(body.answer) !== attempt.captcha_a + attempt.captcha_b || !/^\d+$/.test(String(body.answer))) {
+    if (task.category!=='app' && (Number(body.answer) !== attempt.captcha_a + attempt.captcha_b || !/^\d+$/.test(String(body.answer)))) {
       const a = rand(), b = rand();
       await env.DB.prepare('UPDATE task_attempts SET captcha_a=?,captcha_b=? WHERE id=? AND consumed_by IS NULL').bind(a, b, attempt.id).run();
       await event(env, req, 'captcha_wrong', me.id, `task:${task.id}`);
