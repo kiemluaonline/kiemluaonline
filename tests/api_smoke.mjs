@@ -1945,7 +1945,7 @@ console.log('PASS: public paid ticker cycles old -> new, polls automatically eve
 // Giao diện compact dùng chung: được nạp SAU các stylesheet cũ để thay đổi
 // khoảng trắng mà không sửa dữ liệu, điều kiện xét thưởng hay API.
 const compactStyle=readFileSync(new URL('../public/compact.css',import.meta.url),'utf8');
-const compactLink='/compact.css?v=20261117-mobile-global-compact-v1';
+const compactLink='/compact.css?v=20261118-admin-device-audit-v1';
 assert.ok(publicHomepage.includes(compactLink),'Compact CSS must be loaded on the public app shell');
 assert.ok(publicHomepage.indexOf(compactLink)>publicHomepage.indexOf('/payout-accounts.css?'),
  'Compact stylesheet must load last to override member/Admin page styles');
