@@ -2333,3 +2333,24 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(hint({...views,auto_reward_ready:true},'api'),/đúng 1 View/);
  console.log('PASS: Admin source capability choices, old settings preserved, helpful guidance.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function showReturnGate('),client.indexOf('async function processLinkReturn('));
+ const app={className:'',innerHTML:''};
+ const state={returnChallenge:{a:4,b:2,expiresAt:Date.now()+60000}};
+ const render=new Function('app','state','esc',code+'\nreturn renderLinkReturnModal;')(app,state,v=>String(v));
+ render();
+ assert.match(app.innerHTML,/return-gate-icon/);
+ assert.match(app.innerHTML,/Trạm Có Lúa/);
+ assert.match(app.innerHTML,/4 \+ 2 = \?/);
+ assert.match(app.innerHTML,/Hạn xác minh:/);
+ assert.match(app.innerHTML,/60 phút/);
+ assert.match(app.innerHTML,/data-form="link-return-captcha"/);
+ assert.match(app.innerHTML,/name="answer"/);
+ assert.doesNotMatch(app.innerHTML,/data-action="close-modal"|href="\/"/);
+ const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+ assert.match(html,/width:min\(100%,460px\)/);
+ assert.match(html,/min-height:54px/);
+ console.log('PASS: branded verification gate, large input and button, preserved form, deadline and no active-session dismiss.');
+}

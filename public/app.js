@@ -257,18 +257,21 @@ async function finishLinkReturn(result){
 }
 function showReturnGate(content){
  app.className='';
- app.innerHTML=`<main class="return-gate"><section aria-labelledby="linkReturnTitle">
- <h1 id="linkReturnTitle">Xác minh nhiệm vụ</h1>${content}</section></main>`;
+ app.innerHTML=`<main class="return-gate"><section class="return-gate-card" aria-labelledby="linkReturnTitle">
+ <header class="return-gate-head"><span class="return-gate-icon" aria-hidden="true"><svg viewBox="0 0 48 48" width="48" height="48" fill="none"><path d="M24 5 40 11v12c0 10-6 16-16 21C14 39 8 33 8 23V11L24 5Z" fill="#176c50" stroke="#0e513c" stroke-width="1.6"/><path d="m16 24 6 6 11-13" stroke="#f6d56a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 3v8M36 7h8" stroke="#d4a12d" stroke-width="2.5" stroke-linecap="round"/></svg></span>
+ <div><h1 id="linkReturnTitle">Xác minh nhiệm vụ</h1><p class="return-gate-brand">Trạm Có Lúa</p></div></header>${content}</section></main>`;
 }
 function renderLinkReturnModal(){
  const c=state.returnChallenge;
  if(!c)return;
- showReturnGate(`<p class="note">Bạn có 60 phút kể từ khi quay về để xác minh. Hết giờ không nhận Lúa; lượt đã sử dụng không được hoàn lại.</p>
- <p class="note">Hạn xác minh: ${esc(new Date(c.expiresAt).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))}</p><form data-form="link-return-captcha">
- <label for="return-answer">${Number(c.a)} + ${Number(c.b)} =</label>
+ showReturnGate(`<p class="return-gate-intro">Hoàn thành phép tính để xác minh lượt thực hiện nhiệm vụ.</p>
+ <div class="return-gate-deadline"><strong>Hạn xác minh: ${esc(new Date(c.expiresAt).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))}</strong><p>Bạn có 60 phút kể từ khi quay về. Quá hạn không nhận Lúa; lượt đã sử dụng không được hoàn lại.</p></div>
+ <form data-form="link-return-captcha">
+ <label for="return-answer"><span>Phép tính</span><strong>${Number(c.a)} + ${Number(c.b)} = ?</strong></label>
  <input id="return-answer" name="answer" aria-label="Kết quả phép tính" type="number"
- inputmode="numeric" min="0" max="30" required autocomplete="off">
- <button class="btn" type="submit">Xác minh</button></form>`);
+ inputmode="numeric" min="0" max="30" required autocomplete="off" placeholder="Nhập kết quả">
+ <button class="btn" type="submit">Xác minh</button></form>
+ <p class="return-gate-foot">Hãy xác minh để tiếp tục về trang chính.</p>`);
 }
 async function processLinkReturn(){
  const params=new URLSearchParams(location.search);
