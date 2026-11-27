@@ -214,55 +214,40 @@ function renderHome(){
 function clearLinkReturnQuery(){
  const params=new URLSearchParams(location.search);
  if(!params.has('link_return'))return;
+ document.documentElement.classList.remove('link-return-entry');
  params.delete('link_return');
  params.delete('link_session');
  const remain=params.toString();
  window.history.replaceState(null,'',location.pathname+(remain?'?'+remain:'')+location.hash);
 }
+function showReturnGate(content){
+ app.className='';
+ app.innerHTML=`<main class="return-gate"><section aria-labelledby="linkReturnTitle">
+ <h1 id="linkReturnTitle">Xác minh nhiệm vụ</h1>${content}</section></main>`;
+}
 function renderLinkReturnModal(){
  const c=state.returnChallenge;
  if(!c)return;
- const root=document.getElementById('modal-root');
- if(!root)return;
- root.innerHTML=`<div class="modal-cover"><section class="modal" role="dialog"
- aria-modal="true" aria-labelledby="linkReturnTitle">
- <button class="close" type="button" data-action="close-link-return" aria-label="Đóng">×</button>
- <span class="eyebrow">🔗 TRỞ VỀ TỪ LINK RÚT GỌN</span>
- <h3 id="linkReturnTitle">Xác minh hoàn thành nhiệm vụ</h3>
- <p class="note">Bạn đã trở lại Trạm Có Lúa. Giải phép tính để gửi yêu cầu cho Admin đối soát.</p>
- <form data-form="link-return-captcha">
-  <div class="captcha">${c.a} + ${c.b} = ?</div>
-  <div class="field">
-   <label for="return-answer">Nhập kết quả phép tính</label>
-   <input id="return-answer" name="answer" type="number" inputmode="numeric"
-    min="0" max="30" required autocomplete="off" style="font-size:18px;min-height:48px">
-  </div>
-  <button class="btn" type="submit" style="min-height:48px;width:100%">✅ Xác minh &amp; chờ duyệt</button>
- </form>
- <p class="note">Phép tính chỉ giúp chống thao tác tự động. Doanh thu cần Admin kiểm tra riêng.</p>
- </section></div>`;
- root.querySelector('#return-answer')?.focus({preventScroll:true});
+ showReturnGate(`<form data-form="link-return-captcha">
+ <label for="return-answer">${Number(c.a)} + ${Number(c.b)} =</label>
+ <input id="return-answer" name="answer" aria-label="Kết quả phép tính" type="number"
+ inputmode="numeric" min="0" max="30" required autocomplete="off">
+ <button class="btn" type="submit">Xác minh</button></form>`);
 }
 async function processLinkReturn(){
  const params=new URLSearchParams(location.search);
+ if(!params.has('link_return'))return false;
  const taskId=params.get('link_return'),linkSession=params.get('link_session')||'';
- if(!taskId||!state.me||state.me.user.role!=='member')return false;
- if(!/^[0-9a-f-]{36}$/i.test(taskId)){
-  clearLinkReturnQuery();await navigate('tasks');toast('Đường dẫn quay về không hợp lệ.',true);return true;
- }
+ showReturnGate('<p role="status">Đang kiểm tra phiên…</p>');
  try{
+  if(!/^[0-9a-f-]{36}$/i.test(taskId))throw new Error('Đường dẫn quay về không hợp lệ.');
+  if(state.me?.user?.role!=='member')throw new Error('Hãy đăng nhập đúng tài khoản thành viên đã mở nhiệm vụ.');
   const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',linkSession?{link_session:linkSession}:{});
   if(!result.challenge)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
   state.returnChallenge={taskId,linkSession,a:result.a,b:result.b};
-  // URL của trang đích Link4M là công khai. Sau khi nhận phiên và phép tính,
-  // xóa mã nhiệm vụ khỏi thanh địa chỉ bằng replaceState (không tạo trang lịch sử mới).
-  // Mã vẫn được giữ trong bộ nhớ của trang để xác minh mà không cần URL query.
-  clearLinkReturnQuery();
-  await navigate('tasks');
   renderLinkReturnModal();
  }catch(error){
-  clearLinkReturnQuery();await navigate('tasks');
-  toast(error.message||'Không mở được phép tính xác minh.',true);
+  showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
  }
  return true;
 }
@@ -270,6 +255,12 @@ async function boot(){
   try{ state.meta=await api('/api/meta');document.title=state.meta.site_name+' · Nhiệm vụ'; }
   catch(e){ app.innerHTML=`<div class="auth-page"><div class="auth-card"><h2>Chưa thể kết nối hệ thống</h2><p>${esc(e.message)}. Hãy kiểm tra D1 và migration.</p></div></div>`;return; }
   await loadMe();
+  if(new URLSearchParams(location.search).has('link_return')){
+   if(state.accountHold)renderLocked();
+   else if(!state.me){state.authMode='login';renderAuth();toast('Đăng nhập đúng tài khoản đã mở nhiệm vụ.');}
+   else await processLinkReturn();
+   return;
+  }
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
   else if(state.accountHold){renderLocked();}
   else {
@@ -303,10 +294,6 @@ if(googleError==='suspended'){
  };
  toast(messages[googleError]||'Đăng nhập Google chưa thành công. Hãy thử lại.',true);
  window.history.replaceState(null,'',location.pathname);
-}
-if(new URLSearchParams(location.search).has('link_return')){
- if(state.me?.user?.role==='member')await processLinkReturn();
- else if(!state.me&&!state.accountHold){state.authMode='login';renderAuth();toast('Đăng nhập đúng tài khoản đã mở nhiệm vụ để ghi nhận lượt quay về.');}
 }
 }
 async function loadMe(){
@@ -545,6 +532,7 @@ function markApprovalPopupSeen(id){
  try{localStorage.setItem(approvalPopupStoreKey(),JSON.stringify([...seen].slice(-250)));}catch{}
 }
 async function checkApprovedTaskPopups(){
+ if(new URLSearchParams(location.search).has('link_return'))return;
  if(approvalPopupChecking||state.me?.user?.role!=='member'||document.visibilityState==='hidden')return;
  if(document.getElementById('modal-root')?.children.length)return;
  approvalPopupChecking=true;
@@ -1841,10 +1829,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    root.innerHTML=`<div class="modal-cover"><section class="modal"><button class="close" type="button" data-action="close-modal" aria-label="Đóng">×</button><h3>Ảnh bằng chứng nhiệm vụ App</h3><p class="note">Ghi chú: ${esc(el.dataset.note||'Không có')}</p><img class="app-proof-image" src="/api/admin/reviews/${encodeURIComponent(el.dataset.id)}/photo" alt="Ảnh chụp màn hình thành viên gửi" loading="lazy"><p class="note">Chỉ Admin đã đăng nhập mới xem được ảnh. Hãy đối chiếu kết quả trong hệ thống giới thiệu của ứng dụng trước khi duyệt.</p></section></div>`;
    return;
   }
-  if(act==='close-link-return'){
-   state.returnChallenge=null;document.getElementById('modal-root').innerHTML='';
-   clearLinkReturnQuery();return;
-  }
+  if(act==='retry-link-return'){await processLinkReturn();return;}
   if(act==='close-task-result'){closeTaskResultModal();setTimeout(()=>checkApprovedTaskPopups().catch(()=>{}),0);return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
@@ -1979,11 +1964,12 @@ app.addEventListener('submit',async e=>{
    if(!c)throw new Error('Phiên xác minh không còn. Hãy mở lại nhiệm vụ.');
    try{
     const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer,...(c.linkSession?{link_session:c.linkSession}:{})});
+    if(!result.ok||!['approved','pending'].includes(result.status))throw new Error('Máy chủ chưa xác nhận kết quả.');
     state.returnChallenge=null;
-    document.getElementById('modal-root').innerHTML='';
     clearLinkReturnQuery();
+    renderShell();
     await afterAction('history');
-    renderTaskResultModal({...result,reward:state.memberTasks.find(t=>t.id===c.taskId)?.reward},{linkReturn:true});
+    renderTaskResultModal({...result,reward:result.reward??state.memberTasks.find(t=>t.id===c.taskId)?.reward},{linkReturn:true});
    }catch(err){
     if(err.status===422 && Number.isInteger(err.a) && Number.isInteger(err.b)){
      c.a=err.a;c.b=err.b;renderLinkReturnModal();
@@ -2016,8 +2002,9 @@ app.addEventListener('submit',async e=>{
     const authResult=await api('/api/auth/'+kind,'POST',b);
     await loadMe();
     if(state.accountHold){renderLocked();return;}
+    if(await processLinkReturn())return;
     renderShell();await navigate(state.me.user.role==='admin'?'admin-overview':'overview');toast(kind==='login'?'Đăng nhập thành công.':'Đăng ký thành công.');
-     if(new URLSearchParams(location.search).has('link_return'))await processLinkReturn();
+
   }
   if(kind==='password'){const r=await api('/api/me/password','POST',b);state.me=null;renderAuth();toast(r.message);}
   if(kind==='withdraw'){
