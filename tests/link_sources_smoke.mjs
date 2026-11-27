@@ -28,3 +28,14 @@ let requests=0;
 await assert.rejects(createSourceLink(source,'https://nhiemvu.click/','fake-secret',async(url,options)=>{requests++;assert.equal(options.redirect,'manual');assert.equal(new URL(url).searchParams.get('api'),'fake-secret');assert.equal(new URL(url).searchParams.get('url'),'https://nhiemvu.click/');assert.ok(!url.includes('{token}'));return new Response(null,{status:302,headers:{Location:'https://elsewhere.example/'}});}),/chuyển hướng HTTP 302/);
 assert.equal(requests,1);
 console.log('PASS: Workers-compatible fetch, substituted placeholders and blocked redirects.');
+
+// Generic view arrays: synthetic fixtures, no provider-specific configuration.
+const listSource=normalizeSource({...source,view_path:'data.chart.*.views'});
+const chart=rows=>response({status:'success',data:{chart:rows}});
+assert.equal(await checkSourceView(listSource,'demo1','',async()=>chart([{date:'2026-01-01',views:0},{date:'2026-01-02',views:2},{date:'2026-01-03',views:'3'}])),5);
+assert.equal(await checkSourceView(listSource,'demo1','',async()=>chart([{views:0},{views:0}])),0);
+for(const rows of [[],[{views:1},{}],[{views:-1}],[{views:1.5}],[{views:Number.MAX_SAFE_INTEGER},{views:1}]])await assert.rejects(checkSourceView(listSource,'demo1','',async()=>chart(rows)));
+assert.throws(()=>normalizeSource({...source,view_path:'data.chart.*.__proto__'}));
+assert.throws(()=>normalizeSource({...source,view_path:'data.*.chart.*.views'}));
+assert.throws(()=>normalizeSource({...source,short_path:'data.chart.*.views'}));
+console.log('PASS: generic view array aggregation, zero, missing values and overflow fail closed.');

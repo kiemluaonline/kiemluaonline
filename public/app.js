@@ -1193,8 +1193,8 @@ function sourceSettingsForm(source={}){
  ${field('short_path','Trường JSON chứa link',source.short_path||'','placeholder="shortenedUrl hoặc data.short_url"')}
  ${field('alias_path','Trường JSON chứa alias (bỏ trống nếu lấy cuối URL)',source.alias_path||'','placeholder="data.alias"')}
  ${field('view_url','API kiểm tra lượt GET JSON',source.view_url||'','placeholder="https://.../api/view/{alias}"')}
- ${field('view_path','Trường JSON chứa tổng view',source.view_path||'','placeholder="views hoặc data.views"')}
- <p class="note">Dùng {destination}, {alias}, {token} theo tài liệu đối tác. Không dán token thật vào đây. Nếu cần token, tạo Secret ${esc(source.secret_name||'LINK_PROVIDER_TOKEN_MÃ_NGUỒN_VIẾT_HOA')} trong Cloudflare Worker. ${source.id?(source.token_configured?'Đã có Secret.':'Chưa có Secret (không cần nếu API công khai).'):''}</p>
+ ${field('view_path','Trường JSON chứa tổng view',source.view_path||'','placeholder="views, data.views hoặc data.chart.*.views"')}
+ <p class="note">Nếu API trả danh sách view theo ngày, dùng dạng data.chart.*.views để cộng các dòng trong kỳ API trả về. Dùng {destination}, {alias}, {token} theo tài liệu đối tác. Không dán token thật vào đây. Nếu cần token, tạo Secret ${esc(source.secret_name||'LINK_PROVIDER_TOKEN_MÃ_NGUỒN_VIẾT_HOA')} trong Cloudflare Worker. ${source.id?(source.token_configured?'Đã có Secret.':'Chưa có Secret (không cần nếu API công khai).'):''}</p>
  <button class="btn" type="submit">Lưu nguồn</button></form>
  ${source.id?`<form class="section" data-form="link-source-test"><input type="hidden" name="id" value="${esc(source.id)}">
  ${select('kind','Kiểm tra API',[['view','Kiểm tra view'],['create','Tạo link kiểm thử (không thưởng)']],'view')}
