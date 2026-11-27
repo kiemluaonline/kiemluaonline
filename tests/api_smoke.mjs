@@ -2052,6 +2052,6 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',{...config,is_active:true},admCookie)).status,400);
  const oldClient={...config,is_active:true};delete oldClient.bbmkts_creation;delete oldClient.bbmkts_verification;
  assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',oldClient,admCookie)).status,400);
- assert.equal((await call('/api/admin/tasks/'+taskId,'DELETE',undefined,admCookie)).status,200);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'DELETE',{},admCookie)).status,200);
  console.log('PASS: admin BBMKTS draft saved, old-client activation blocked, clean deletion.');
 }
