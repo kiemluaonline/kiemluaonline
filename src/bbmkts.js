@@ -30,3 +30,43 @@ export function bbmktsReviewState({ views, paidMetricConfirmed = false, captchaP
   if (views !== 1) return 'manual_review';
   return 'eligible_for_review';
 }
+
+// Public read-only API documented by BBMKTS on 2026-11-27.
+export function bbmktsViewApiUrl(alias) {
+  bbmktsChartUrl(alias);
+  return 'https://bbmkts.com/api/link/chart/' + encodeURIComponent(alias);
+}
+
+// Until the actual JSON schema and paid-view semantics are confirmed,
+// return the provider's JSON as diagnostic data, never as a reward decision.
+export async function fetchBbmktsViewJson(alias, fetcher = fetch) {
+  const endpoint = bbmktsViewApiUrl(alias);
+  const response = await fetcher(endpoint, {
+    method: 'GET', redirect: 'error', cache: 'no-store',
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!response.ok) throw new Error('BBMKTS HTTP ' + response.status);
+  if (!/\bapplication\/(?:[a-z0-9.+-]+\+)?json\b/i.test(response.headers.get('content-type') || ''))
+    throw new Error('BBMKTS không trả JSON');
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('BBMKTS không trả dữ liệu');
+  const decoder = new TextDecoder();
+  let bytes = 0, raw = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > 65536) throw new Error('Dữ liệu BBMKTS vượt giới hạn');
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  const data = JSON.parse(raw);
+  if (data === null || typeof data !== 'object') throw new Error('JSON BBMKTS không hợp lệ');
+  return { alias, endpoint, data };
+}

@@ -1190,6 +1190,17 @@ async function adminTasks(){
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
  <section class="info-split">${taskForm(edit||{})}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, Lúa và hạn mức của từng nhiệm vụ. Thẻ thành viên tự lấy các số liệu này.</p><p>2. Với Link tự quay về, đặt chế độ <strong>Admin kiểm tra bằng chứng</strong>; lấy trang đích từ nút bên dưới để tạo link rút gọn.</p><p>3. Khi thành viên vượt link, quay về và giải phép tính, lượt sẽ được đưa vào <strong>Chờ đối soát</strong>.</p><p>4. Kiểm tra khoản thu hợp lệ rồi mới duyệt, chỉ bật công khai sau khi kiểm thử.</p><div class="callout">Quay về và giải CAPTCHA không chứng minh nhà cung cấp đã tính tiền. Chỉ dùng nguồn cho phép hình thức nhiệm vụ thưởng.</div></article></section>
+ <section class="card section"><h3>🔗 BBMKTS — Xác minh tự động</h3>
+ <p><strong>Chế độ hiện tại: Admin đối soát thủ công.</strong> API Check View đã được hỗ trợ để thử tra cứu trực tiếp. Chưa bật tự động cấp link hoặc cộng Lúa.</p>
+ <form data-form="bbmkts-check-view">
+ ${field('alias','Alias của link BBMKTS','', 'required maxlength="128" pattern="[A-Za-z0-9_\\-]+" placeholder="Ví dụ: krjkB" autocapitalize="off" autocomplete="off"')}
+ <button class="btn" type="submit">Kiểm tra View qua API</button>
+ <p class="note">Không cần API Token để kiểm tra. Dữ liệu trả về chỉ dùng đối soát, không sửa số dư. Không có view chưa có nghĩa là gian lận.</p>
+ <pre data-bbmkts-result role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
+ </form>
+ <label class="note"><input type="checkbox" disabled> Tự động duyệt và cộng Lúa qua BBMKTS (chưa sẵn sàng)</label>
+ <p class="note">Cần cấu hình API tạo link riêng, xác nhận cấu trúc JSON và lượt view được tính tiền trước khi mở chế độ này.</p>
+ </section>
  <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${d.tasks.length})</h3><p class="note">Số lượt hôm nay được tính theo giờ Việt Nam. Số lượt giới hạn mỗi tài khoản có thể cấu hình riêng cho từng nhiệm vụ.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>`;
 }
 async function adminUsers(){
@@ -1997,6 +2008,19 @@ app.addEventListener('submit',async e=>{
     toast(saveError?'Yêu cầu rút đã gửi, nhưng chưa lưu được tài khoản: '+saveError:savedOk?'Đã gửi yêu cầu rút và lưu tài khoản nhận tiền mặc định.':r.message,!!saveError);
   }
   if(kind==='settings'){await api('/api/admin/settings','PUT',b);state.meta=await api('/api/meta');toast('Đã lưu cài đặt.');await navigate('admin-settings');}
+  if(kind==='bbmkts-check-view'){
+    const output=form.querySelector('[data-bbmkts-result]');
+    if(output)output.textContent='Đang kiểm tra BBMKTS...';
+    try{
+      const result=await api('/api/admin/bbmkts/check-view','POST',{alias:String(b.alias||'').trim()});
+      if(output)output.textContent=JSON.stringify(result.data,null,2);
+      toast('Đã đọc dữ liệu BBMKTS. Chưa cộng Lúa.');
+    }catch(error){
+      if(output)output.textContent=error.message||'Không thể kiểm tra BBMKTS.';
+      throw error;
+    }
+    return;
+  }
   if(kind==='admin-task'){
     if(b.category==='link'&&b.review_mode!=='manual')
       throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');

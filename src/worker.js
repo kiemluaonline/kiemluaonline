@@ -3,6 +3,7 @@ import { shopOrdersAPI } from './shop-orders.js';
 import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
 import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
+import { fetchBbmktsViewJson } from './bbmkts.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -1596,6 +1597,18 @@ async function handler(req, env) {
       const r = await Promise.all(queries.map(q => env.DB.prepare(q).first()));
       return json({ members: r[0].n, tasks: r[1].n, pending_evidence: r[2].n,
         pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n });
+    }
+    // Admin-only diagnostic. No database writes, no member reward, no provider credentials.
+    if (m === 'POST' && p === '/api/admin/bbmkts/check-view') {
+      const body = await readBody(req);
+      const alias = typeof body.alias === 'string' ? body.alias.trim() : '';
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(alias)) fail(400, 'Alias BBMKTS không hợp lệ.');
+      try {
+        const result = await fetchBbmktsViewJson(alias);
+        return json({ ok: true, ...result, reward_eligible: false, checked_at: new Date().toISOString() });
+      } catch {
+        fail(502, 'Chưa đọc được JSON từ BBMKTS. Vui lòng kiểm tra lại alias hoặc thử lại sau.');
+      }
     }
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings,activity]=await Promise.all([
