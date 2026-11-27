@@ -1482,29 +1482,24 @@ function showTaskRules(taskId){
 }
 
 // Tiến trình bắt đầu nhiệm vụ: hiển thị trạng thái thật của API, không giả xác minh.
-function renderTaskStartProgress(taskId,stage='checking',redirectUrl=''){
+function renderTaskStartProgress(taskId){
  const root=document.getElementById('modal-root');
  if(!root)return;
  const task=state.memberTasks.find(t=>t.id===taskId);
- const ready=stage==='ready';
- const icon=ready?
-  '<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M10 24 20 34 39 13" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>':
-  '<span class="task-start-spinner" aria-hidden="true"></span>';
  root.innerHTML=`<div class="modal-cover task-start-cover">
-  <section class="modal task-start-modal ${ready?'is-ready':'is-checking'}" role="dialog" aria-modal="true" aria-labelledby="task-start-title" aria-describedby="task-start-subtitle" aria-busy="${ready?'false':'true'}" tabindex="-1">
+  <section class="modal task-start-modal is-checking" role="dialog" aria-modal="true" aria-labelledby="task-start-title" aria-describedby="task-start-subtitle" aria-busy="true" tabindex="-1">
    <span class="task-start-kicker">🌾 TRẠM CÓ LÚA</span>
    <div class="task-start-heading">
-    <span class="task-start-heading-icon">${icon}</span>
+    <span class="task-start-heading-icon"><span class="task-start-spinner" aria-hidden="true"></span></span>
     <div class="task-start-heading-text">
      <h3 id="task-start-title">${esc(task?.title||'Nhiệm vụ')}</h3>
-     <p id="task-start-subtitle">${ready?'Đã khởi tạo nhiệm vụ':'Đang kiểm tra nhiệm vụ...'}</p>
+     <p id="task-start-subtitle">Đang kiểm tra phiên nhiệm vụ...</p>
     </div>
    </div>
    <div class="task-start-status" role="status" aria-live="polite">
-    <span class="task-start-status-icon">${ready?'✓':'◌'}</span>
-    <span>${ready?'Lượt thực hiện đã được tạo từ hệ thống. Đang chuyển tới bước thực hiện...':'Vui lòng chờ phản hồi từ hệ thống.'}</span>
+    <span class="task-start-status-icon">◌</span>
+    <span>Hệ thống đang kiểm tra tài khoản và giới hạn của nhiệm vụ.</span>
    </div>
-   ${ready&&redirectUrl?`<a class="task-start-fallback" href="${safeUrl(redirectUrl)}">Nếu chưa tự chuyển, chạm để mở nhiệm vụ ↗</a>`:''}
    <div class="task-start-accent" aria-hidden="true"></div>
   </section>
  </div>`;
@@ -1513,7 +1508,7 @@ function renderTaskStartProgress(taskId,stage='checking',redirectUrl=''){
 
 async function startTask(taskId){
  // Không báo đã khởi tạo trước khi server xác nhận phiên nhiệm vụ thành công.
- renderTaskStartProgress(taskId,'checking');
+ renderTaskStartProgress(taskId);
  try{
   const data=await api(`/api/tasks/${encodeURIComponent(taskId)}/start`,'POST',{});
   if(!data?.attempt_id)throw new Error('Máy chủ chưa xác nhận tạo phiên nhiệm vụ. Hãy thử lại.');
@@ -1521,9 +1516,6 @@ async function startTask(taskId){
   const url=autoOpenLink?String(data.task_url||''):'';
   if(autoOpenLink&&(!/^https:\/\//i.test(url)||!URL.canParse(url)))
    throw new Error('Admin chưa cài liên kết HTTPS hợp lệ cho nhiệm vụ này.');
-  renderTaskStartProgress(taskId,'ready',url);
-  // Hiển thị trạng thái đã tạo đủ để người dùng nhận biết, kể cả khi API rất nhanh.
-  await new Promise(resolve=>setTimeout(resolve,750));
   if(autoOpenLink){
    // Link rút gọn mở trong CÙNG tab, không tạo trang mới hoặc nộp bằng chứng sớm.
    state.attempt=null;
