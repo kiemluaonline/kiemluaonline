@@ -1450,10 +1450,10 @@ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM task_attempts WHERE user_
  'Bắt đầu lại phải vô hiệu hóa các phiên Link cũ');
 assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,
  '55555555-3333-4333-8444-555555555555')).status,409,'Sai mã trình duyệt không được ghi nhận');
-assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
- 'Sai IP không được ghi nhận');
 const challenge=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
 assert.equal(challenge.status,200,JSON.stringify(challenge));
+assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
+ 'Đổi IP sau khi đã ghi nhận quay về không được đổi phiên xác minh');
 assert.equal(challenge.data.challenge,true,'Khi quay về phải hiện phép tính, chưa ghi lượt');
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast'")
  .get(returnMemberId).n,1,'Quay về ngay sau khi bắt đầu phải ghi cảnh báo rủi ro');
@@ -1476,6 +1476,9 @@ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,
  memberBefore,'Quay về trang đích KHÔNG tự cộng Lúa');
 const returnRow=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(returnTask.data.id);
 assert.equal(returnRow.status,'pending');
+const recoveredReturn=await call(returnPath,'POST',{attempt_id:startedReturnAgain.data.attempt_id},returnMember.cookie,returnIP,returnDevice);
+assert.equal(recoveredReturn.status,200);assert.equal(recoveredReturn.data.status,'pending');assert.equal(recoveredReturn.data.recovered,true);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(returnTask.data.id).n,1);
 // New Admin-only audit: server logs device stages without changing the existing D1 schema.
 const deviceAuditReview=await call('/api/admin/reviews','GET',undefined,admCookie);
 assert.equal(deviceAuditReview.status,200,JSON.stringify(deviceAuditReview.data));
@@ -1547,7 +1550,10 @@ assert.equal(qLanding1.data.challenge,true);
 const taskViewFirst=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
  .find(t=>t.id===quotaReturnTask.data.id);
 assert.equal(taskViewFirst.link_24h_count,1,'Lượt quay về đầu tiên hiển thị 1/2 trước cả CAPTCHA');
+const confirmationDeadline=qLanding1.data.expires_at;
+assert.ok(Math.abs(confirmationDeadline-Date.now()-3600000)<3000,'Exactly 60 minutes from recorded return');
 const qLandingSame=await call(quotaPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(qLandingSame.data.expires_at,confirmationDeadline,'Reload must not extend the deadline');
 assert.equal(qLandingSame.status,200,'Tải lại cùng phiên không dùng thêm lượt; khách vẫn giải được CAPTCHA');
 const taskViewSame=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
  .find(t=>t.id===quotaReturnTask.data.id);
@@ -1570,7 +1576,11 @@ assert.equal(taskViewSecond.link_24h_count,2,'Lượt về thứ hai hiển th�
 assert.equal(taskViewSecond.link_blocked,'link_task_limit','Hết lượt phải khóa nút bắt đầu');
 const qStart3=await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{},
  returnMember.cookie,returnIP,returnDevice);
-assert.equal(qStart3.status,429,'Không cho tạo lượt thứ ba trong cùng ngày');
+assert.equal(qStart3.status,200,'Chỉ cho tiếp tục xác minh lượt hai, không tạo lượt thứ ba');
+assert.equal(qStart3.data.attempt_id,qStart2.data.attempt_id);
+assert.equal(qStart3.data.resume_confirmation,true);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_attempts WHERE task_id=?').get(quotaReturnTask.data.id).n,2);
+assert.equal(taskViewSecond.link_needs_confirmation,true);
 const qAnswer2=await call(quotaPath,'POST',{answer:qLanding2.data.a+qLanding2.data.b},
  returnMember.cookie,returnIP,returnDevice);
 assert.equal(qAnswer2.status,200,JSON.stringify(qAnswer2));
@@ -1583,6 +1593,30 @@ assert.equal((await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{
  returnMember.cookie,returnIP,returnDevice)).status,429,
  'Hai lần đến đích vẫn hết lượt dù một lần bị Admin từ chối');
 
+// Expired confirmation uses the slot but cannot grant any Lúa.
+{
+ const created=await call('/api/admin/tasks','POST',{title:'BBMKTS hết hạn xác minh',category:'link',url:'https://example.com/timeout',reward:9,review_mode:'manual',repeat_policy:'daily',link_24h_limit:2,is_active:true},admCookie);
+ assert.equal(created.status,201,JSON.stringify(created));
+ const taskId=created.data.id,path='/api/tasks/'+taskId+'/return';
+ const start=await call('/api/tasks/'+taskId+'/start','POST',{},returnMember.cookie,returnIP,returnDevice);
+ assert.equal(start.status,200,JSON.stringify(start));
+ const landing=await call(path,'POST',{},returnMember.cookie,returnIP,returnDevice);
+ assert.equal(landing.status,200);assert.ok(Math.abs(landing.data.expires_at-Date.now()-3600000)<3000);
+ const old=Date.now()-3600001;
+ sqlite.prepare('UPDATE task_attempts SET available_at=?,expires_at=? WHERE id=?').run(-old,old+3600000,start.data.attempt_id);
+ const before=(await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance;
+ const expired=await call(path,'POST',{attempt_id:start.data.attempt_id,answer:landing.data.a+landing.data.b},returnMember.cookie,returnIP,returnDevice);
+ assert.equal(expired.status,410);assert.equal(expired.data.confirmation_expired,true);
+ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance,before);
+ const today=sqlite.prepare("SELECT date('now','+7 hours') d").get().d;
+ const day=sqlite.prepare("SELECT date(datetime(?/1000,'unixepoch'),'+7 hours') d").get(old).d;
+ if(today===day){
+  assert.equal((await call('/api/tasks/'+taskId+'/start','POST',{},returnMember.cookie,returnIP,returnDevice)).status,429);
+  const listing=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks.find(t=>t.id===taskId);
+  assert.equal(listing.link_24h_count,1);assert.equal(listing.link_needs_confirmation,false);
+ }
+ assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(taskId).n,0);
+}
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/Sao chép trang đích/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/async function processLinkReturn/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/renderLinkReturnModal/);
@@ -1711,24 +1745,13 @@ const cleanedReturnMethod=cleanedReturnClient.slice(
  cleanedReturnClient.indexOf('async function processLinkReturn(){'),
  cleanedReturnClient.indexOf('async function boot(){')
 );
-const cleanedReturnSuccess=cleanedReturnMethod.slice(
- cleanedReturnMethod.indexOf('state.returnChallenge={taskId,'),
- cleanedReturnMethod.indexOf('renderLinkReturnModal();')
-);
-assert.match(cleanedReturnSuccess,/clearLinkReturnQuery\(\)/,
- 'Browser address bar must be cleaned after capturing returned task challenge');
-assert.ok(cleanedReturnSuccess.indexOf('clearLinkReturnQuery()') <
- cleanedReturnSuccess.indexOf("await navigate('tasks')"),
- 'Remove task identifier before displaying post-return verification');
-const cleanedHelper=cleanedReturnClient.slice(cleanedReturnClient.indexOf('function clearLinkReturnQuery(){'),
- cleanedReturnClient.indexOf('function renderLinkReturnModal(){'));
-assert.match(cleanedHelper,/params\.delete\('link_return'\)/,
- 'Only shortlink query parameter is removed');
-assert.match(cleanedHelper,/window\.history\.replaceState\(null,'',location\.pathname/,
- 'Use history.replaceState without adding navigation to history');
-assert.match(cleanedReturnClient,/\+encodeURIComponent\(c\.taskId\)\+'\/return'/,
- 'CAPTCHA submission must still use the captured task ID from in-memory state');
-console.log('PASS: shortlink destination query is removed from address bar without breaking CAPTCHA verification.');
+assert.match(cleanedReturnMethod,/params\.set\('return_attempt',result\.attempt_id\)/);
+assert.match(cleanedReturnMethod,/rememberReturn\(result\.expires_at\)/);
+const finishReturnClient=cleanedReturnClient.slice(cleanedReturnClient.indexOf('async function finishLinkReturn('),cleanedReturnClient.indexOf('function showReturnGate('));
+assert.ok(finishReturnClient.indexOf('renderTaskResultModal')<finishReturnClient.indexOf('clearLinkReturnQuery()'));
+assert.match(cleanedReturnClient,/params\.delete\('link_return'\)/);
+assert.match(cleanedReturnClient,/attempt_id:c\.attemptId/);
+console.log('PASS: exact return session retained until server receipt is displayed.');
 
 const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 assert.match(linkFraudWorkerSource,/LINK_RETURN_FAST_SECONDS = 20/);
@@ -1799,7 +1822,7 @@ assert.doesNotMatch(outcomeRoot.innerHTML,/task-result-success|Bạn vừa nhậ
 assert.match(outcomeRoot.innerHTML,/task-result-pending/);
 assert.match(outcomeClient,/await afterAction\('tasks'\);renderTaskResultModal\(r\);/,
  'Task claim should show result popup only after server response and wallet refresh');
-assert.match(outcomeClient,/await afterAction\('history'\);\s*renderTaskResultModal\(/,
+assert.match(outcomeClient,/await afterAction\('history'\);[\s\S]*?renderTaskResultModal\(result,\{linkReturn:true\}\)/,
  'Link return must show amber pending popup after server response');
 assert.match(outcomeClient,/if\(act==='close-task-result'\)/);
 assert.match(outcomeClient,/e\.target\.classList\?\.contains\('task-result-cover'\)/);
@@ -1853,24 +1876,20 @@ const startProgressFns=new Function(
 );
 const startProgressPromise=startProgressFns.startTask('link4m-id');
 assert.match(startProgressRoot.innerHTML,/task-start-modal is-checking/);
-assert.match(startProgressRoot.innerHTML,/Đang kiểm tra nhiệm vụ/);
-assert.match(startProgressRoot.innerHTML,/Vui lòng chờ phản hồi từ hệ thống/);
+assert.match(startProgressRoot.innerHTML,/Đang kiểm tra phiên nhiệm vụ/);
+assert.match(startProgressRoot.innerHTML,/Hệ thống đang kiểm tra tài khoản và giới hạn/);
 assert.doesNotMatch(startProgressRoot.innerHTML,/Đã khởi tạo nhiệm vụ/);
 resolveStartProgress({attempt_id:'attempt-test',category:'link',
  review_mode:'manual',task_url:'https://example.com/short-link'});
 await startProgressPromise;
-assert.match(startProgressReadyAtTimer,/task-start-modal is-ready/);
-assert.match(startProgressReadyAtTimer,/Đã khởi tạo nhiệm vụ/);
-assert.match(startProgressReadyAtTimer,/Lượt thực hiện đã được tạo từ hệ thống/);
-assert.match(startProgressReadyAtTimer,/href="https:\/\/example.com\/short-link"/);
+assert.equal(startProgressReadyAtTimer,'','No artificial delay after a successful start');
 assert.deepEqual(startProgressNavigated,['https://example.com/short-link'],
  'After server-created stage, manual link must open in same tab');
 assert.equal(startProgressAttemptShown,0,'Do not show CAPTCHA/evidence before link redirect');
 assert.equal(startProgressRulesRestored,0,'Successful task start must not restore rules modal');
 assert.match(startProgressEvents[0],/Link4M &amp; thật/,'Task name must be HTML escaped');
-assert.ok(startProgressEvents.findIndex(v=>v.includes('is-checking'))<
- startProgressEvents.findIndex(v=>v.includes('is-ready')),
- 'Checking stage must be visible before created stage');
+assert.ok(startProgressEvents.some(v=>v.includes('is-checking')),
+ 'Checking stage must be visible before redirect');
 let apiRejectCount=0,recoveredRules=0;
 const errorStartFns=new Function(
  'state','document','esc','safeUrl','api','location','showTaskRules','renderAttemptModal','setTimeout',
@@ -1897,7 +1916,7 @@ assert.match(startProgressCss,/min-height:44px/,'Touch-accessible fallback link 
 const startProgressHmoob=readFileSync(new URL('../public/i18n-extra.js',import.meta.url),'utf8');
 assert.match(startProgressHmoob,/"Đang kiểm tra nhiệm vụ\.\.\.":/);
 assert.match(startProgressHmoob,/"Đã khởi tạo nhiệm vụ":/);
-console.log('PASS: start-task modal shows checking then server-verified created before redirect, with error rollback and mobile/Hmoob support.');
+console.log('PASS: start-task modal shows checking, redirects only after server success, restores rules on failure.');
 
 const memberSafeWorker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 const memberSafeClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
@@ -2094,26 +2113,52 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
    creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');const dest=new URL(u.searchParams.get('url'));assert.equal(dest.origin,'https://nhiemvu.click');assert.equal(dest.searchParams.get('link_return'),taskId);assert.match(dest.searchParams.get('link_session'),/^[0-9a-f-]{36}$/i);
    return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
   }
-  if(u.pathname==='/view/mock1'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
+  if(u.pathname==='/view/mock2'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
   throw Error('Unexpected provider URL');
  };
  try{
   const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock1');
-  assert.ok(!JSON.stringify(start).includes('mock-only-secret'));
-  const resumed=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
-  assert.equal(resumed.data.attempt_id,start.data.attempt_id);assert.equal(creates,1);
-  const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id,answer:start.data.a+start.data.b,evidence:'mock proof direct bypass'},member.cookie,ip,device);
+  const newIP='203.0.113.210';
+  const changedNetwork=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
+  assert.equal(changedNetwork.status,200,JSON.stringify(changedNetwork));
+  assert.notEqual(changedNetwork.data.attempt_id,start.data.attempt_id);
+  assert.equal(changedNetwork.data.task_url,'https://example.com/go/mock2');
+  assert.equal(creates,2,'Explicit new start must create one fresh link');
+  assert.ok(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(start.data.attempt_id).expires_at<=Date.now());
+  assert.ok(!JSON.stringify(changedNetwork).includes('mock-only-secret'));
+  const fresh=changedNetwork.data;
+  const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:fresh.attempt_id,answer:fresh.a+fresh.b,evidence:'mock proof direct bypass'},member.cookie,newIP,device);
   assert.equal(direct.status,409);
   const path='/api/tasks/'+taskId+'/return';
-  assert.equal((await call(path,'POST',{},member.cookie,ip,device)).status,409);
-  const challenge=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
-  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
+  assert.equal((await call(path,'POST',{},member.cookie,newIP,device)).status,409);
+  assert.equal((await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device)).status,409,'Replaced link cannot be redeemed');
+  const challenge=await call(path,'POST',{link_session:fresh.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
+  const blockedRestart=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
+  assert.equal(blockedRestart.status,409,'Đổi IP sau khi đã quay về không cấp lượt mới');
+  const blockedAnswer=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:fresh.attempt_id},member.cookie,newIP,device);
+  assert.equal(blockedAnswer.status,409,'Old network cannot replace verification IP');
+  const resumeConfirm=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
+  assert.equal(resumeConfirm.status,200);assert.equal(resumeConfirm.data.resume_confirmation,true);
+  assert.equal(resumeConfirm.data.attempt_id,fresh.attempt_id);assert.equal(creates,2);
+  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:fresh.attempt_id},member.cookie,ip,device);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
+  const audit=(await call('/api/admin/reviews','GET',undefined,admCookie)).data.reviews.find(x=>x.task_id===taskId);
+  assert.equal(audit.started_ip,newIP);assert.equal(audit.submitted_ip,ip);
   const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
-  assert.match(record.evidence,/Alias: mock1; View API: 1/);
+  assert.match(record.evidence,/Alias: mock2; View API: 1/);
   assert.equal(record.status,'pending');
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
+  const failedTask=await call('/api/admin/tasks','POST',{title:'Mock timeout guard',category:'link',url:'',reward:3,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'mock_source',link_source_creation:'api',link_source_verification:'api_view'},admCookie);
+  assert.equal(failedTask.status,201,JSON.stringify(failedTask));
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;throw new Error('mock upstream timeout');};
+  const failedPath='/api/tasks/'+failedTask.data.id+'/start';
+  const firstFailure=await call(failedPath,'POST',{},member.cookie,ip,device);
+  assert.equal(firstFailure.status,502,JSON.stringify(firstFailure));
+  const secondFailure=await call(failedPath,'POST',{},member.cookie,ip,device);
+  assert.equal(secondFailure.status,409,JSON.stringify(secondFailure));
+  assert.equal(calls,1,'Uncertain upstream error must never trigger another create automatically');
  }finally{globalThis.fetch=originalFetch;delete env.LINK_PROVIDER_TOKEN_MOCK_SOURCE;}
  console.log('PASS: real member start path with mock provider, one alias reused, direct submit blocked, API view audit, wallet untouched.');
 }
@@ -2202,7 +2247,11 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
   const completion=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(taskId);assert.equal(completion.status,'approved');
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
-  assert.equal((await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device)).status,409);
+  const replay=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
+  assert.equal(replay.status,200);assert.equal(replay.data.status,'approved');assert.equal(replay.data.recovered,true);
+  const refreshed=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);
+  assert.equal(refreshed.data.status,'approved');
+  assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
  }finally{globalThis.fetch=oldFetch;delete env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE;}
  console.log('PASS: opt-in auto reward gated, zero baseline then one view, one wallet entry, replay blocked.');

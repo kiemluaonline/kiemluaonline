@@ -10,6 +10,7 @@ const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
 // Tín hiệu rà soát, KHÔNG phải bằng chứng người dùng chưa vượt link.
 const LINK_RETURN_FAST_SECONDS = 20;
+const LINK_CONFIRM_WINDOW_MS = 3600000;
 // Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
 const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
@@ -783,8 +784,12 @@ async function linkIPUsage(env,ip,userId){
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
 
+function isBbmktsTask(task,source){
+ return /bbmkts/i.test(String(task.title||''))||String(source?.id||'').toLowerCase()==='bbmkts';
+}
 async function linkTaskPerAccountLimit(env,task){
  if(task.category!=='link')return 1;
+ if(isBbmktsTask(task,await getTaskSource(env,task.id)))return 1;
  const limit=await env.DB.prepare('SELECT value FROM settings WHERE key=?')
   .bind('link_task_limit:'+task.id).first();
  return Math.max(1,Math.min(20,int(limit?.value,1)));
@@ -1233,8 +1238,8 @@ async function handler(req, env) {
         .bind(me.id,ip,browserCode,conflict).first();
       if(!seen)await event(env,req,conflict,me.id,(denied==='link_owner'?'link_owner':'link_browser_owner')+':list');
     }
-    const [overrides,counts,linkReturnCounts]=await Promise.all([
-      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%'").all(),
+    const [overrides,counts,linkReturnCounts,unfinishedReturns]=await Promise.all([
+      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'link_source_task:%'").all(),
       env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id").bind(me.id).all(),
       // Một lượt đến link đích được tính ngay khi quay về, kể cả chưa giải phép tính;
       // lượt đã gửi (kể cả bị từ chối) tính một lần, không đếm lại phiên đã tiêu thụ.
@@ -1246,19 +1251,22 @@ async function handler(req, env) {
           WHERE user_id=? AND consumed_by IS NULL AND available_at<0
             AND date(datetime(-available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')
           GROUP BY task_id
-       ) GROUP BY task_id`).bind(me.id,me.id).all()
+       ) GROUP BY task_id`).bind(me.id,me.id).all(),
+      env.DB.prepare('SELECT DISTINCT task_id FROM task_attempts WHERE user_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>?').bind(me.id,LINK_CONFIRM_WINDOW_MS,now()).all()
     ]);
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
     const done=new Map(counts.results.map(r=>[r.task_id,{n:Number(r.n),pending:Number(r.pending||0)}]));
     const returned=new Map(linkReturnCounts.results.map(r=>[r.task_id,Number(r.n||0)]));
+    const unfinished=new Set(unfinishedReturns.results.map(r=>r.task_id));
     const tasks=results.results.map(t=>{
       const appCode=str(overrides.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
       const displayCategory=t.category==='other'&&appCode?'app':t.category;
-      const max=t.category==='link'?limits.get('link_task_limit:'+t.id)||1:1;
+      const taskSource=JSON.parse(overrides.results.find(r=>r.key===TASK_SOURCE_PREFIX+t.id)?.value||'{}');
+      const max=t.category==='link'&&!isBbmktsTask(t,taskSource)?limits.get('link_task_limit:'+t.id)||1:1;
       const entry=done.get(t.id)||{n:0,pending:0};
       const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
       const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||denied)):null;
-      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,
+      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,link_needs_confirmation:t.category==='link'&&unfinished.has(t.id),
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
@@ -1301,6 +1309,20 @@ async function handler(req, env) {
   if (m === 'POST' && returnMatch) {
     const me = await auth(req, env);
     const body=await readBody(req); // POST cùng nguồn gốc, không xử lý phép tính ở trình duyệt.
+    // Recovery is read-only, tied to the authenticated member and exact attempt.
+    const returnTaskId=returnMatch[1];
+    const exactAttempt=str(body.link_session||body.attempt_id,60);
+    async function savedReturn(){
+      if(!exactAttempt)return null;
+      const old=await env.DB.prepare('SELECT id,consumed_by FROM task_attempts WHERE id=? AND user_id=? AND task_id=?').bind(exactAttempt,me.id,returnTaskId).first();
+      if(!old?.consumed_by)return null;
+      const source=await getAttemptSource(env,old.id);
+      if(source?.returnSession&&body.link_session!==source.returnSession)return null;
+      const receipt=await env.DB.prepare('SELECT status,reward FROM task_completions WHERE id=? AND user_id=? AND task_id=?').bind(old.consumed_by,me.id,returnTaskId).first();
+      return receipt?{ok:true,status:receipt.status,reward:receipt.reward,attempt_id:old.id,recovered:true}:null;
+    }
+    const receipt=await savedReturn();
+    if(receipt)return json(receipt);
     const task = await env.DB.prepare("SELECT * FROM tasks WHERE id=? AND category='link' AND is_active=1")
       .bind(returnMatch[1]).first();
     if (!task) fail(404, 'Link nhiệm vụ không còn hoạt động.');
@@ -1308,16 +1330,26 @@ async function handler(req, env) {
     if(!task.url&&sourceConfig.creation!=='api')fail(404,'Link nhiệm vụ không còn hoạt động.');
     if (task.review_mode !== 'manual')
       fail(409, 'Admin cần chọn chế độ duyệt thủ công cho nhiệm vụ Link trước khi sử dụng xác minh quay về.');
-    const attempt = await env.DB.prepare(
-      'SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ' +
-      'ORDER BY created_at DESC,id DESC LIMIT 1'
-    ).bind(me.id, task.id, now()).first();
+    const attempt = exactAttempt
+      ? await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?)').bind(exactAttempt,me.id,task.id,now()).first()
+      : await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
     const sourceLink=await getAttemptSource(env,attempt.id);
     if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
     if(sourceLink?.returnSession&&body.link_session!==sourceLink.returnSession)fail(409,'Link quay về không thuộc phiên này. Hãy mở lại đúng link nhiệm vụ đã cấp.');
-    if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
-      fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
+    const returnIP=clientIP(req);
+    if(attempt.device_code!==await deviceCode(req,env))
+      fail(409,'Hãy xác minh bằng trình duyệt đã mở nhiệm vụ.');
+    if(attempt.available_at<0&&attempt.ip!==returnIP)
+      fail(409,'Hãy dùng lại mạng tại thời điểm bắt đầu xác minh. Lượt cũ vẫn được giữ trong thời hạn.');
+    if(attempt.available_at<0){
+      const deadline=-attempt.available_at+LINK_CONFIRM_WINDOW_MS;
+      if(now()>=deadline)fail(410,'Đã hết 60 phút xác minh. Lượt đã sử dụng vẫn được tính và không nhận Lúa.',{confirmation_expired:true});
+      if(attempt.expires_at!==deadline){
+        await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL AND available_at=?').bind(deadline,attempt.id,attempt.available_at).run();
+        attempt.expires_at=deadline;
+      }
+    }
     const hasAnswer=Object.prototype.hasOwnProperty.call(body,'answer');
     // Ghi một lượt quay về CHỈ MỘT LẦN mỗi phiên, ngay lúc khách đến trang đích.
     // Nhiều lần tải lại cùng phiên không tăng 0/2 -> 1/2 nhiều lần; CAPTCHA
@@ -1328,12 +1360,20 @@ async function handler(req, env) {
       const perTaskLimit=await linkTaskPerAccountLimit(env,task);
       if(await linkReturnUsage(env,me.id,task.id)>=perTaskLimit)
         fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+      // Check current network/browser eligibility before the first return.
+      // Bind that observed IP atomically, then never rebind during verification.
+      const arrivalSettings=await getSettings(env);
+      await linkIPQuota(env,req,me.id,task,arrivalSettings);
+      await linkBrowserQuota(env,req,me.id,task,arrivalSettings);
       const arrivedAt=now();
       const mark=await env.DB.prepare(
-        'UPDATE task_attempts SET available_at=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
-      ).bind(-arrivedAt,attempt.id,me.id,arrivedAt).run();
+        'UPDATE task_attempts SET available_at=?,expires_at=?,ip=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
+      ).bind(-arrivedAt,arrivedAt+LINK_CONFIRM_WINDOW_MS,returnIP,attempt.id,me.id,arrivedAt).run();
       if(!mark.meta?.changes)fail(409,'Phiên đã thay đổi. Hãy tải lại trang Nhiệm vụ.');
+      if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
+      attempt.ip=returnIP;
       attempt.available_at=-arrivedAt;
+      attempt.expires_at=arrivedAt+LINK_CONFIRM_WINDOW_MS;
     }
     // Lượt quay về sớm bất thường cần được Admin xem xét. Người dùng có thể
     // mở trực tiếp link đích sau khi Bắt đầu; thời gian không chứng minh đã vượt link.
@@ -1350,7 +1390,7 @@ async function handler(req, env) {
     // Nạp lại link cùng phiên chỉ lấy lại phép tính, không tạo thêm lượt quay về.
     if (!hasAnswer)
       return json({ok:true,challenge:true,a:attempt.captcha_a,b:attempt.captcha_b,
-        expires_at:attempt.expires_at});
+        attempt_id:attempt.id,expires_at:attempt.expires_at});
     if (!/^\d+$/.test(String(body.answer)) ||
         Number(body.answer)!==attempt.captcha_a+attempt.captcha_b) {
       const a=rand(),b=rand();
@@ -1396,8 +1436,11 @@ async function handler(req, env) {
       ).bind(completionId,me.id,task.id,completionPeriod,task.reward,evidence,
         clientIP(req),await deviceCode(req,env),attempt.id,me.id,completionId)
     ]);
-    if (!batch[0].meta?.changes || !batch[1].meta?.changes)
+    if (!batch[0].meta?.changes || !batch[1].meta?.changes){
+      const existing=await savedReturn();
+      if(existing)return json(existing);
       fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
+    }
     await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
     if(sourceLink?.verification==='api_auto'&&sourceConfig.verification==='api_auto'&&autoRewardEligible({views,baseline:sourceLink.baseline,fastReturn:Boolean(fastReturn),confirmed:autoRewardEnabled(env,verifiedSource),unchanged:sourceConfig.id===sourceLink.id})){
       // Re-check current settings, task and user inside the atomic write; no client-supplied view.
@@ -1413,7 +1456,7 @@ async function handler(req, env) {
       ]);
       if(approved[0].meta?.changes){await giveReferral(env,me.id,settings);return json({ok:true,status:'approved',reward:task.reward,message:'Đã xác minh lượt hợp lệ và cộng Lúa.'});}
     }
-    return json({ok:true,status:'pending',
+    return json({ok:true,status:'pending',reward:task.reward,
       message:'Đã nhận yêu cầu xác minh. Đang chờ Admin đối soát; chưa cộng Lúa.'});
   }
   const startMatch = p.match(/^\/api\/tasks\/([^/]+)\/start$/);
@@ -1421,6 +1464,19 @@ async function handler(req, env) {
     const me = await auth(req, env), task = await env.DB.prepare('SELECT * FROM tasks WHERE id=? AND is_active=1').bind(startMatch[1]).first();
     if (!task) fail(404, 'Nhiệm vụ không còn hoạt động.');
     task.category=await resolveTaskCategory(env,task);
+    // A returned attempt has already reserved a daily slot. Resume it before checking
+    // new-start quotas; the existing CAPTCHA submission still enforces all claim quotas.
+    if(task.category==='link'){
+      const unfinished=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>? ORDER BY available_at ASC,id DESC LIMIT 1').bind(me.id,task.id,LINK_CONFIRM_WINDOW_MS,now()).first();
+      if(unfinished){
+        if(unfinished.ip!==clientIP(req)||unfinished.device_code!==await deviceCode(req,env))
+          fail(409,'Bạn còn lượt chưa xác minh. Hãy dùng lại mạng và trình duyệt ban đầu hoặc liên hệ Admin. Lượt cũ vẫn được giữ.');
+        const assigned=await getAttemptSource(env,unfinished.id);
+        const query=new URLSearchParams({link_return:task.id,return_attempt:unfinished.id});
+        if(assigned?.returnSession)query.set('link_session',assigned.returnSession);
+        return json({attempt_id:unfinished.id,category:'link',review_mode:'manual',resume_confirmation:true,task_url:'https://nhiemvu.click/verify-link?'+query.toString()});
+      }
+    }
     if(await linkTaskPerAccountLimit(env,task)<=1){
       const existing=await env.DB.prepare('SELECT id FROM task_completions WHERE user_id=? AND task_id=? AND period_key=?')
         .bind(me.id,task.id,period(task)).first();
@@ -1434,15 +1490,17 @@ async function handler(req, env) {
       fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
     const sourceConfig=task.category==='link'?await getTaskSource(env,task.id):{creation:'manual'};
     const source=sourceConfig.creation==='api'?await getSource(env,sourceConfig.id):null;
+    let replaceAttempt=null;
     if(sourceConfig.creation==='api'){
       if(!sourceReady(env,source)||task.review_mode!=='manual')fail(409,'Nguồn API chưa sẵn sàng.');
-      const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(me.id,task.id,now()).first();
+      const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(me.id,task.id,now()).first();
       if(ongoing){
         const existing=await getAttemptSource(env,ongoing.id);
-        if(!existing)fail(409,'Đang cấp link riêng. Hãy thử lại sau.');
-        if(ongoing.ip!==clientIP(req)||ongoing.device_code!==await deviceCode(req,env))fail(409,'Hãy tiếp tục trên cùng mạng và trình duyệt.');
+        if(!existing)fail(409,'Phiên đang được cấp link hoặc chưa nhận được phản hồi từ đối tác. Hệ thống không tự tạo thêm link. Nếu vẫn gặp lỗi, hãy liên hệ Admin.');
+        // A deliberate new start replaces an unreturned, already-issued attempt.
+        // Never reuse an issued URL for a new Start. Quotas have already passed.
         if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
-        return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:'manual',category:'link',task_url:existing.shortUrl,resumed:true});
+        replaceAttempt=ongoing.id;
       }
     }
     if(task.category==='app'){
@@ -1461,22 +1519,37 @@ async function handler(req, env) {
     // Video và các nhiệm vụ khác giữ nguyên thời hạn 20 phút.
     const attemptSeconds=task.category==='app'?7*86400:task.category==='link'?86400:1200;
     const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
-       VALUES(?,?,?,?,?,?,?,?,?)`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
-      clientIP(req), await deviceCode(req, env));
-    if(task.category==='link'){
-      // Mỗi nhiệm vụ link chỉ được có một phiên còn hiệu lực trên một tài khoản.
-      // Tạo mới làm hết hạn phiên cũ; không sửa lịch sử nhiệm vụ đã hoàn thành.
-      await env.DB.batch([
-        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>?')
+       SELECT ?,?,?,?,?,?,?,?,? ${task.category==='link'?'WHERE NOT EXISTS (SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>?)':''}`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
+      clientIP(req), await deviceCode(req, env),...(task.category==='link'?[me.id,task.id,LINK_CONFIRM_WINDOW_MS,startedNow]:[]));
+    if(source){
+      // Only the observed, fully issued, unreturned attempt can be replaced.
+      // Reserving the replacement and expiring the old attempt is atomic.
+      const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
+          SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
+          AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))
+        )`).bind(attempt,me.id,task.id,a,b,available,startedNow+attemptSeconds*1000,
+        clientIP(req),await deviceCode(req,env),me.id,task.id,startedNow,LINK_CONFIRM_WINDOW_MS,startedNow);
+      const writes=replaceAttempt?await env.DB.batch([
+        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?')
+          .bind(startedNow,replaceAttempt,me.id,task.id,startedNow),
+        reserve
+      ]):[await reserve.run()];
+      if(!writes[writes.length-1].meta?.changes)fail(409,'Đang có yêu cầu cấp link hoặc lượt chờ xác minh. Không tạo thêm link.');
+    }else if(task.category==='link'){
+      // Manual links have no provider creation API.
+      const started=await env.DB.batch([
+        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?')
           .bind(startedNow,me.id,task.id,startedNow),
         insertAttempt
       ]);
+      if(!started[1].meta?.changes)fail(409,'Bạn còn lượt chưa xác minh. Hãy tiếp tục phiên cũ, không tạo lượt mới.');
     }else await insertAttempt.run();
     let assignedUrl=task.url;
     if(source){
       try{
         const returnSession=attempt;
-        const destination='https://nhiemvu.click/?link_return='+encodeURIComponent(task.id)+'&link_session='+encodeURIComponent(returnSession);
+        const destination='https://nhiemvu.click/verify-link?link_return='+encodeURIComponent(task.id)+'&link_session='+encodeURIComponent(returnSession);
         const link=await createSourceLink(source,destination,sourceToken(env,source));
         let baseline=null;
         if(sourceConfig.verification==='api_auto'&&autoRewardEnabled(env,source))try{baseline=await checkSourceView(source,link.alias,sourceToken(env,source));}catch{}
@@ -1491,7 +1564,8 @@ async function handler(req, env) {
         ]);
         assignedUrl=link.shortUrl;
       }catch(error){
-        await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL').bind(now(),attempt).run();
+        // An error/timeout does not prove that the provider failed to create
+        // the link. Keep the reservation until its original expiry; no auto retry.
         const reason=error instanceof SourceDiagnosticError?error.message:'Không lưu được phiên hoặc Alias đã tồn tại.';
         await event(env,req,'link_source_create_failed',me.id,'Nguồn '+source.id+': '+reason).catch(()=>{});
         fail(502,'Không thể cấp link riêng: '+reason);
@@ -1510,7 +1584,7 @@ async function handler(req, env) {
     const attempt = await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=?')
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
     if (!attempt || attempt.consumed_by || attempt.expires_at <= now()) fail(410, 'Phiên nhiệm vụ hết hạn. Vui lòng mở lại nhiệm vụ.');
-    if(task.category==='link'&&((await getTaskSource(env,task.id)).creation==='api'||await getAttemptSource(env,attempt.id)))fail(409,'Nhiệm vụ link riêng phải xác nhận qua trang đích.');
+    if(task.category==='link'&&(attempt.available_at<0||(await getTaskSource(env,task.id)).creation==='api'||await getAttemptSource(env,attempt.id)))fail(409,'Nhiệm vụ link riêng phải xác nhận qua trang đích.');
     if (task.category === 'video' && now() < attempt.available_at) fail(425, 'Chưa đủ thời gian thực hiện nhiệm vụ.', { remaining_seconds: Math.ceil((attempt.available_at - now()) / 1000) });
     if (task.category!=='app' && (Number(body.answer) !== attempt.captcha_a + attempt.captcha_b || !/^\d+$/.test(String(body.answer)))) {
       const a = rand(), b = rand();
@@ -1740,7 +1814,7 @@ async function handler(req, env) {
         return {...t,app_confirmation_mode:settings.results.find(r=>r.key===APP_CONFIRM_PREFIX+t.id)?.value||'photo',link_source_id:source.id||'',link_source_creation:source.creation||'manual',link_source_verification:source.verification||'manual',
           bbmkts_creation:settings.results.find(r=>r.key==='bbmkts_task_creation:'+t.id)?.value||'manual',
           bbmkts_verification:settings.results.find(r=>r.key==='bbmkts_task_verification:'+t.id)?.value||'manual',category:t.category==='other'&&appCode?'app':t.category,
-          link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
+          link_24h_limit:isBbmktsTask(t,source)?1:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
           submitted_today:Number(usage?.submitted_today||0),pending_today:Number(usage?.pending_today||0)};
       })});
     }
@@ -1884,7 +1958,8 @@ async function handler(req, env) {
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,
         CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END AS category,
         u.name,u.email,
-        a.id AS attempt_id,a.created_at AS started_at,a.ip AS started_ip,
+        a.id AS attempt_id,a.created_at AS started_at,
+        COALESCE((SELECT e.ip FROM risk_events e WHERE e.user_id=a.user_id AND e.event_type='task_device_start' AND substr(e.detail,1,36)=a.id ORDER BY e.created_at ASC LIMIT 1),a.ip) AS started_ip,
         a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         LEFT JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id
@@ -2195,7 +2270,9 @@ export default {
     ]);
   },
   async fetch(req, env) {
-    if (!new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    const path=new URL(req.url).pathname;
+    if(path==='/verify-link')return env.ASSETS.fetch(new Request(new URL('/',req.url),req));
+    if (!path.startsWith('/api/')) return env.ASSETS.fetch(req);
     if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return json({ error: 'Phương thức không được hỗ trợ.' }, 405);
     try { return await handler(req, env); }
     catch (e) {

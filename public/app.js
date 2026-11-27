@@ -217,8 +217,43 @@ function clearLinkReturnQuery(){
  document.documentElement.classList.remove('link-return-entry');
  params.delete('link_return');
  params.delete('link_session');
+ params.delete('return_attempt');
  const remain=params.toString();
- window.history.replaceState(null,'',location.pathname+(remain?'?'+remain:'')+location.hash);
+ const destination=location.pathname==='/verify-link'?'/':location.pathname;
+ window.history.replaceState(null,'',destination+(remain?'?'+remain:'')+location.hash);
+}
+function returnStorageKey(){
+ return state.me?.user?.id?'tram-lua.return.'+state.me.user.id:'';
+}
+function rememberReturn(expiresAt){
+ try{const key=returnStorageKey();if(key)localStorage.setItem(key,JSON.stringify({url:location.pathname+location.search,expiresAt:Number(expiresAt)}));}catch{}
+}
+function resumeStoredReturn(){
+ try{
+  const key=returnStorageKey(),value=key&&localStorage.getItem(key);
+  if(!value)return false;
+  const saved=JSON.parse(value);
+  if(!Number.isFinite(saved.expiresAt)||saved.expiresAt<=Date.now()){localStorage.removeItem(key);return false;}
+  const target=new URL(saved.url,location.origin);
+  if(target.origin!==location.origin||!['/','/verify-link'].includes(target.pathname)||!target.searchParams.has('link_return'))return false;
+  location.replace(target.pathname+target.search);return true;
+ }catch{return false;}
+}
+async function finishLinkReturn(result){
+ // Keep the recovery URL until the member page and real server receipt are displayed.
+ const key=returnStorageKey();
+ try{
+  renderShell();
+  await afterAction('history');
+  if(!state.me)throw new Error('Không tải được tài khoản. Hãy thử lại để xem kết quả đã lưu.');
+  if(result.status==='rejected')toast('Nhiệm vụ đã được xử lý: Từ chối.',true);
+  else renderTaskResultModal(result,{linkReturn:true});
+  state.returnChallenge=null;
+  try{if(key)localStorage.removeItem(key);}catch{}
+  clearLinkReturnQuery();
+ }catch(error){
+  showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
+ }
 }
 function showReturnGate(content){
  app.className='';
@@ -228,7 +263,8 @@ function showReturnGate(content){
 function renderLinkReturnModal(){
  const c=state.returnChallenge;
  if(!c)return;
- showReturnGate(`<form data-form="link-return-captcha">
+ showReturnGate(`<p class="note">Bạn có 60 phút kể từ khi quay về để xác minh. Hết giờ không nhận Lúa; lượt đã sử dụng không được hoàn lại.</p>
+ <p class="note">Hạn xác minh: ${esc(new Date(c.expiresAt).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))}</p><form data-form="link-return-captcha">
  <label for="return-answer">${Number(c.a)} + ${Number(c.b)} =</label>
  <input id="return-answer" name="answer" aria-label="Kết quả phép tính" type="number"
  inputmode="numeric" min="0" max="30" required autocomplete="off">
@@ -237,17 +273,25 @@ function renderLinkReturnModal(){
 async function processLinkReturn(){
  const params=new URLSearchParams(location.search);
  if(!params.has('link_return'))return false;
- const taskId=params.get('link_return'),linkSession=params.get('link_session')||'';
+ const taskId=params.get('link_return'),linkSession=params.get('link_session')||'',attemptId=params.get('return_attempt')||'';
  showReturnGate('<p role="status">Đang kiểm tra phiên…</p>');
  try{
   if(!/^[0-9a-f-]{36}$/i.test(taskId))throw new Error('Đường dẫn quay về không hợp lệ.');
   if(state.me?.user?.role!=='member')throw new Error('Hãy đăng nhập đúng tài khoản thành viên đã mở nhiệm vụ.');
-  const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',linkSession?{link_session:linkSession}:{});
-  if(!result.challenge)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
-  state.returnChallenge={taskId,linkSession,a:result.a,b:result.b};
+  const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',{...(linkSession?{link_session:linkSession}:{}),...(attemptId?{attempt_id:attemptId}:{})});
+  if(result.ok&&['approved','pending','rejected'].includes(result.status)){await finishLinkReturn(result);return true;}
+  if(!result.challenge||!result.attempt_id)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
+  params.set('return_attempt',result.attempt_id);
+  window.history.replaceState(null,'',location.pathname+'?'+params.toString());
+  rememberReturn(result.expires_at);
+  state.returnChallenge={taskId,linkSession,attemptId:result.attempt_id,a:result.a,b:result.b,expiresAt:result.expires_at};
   renderLinkReturnModal();
  }catch(error){
-  showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
+  if(error.confirmation_expired){
+   try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
+   clearLinkReturnQuery();
+   showReturnGate(`<p role="alert">${esc(error.message)}</p><a class="btn" href="/">Về trang chủ</a>`);
+  }else showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
  }
  return true;
 }
@@ -261,6 +305,7 @@ async function boot(){
    else await processLinkReturn();
    return;
   }
+  if(state.me?.user?.role==='member'&&resumeStoredReturn())return;
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
   else if(state.accountHold){renderLocked();}
   else {
@@ -970,7 +1015,7 @@ function renderMemberTaskCard(t){
    t.category==='link'?'Thực hiện qua liên kết':'Theo hướng dẫn';
  const usedLabel=isLink&&maxUses>1?`${used}/${maxUses}`:null;
  const badge=usedLabel||`${used}/${maxUses}`;
- const countText=t.link_blocked==='link_task_limit'?`Đã sử dụng ${used}/${maxUses} lượt hôm nay`:
+ const countText=t.link_needs_confirmation?'Đang chờ xác minh phép tính':t.link_blocked==='link_task_limit'?`Đã sử dụng ${used}/${maxUses} lượt hôm nay`:
    t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
    t.my_status==='pending'?'Đã gửi, đang chờ Admin đối soát':
    t.my_status==='approved'?'Nhiệm vụ đã được duyệt':
@@ -978,7 +1023,7 @@ function renderMemberTaskCard(t){
    daily?`Còn ${left}/${maxUses} lượt hôm nay`:
    `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
  const progress=Math.round(used/maxUses*100);
- const blockNote=t.link_blocked?(
+ const blockNote=t.link_needs_confirmation?'Hoàn tất xác minh lượt cũ trước khi làm lượt mới.':t.link_blocked?(
   t.link_blocked==='link_task_limit'?'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
   t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
   t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
@@ -987,7 +1032,9 @@ function renderMemberTaskCard(t){
   t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':
   'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
  ):'';
- const button=t.link_blocked?
+ const button=t.link_needs_confirmation?
+  `<button class="btn task-card-modern-action" type="button" data-action="resume-link-confirmation" data-id="${esc(t.id)}">Tiếp tục xác minh</button>`:
+  t.link_blocked?
   `<button class="btn task-card-modern-action is-disabled" type="button" disabled>⛔ Chưa thể bắt đầu</button>`:
   t.my_status?
    `<div class="task-card-modern-completed">${chip(t.my_status)}<span>Trạng thái được cập nhật từ hệ thống.</span></div>`:
@@ -1204,7 +1251,7 @@ async function adminTasks(){
   const quota=t.category==='link'?(max>1||t.repeat_policy==='daily'?max+' lượt/ngày':'1 lượt/tài khoản'):(t.repeat_policy==='daily'?'1 lượt/ngày':'1 lượt/tài khoản');
   return `<tr>
    <td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">Xóa</button></div>
-    ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
+    ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/verify-link?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
    </td>
    <td class="num">${fmt(t.reward)} Lúa</td>
    <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
@@ -1495,6 +1542,9 @@ function renderTaskStartProgress(taskId){
 }
 
 async function startTask(taskId){
+ // Ignore duplicate taps while the same start request is being processed.
+ if(state.taskStartInFlight)return;
+ state.taskStartInFlight=true;
  // Không báo đã khởi tạo trước khi server xác nhận phiên nhiệm vụ thành công.
  renderTaskStartProgress(taskId);
  try{
@@ -1517,6 +1567,8 @@ async function startTask(taskId){
   if(root?.querySelector('.task-start-cover'))root.innerHTML='';
   if(state.pendingTaskRules===taskId)showTaskRules(taskId);
   throw error;
+ }finally{
+  state.taskStartInFlight=false;
  }
 }
 function renderAttemptModal(){
@@ -1810,6 +1862,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
   if(act==='filter-tasks'){state.taskFilter=['app','link'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
+  if(act==='resume-link-confirmation'){await startTask(el.dataset.id);return;}
   if(act==='start-task'){const t=state.memberTasks.find(x=>x.id===el.dataset.id);if(t?.category==='app'){await startTask(el.dataset.id);return;}showTaskRules(el.dataset.id);return;}
   if(act==='cancel-task-rules'){
    state.pendingTaskRules=null;document.getElementById('modal-root').innerHTML='';return;
@@ -1963,14 +2016,13 @@ app.addEventListener('submit',async e=>{
    const c=state.returnChallenge;
    if(!c)throw new Error('Phiên xác minh không còn. Hãy mở lại nhiệm vụ.');
    try{
-    const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer,...(c.linkSession?{link_session:c.linkSession}:{})});
-    if(!result.ok||!['approved','pending'].includes(result.status))throw new Error('Máy chủ chưa xác nhận kết quả.');
-    state.returnChallenge=null;
-    clearLinkReturnQuery();
-    renderShell();
-    await afterAction('history');
-    renderTaskResultModal({...result,reward:result.reward??state.memberTasks.find(t=>t.id===c.taskId)?.reward},{linkReturn:true});
+    const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer,attempt_id:c.attemptId,...(c.linkSession?{link_session:c.linkSession}:{})});
+    if(!result.ok||!['approved','pending','rejected'].includes(result.status))throw new Error('Máy chủ chưa xác nhận kết quả.');
+    await finishLinkReturn({...result,reward:result.reward??state.memberTasks.find(t=>t.id===c.taskId)?.reward});
    }catch(err){
+    if(err.confirmation_expired){
+     await processLinkReturn();return;
+    }
     if(err.status===422 && Number.isInteger(err.a) && Number.isInteger(err.b)){
      c.a=err.a;c.b=err.b;renderLinkReturnModal();
     }
@@ -2003,6 +2055,7 @@ app.addEventListener('submit',async e=>{
     await loadMe();
     if(state.accountHold){renderLocked();return;}
     if(await processLinkReturn())return;
+    if(state.me?.user?.role==='member'&&resumeStoredReturn())return;
     renderShell();await navigate(state.me.user.role==='admin'?'admin-overview':'overview');toast(kind==='login'?'Đăng nhập thành công.':'Đăng ký thành công.');
 
   }
