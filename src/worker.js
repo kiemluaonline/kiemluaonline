@@ -4,6 +4,7 @@ import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
 import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
 import { fetchBbmktsViewJson, bbmktsTaskConfig } from './bbmkts.js';
+import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,DEFAULT_SOURCE,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -1298,7 +1299,9 @@ async function handler(req, env) {
     const body=await readBody(req); // POST cùng nguồn gốc, không xử lý phép tính ở trình duyệt.
     const task = await env.DB.prepare("SELECT * FROM tasks WHERE id=? AND category='link' AND is_active=1")
       .bind(returnMatch[1]).first();
-    if (!task || !task.url) fail(404, 'Link nhiệm vụ không còn hoạt động.');
+    if (!task) fail(404, 'Link nhiệm vụ không còn hoạt động.');
+    const sourceConfig=await getTaskSource(env,task.id);
+    if(!task.url&&sourceConfig.creation!=='api')fail(404,'Link nhiệm vụ không còn hoạt động.');
     if (task.review_mode !== 'manual')
       fail(409, 'Admin cần chọn chế độ duyệt thủ công cho nhiệm vụ Link trước khi sử dụng xác minh quay về.');
     const attempt = await env.DB.prepare(
@@ -1306,6 +1309,8 @@ async function handler(req, env) {
       'ORDER BY created_at DESC,id DESC LIMIT 1'
     ).bind(me.id, task.id, now()).first();
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
+    const sourceLink=await getAttemptSource(env,attempt.id);
+    if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
     if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
       fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
     const hasAnswer=Object.prototype.hasOwnProperty.call(body,'answer');
@@ -1358,9 +1363,18 @@ async function handler(req, env) {
     const fastReturn=await env.DB.prepare(
       "SELECT id FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=? LIMIT 1"
     ).bind(me.id,riskKey).first();
+    let sourceAudit='';
+    if(sourceLink){
+      let views=null;
+      if(sourceLink.verification==='api_view')try{
+        const source=await getSource(env,sourceLink.id);
+        if(source&&JSON.stringify(source)===sourceLink.config)views=await checkSourceView(source,sourceLink.alias,sourceToken(env,source));
+      }catch{}
+      sourceAudit='; Nguồn: '+sourceLink.id+'; Alias: '+sourceLink.alias+'; View API: '+(views===null?'Chưa xác nhận':views)+' (chờ đối soát doanh thu)';
+    }
     const evidence='[LINK_RETURN_V1] Thành viên đã quay về và giải phép tính trên Trạm Có Lúa (không phải xác nhận lượt xem hoặc doanh thu của bên rút gọn). Phiên: ' +
       attempt.id + '; UTC: ' + new Date().toISOString() +
-      (fastReturn?' [LINK_RETURN_FAST_V1] Cảnh báo: phiên quay về trong dưới 20 giây, cần đối soát riêng.':'');
+      (fastReturn?' [LINK_RETURN_FAST_V1] Cảnh báo: phiên quay về trong dưới 20 giây, cần đối soát riêng.':'')+sourceAudit;
     const batch=await env.DB.batch([
       env.DB.prepare(TASK_CLAIM_UPDATE)
         .bind(completionId,attempt.id,me.id,now(),now(),task.category,
@@ -1400,6 +1414,19 @@ async function handler(req, env) {
     await linkBrowserQuota(env,req,me.id,task,settings);
     if(task.category==='link'&&await linkReturnUsage(env,me.id,task.id)>=await linkTaskPerAccountLimit(env,task))
       fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+    const sourceConfig=task.category==='link'?await getTaskSource(env,task.id):{creation:'manual'};
+    const source=sourceConfig.creation==='api'?await getSource(env,sourceConfig.id):null;
+    if(sourceConfig.creation==='api'){
+      if(!sourceReady(env,source)||task.review_mode!=='manual')fail(409,'Nguồn API chưa sẵn sàng.');
+      const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(me.id,task.id,now()).first();
+      if(ongoing){
+        const existing=await getAttemptSource(env,ongoing.id);
+        if(!existing)fail(409,'Đang cấp link riêng. Hãy thử lại sau.');
+        if(ongoing.ip!==clientIP(req)||ongoing.device_code!==await deviceCode(req,env))fail(409,'Hãy tiếp tục trên cùng mạng và trình duyệt.');
+        if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
+        return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:'manual',category:'link',task_url:existing.shortUrl,resumed:true});
+      }
+    }
     if(task.category==='app'){
       const ongoing=await env.DB.prepare('SELECT id,captcha_a,captcha_b,available_at,expires_at FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1')
         .bind(me.id,task.id,now()).first();
@@ -1427,9 +1454,27 @@ async function handler(req, env) {
         insertAttempt
       ]);
     }else await insertAttempt.run();
+    let assignedUrl=task.url;
+    if(source){
+      try{
+        const destination='https://nhiemvu.click/?link_return='+encodeURIComponent(task.id);
+        const link=await createSourceLink(source,destination,sourceToken(env,source));
+        // Alias cannot be assigned to two attempts. No fallback to a shared link.
+        const current=await env.DB.prepare('SELECT id FROM task_attempts WHERE id=? AND consumed_by IS NULL AND expires_at>?').bind(attempt,now()).first();
+        if(!current)throw Error('Phiên đã thay đổi');
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_source_alias:'+source.id+':'+link.alias,attempt),
+          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind(ATTEMPT_SOURCE_PREFIX+attempt,JSON.stringify({id:source.id,...link,config:JSON.stringify(source),verification:sourceConfig.verification}))
+        ]);
+        assignedUrl=link.shortUrl;
+      }catch{
+        await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL').bind(now(),attempt).run();
+        fail(502,'Không thể cấp link riêng từ nguồn. Vui lòng thử lại sau.');
+      }
+    }
     await recordTaskDevice(env, req, me.id, attempt, 'start');
     return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: attemptSeconds,
-      review_mode: task.review_mode, category: task.category, task_url: task.url,
+      review_mode: task.review_mode, category: task.category, task_url: assignedUrl,
       app_no_photo: await isColorSortReferralTask(env, task) });
   }
   const submitMatch = p.match(/^\/api\/tasks\/([^/]+)\/submit$/);
@@ -1440,6 +1485,7 @@ async function handler(req, env) {
     const attempt = await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=?')
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
     if (!attempt || attempt.consumed_by || attempt.expires_at <= now()) fail(410, 'Phiên nhiệm vụ hết hạn. Vui lòng mở lại nhiệm vụ.');
+    if(task.category==='link'&&((await getTaskSource(env,task.id)).creation==='api'||await getAttemptSource(env,attempt.id)))fail(409,'Nhiệm vụ link riêng phải xác nhận qua trang đích.');
     if (task.category === 'video' && now() < attempt.available_at) fail(425, 'Chưa đủ thời gian thực hiện nhiệm vụ.', { remaining_seconds: Math.ceil((attempt.available_at - now()) / 1000) });
     if (task.category!=='app' && (Number(body.answer) !== attempt.captcha_a + attempt.captcha_b || !/^\d+$/.test(String(body.answer)))) {
       const a = rand(), b = rand();
@@ -1601,6 +1647,31 @@ async function handler(req, env) {
       return json({ members: r[0].n, tasks: r[1].n, pending_evidence: r[2].n,
         pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n });
     }
+    if(m==='GET'&&p==='/api/admin/link-sources'){
+      const rows=await env.DB.prepare("SELECT value FROM settings WHERE key LIKE 'link_source_config:%' ORDER BY key LIMIT 100").all();
+      const sources=new Map([[DEFAULT_SOURCE.id,DEFAULT_SOURCE]]);
+      for(const row of rows.results){const source=normalizeSource(JSON.parse(row.value));sources.set(source.id,source);}
+      return json({sources:[...sources.values()].map(source=>presentSource(env,source))});
+    }
+    if(m==='POST'&&p==='/api/admin/link-sources'){
+      const body=await readBody(req);
+      let source;try{source=normalizeSource(body);}catch(error){fail(400,error.message);}
+      await env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SOURCE_PREFIX+source.id,JSON.stringify(source)).run();
+      return json({ok:true,source:presentSource(env,source)});
+    }
+    if(m==='POST'&&p==='/api/admin/link-sources/check'){
+      const body=await readBody(req),source=await getSource(env,String(body.id||''));
+      if(!source)fail(404,'Không tìm thấy nguồn.');
+      try{
+        if(body.kind==='create'){
+          const result=await createSourceLink(source,'https://nhiemvu.click/',sourceToken(env,source));
+          return json({ok:true,...result,message:'Đã tạo link kiểm thử; không có thưởng.'});
+        }
+        if(body.kind!=='view')fail(400,'Loại kiểm tra không hợp lệ.');
+        const views=await checkSourceView(source,String(body.alias||''),sourceToken(env,source));
+        return json({ok:true,views,message:'Chỉ là số view được API báo; chưa xác minh doanh thu.'});
+      }catch{fail(502,'Chưa kiểm tra được API nguồn. Kiểm tra cấu hình, Secret hoặc phản hồi JSON.');}
+    }
     // Admin-only diagnostic. No database writes, no member reward, no provider credentials.
     if (m === 'POST' && p === '/api/admin/bbmkts/check-view') {
       const body = await readBody(req);
@@ -1616,7 +1687,7 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings,activity]=await Promise.all([
         env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
-        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%'").all(),
+        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%' OR key LIKE 'link_source_task:%'").all(),
         env.DB.prepare(`SELECT task_id,COUNT(*) AS submitted_today,
           SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_today
           FROM task_completions WHERE date(created_at,'+7 hours')=date('now','+7 hours')
@@ -1627,7 +1698,8 @@ async function handler(req, env) {
       return json({tasks:rows.results.map(t=>{
         const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
         const usage=dailyActivity.get(t.id);
-        return {...t,
+        const source=JSON.parse(settings.results.find(r=>r.key===TASK_SOURCE_PREFIX+t.id)?.value||'{}');
+        return {...t,link_source_id:source.id||'',link_source_creation:source.creation||'manual',link_source_verification:source.verification||'manual',
           bbmkts_creation:settings.results.find(r=>r.key==='bbmkts_task_creation:'+t.id)?.value||'manual',
           bbmkts_verification:settings.results.find(r=>r.key==='bbmkts_task_verification:'+t.id)?.value||'manual',category:t.category==='other'&&appCode?'app':t.category,
           link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
@@ -1635,14 +1707,16 @@ async function handler(req, env) {
       })});
     }
     if (m === 'POST' && p === '/api/admin/tasks') {
-      const t = validateTaskBody(await readBody(req)), taskId = id();
+      const body=await readBody(req),t=validateTaskBody(body),taskId=id();
+      let source;try{source=await validateTaskSource(env,body,t.category);}catch(error){fail(400,error.message);}
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO tasks(id,title,description,category,url,reward,min_seconds,review_mode,repeat_policy,is_active)
           VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId,t.title,t.description,storedTaskCategory(t.category),t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_task_limit:'+taskId,String(t.linkLimit)),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_creation:'+taskId,t.bbmkts.creation),
-        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_verification:'+taskId,t.bbmkts.verification)
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_verification:'+taskId,t.bbmkts.verification),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(TASK_SOURCE_PREFIX+taskId,JSON.stringify(source))
       ]);
       return json({ ok: true, id: taskId }, 201);
     }
@@ -1670,8 +1744,8 @@ async function handler(req, env) {
       const result = await env.DB.prepare('DELETE FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM task_attempts WHERE task_id=?) AND NOT EXISTS (SELECT 1 FROM task_completions WHERE task_id=?)')
         .bind(taskId,taskId,taskId).run();
       if (!result.meta?.changes) fail(409,'Nhiệm vụ vừa phát sinh lượt thực hiện. Không thể xóa.');
-      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?,?,?)")
-        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId,'bbmkts_task_creation:'+taskId,'bbmkts_task_verification:'+taskId).run();
+      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?,?,?,?)")
+        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId,'bbmkts_task_creation:'+taskId,'bbmkts_task_verification:'+taskId,TASK_SOURCE_PREFIX+taskId).run();
       return json({ok:true});
     }
     const taskEdit = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
@@ -1684,7 +1758,10 @@ async function handler(req, env) {
           body[key]=previous?.value||'manual';
         }
       }
+      const previousSource=await getTaskSource(env,taskEdit[1]);
+      for(const key of ['id','creation','verification'])if(!Object.hasOwn(body,'link_source_'+key))body['link_source_'+key]=previousSource[key];
       const t = validateTaskBody(body);
+      let source;try{source=await validateTaskSource(env,body,t.category);}catch(error){fail(400,error.message);}
       const exists=await env.DB.prepare('SELECT id FROM tasks WHERE id=?').bind(taskEdit[1]).first();
       if(!exists)fail(404,'Không tìm thấy nhiệm vụ.');
       await env.DB.batch([
@@ -1698,7 +1775,8 @@ async function handler(req, env) {
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
           .bind('bbmkts_task_creation:'+taskEdit[1],t.bbmkts.creation),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-          .bind('bbmkts_task_verification:'+taskEdit[1],t.bbmkts.verification)
+          .bind('bbmkts_task_verification:'+taskEdit[1],t.bbmkts.verification),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(TASK_SOURCE_PREFIX+taskEdit[1],JSON.stringify(source))
       ]);
       return json({ ok: true });
     }

@@ -1145,7 +1145,7 @@ async function shrinkAppLogo(file){
   throw new Error('Không thể nén ảnh logo. Hãy thử ảnh khác.');
  }finally{image.close();}
 }
-function taskForm(task={}){
+function taskForm(task={},sources=[]){
  const linkHint=task.category==='link'?'':'hidden';
  return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa nhiệm vụ':'Tạo nhiệm vụ thật'}</h3>
  <input type="hidden" name="id" value="${esc(task.id||'')}">
@@ -1156,10 +1156,12 @@ function taskForm(task={}){
  <div class="callout admin-link-task-hint" id="admin-link-task-hint" ${linkHint}>
  <strong>🔗 Link tự quay về:</strong> Chọn <strong>Admin kiểm tra bằng chứng</strong>, tạo nhiệm vụ <strong>Tắt / nháp</strong> rồi lưu. Sao chép trang đích ở danh sách bên dưới làm URL gốc khi rút gọn. Sau đó dán link đã rút gọn vào URL nhiệm vụ và bật công khai.
  <p class="note">Thành viên xem lưu ý → Bắt đầu → quay về → giải phép tính → Chờ đối soát. Chỉ duyệt sau khi xác minh nguồn thu hợp lệ; phép tính không chứng minh đối tác đã tính tiền.</p>
- <h4>Cấu hình link riêng BBMKTS</h4>
- ${select('bbmkts_creation','Cách tạo link',[['manual','Nhập link rút gọn thủ công'],['quicklink','Tự động — Quicklink (nháp)'],['developer','Tự động — Developer API (nháp)']],task.bbmkts_creation||'manual')}
- ${select('bbmkts_verification','Cách xác minh BBMKTS',[['manual','Admin đối soát'],['api_view','Tự động — API Check View (nháp)']],task.bbmkts_verification||'manual')}
- <p class="note">Hai lựa chọn tự động hiện chỉ lưu cấu hình nháp, chưa cấp link thật. Chọn Tắt / nháp và Admin kiểm tra bằng chứng khi lưu. Token sẽ được cấu hình ở máy chủ sau khi có tài liệu chính thức.</p>
+ <h4>Nguồn rút gọn</h4>
+ ${select('link_source_id','Nhà cung cấp',[['','Không chọn / link thủ công'],...sources.map(s=>[s.id,s.name])],task.link_source_id||((task.bbmkts_creation&&task.bbmkts_creation!=='manual')?'bbmkts':''))}
+ ${select('link_source_creation','Cách tạo link',[['manual','Nhập link thủ công'],['api','Tự động cấp link riêng qua API']],task.link_source_creation==='api'||(task.bbmkts_creation&&task.bbmkts_creation!=='manual')?'api':'manual')}
+ ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng']],task.link_source_verification==='api_view'||task.bbmkts_verification==='api_view'?'api_view':'manual')}
+ <input type="hidden" name="bbmkts_creation" value="manual"><input type="hidden" name="bbmkts_verification" value="manual">
+ <p class="note">Thêm nguồn trong mục Quản lý nguồn rút gọn bên dưới. Cấp link qua API không cần dán URL rút gọn. Chỉ mở nhiệm vụ sau khi thử API thật. View chưa được coi là doanh thu; vẫn duyệt thưởng thủ công.</p>
  </div>
  ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
@@ -1174,8 +1176,29 @@ function taskForm(task={}){
  <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?'<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button>':''}</div>
  <p class="note">🔗 Link tự quay về: tạo nhiệm vụ ở trạng thái Tắt / nháp, bấm “Sao chép trang đích” trong danh sách bên dưới, dùng địa chỉ đó làm link gốc để rút gọn, rồi dán link đã rút gọn vào ô URL và bật nhiệm vụ. Chọn “Admin kiểm tra bằng chứng” vì trang đích không xác minh doanh thu. Nhiệm vụ App, Link và Khác không yêu cầu thời gian chờ. Chỉ nhiệm vụ Video áp dụng thời gian tối thiểu. Không có khả năng xác minh người xem thực sự đã xem video tại nền tảng bên ngoài.</p></form>`;
 }
+function sourceSettingsForm(source={}){
+ return `<details class="section"><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}</summary>
+ <form data-form="link-source-save" class="section">
+ ${field('id','Mã nguồn (ví dụ trafficvn)',source.id||'','required maxlength="32" '+(source.id?'readonly':''))}
+ ${field('name','Tên nhà cung cấp',source.name||'','required maxlength="80"')}
+ ${field('host','Tên miền API',source.host||'','required placeholder="example.com"')}
+ ${field('short_host','Tên miền link rút gọn',source.short_host||'','placeholder="example.com"')}
+ ${field('create_url','API tạo link GET JSON',source.create_url||'','placeholder="https://.../?api={token}&url={destination}"')}
+ ${field('short_path','Trường JSON chứa link',source.short_path||'','placeholder="shortenedUrl hoặc data.short_url"')}
+ ${field('alias_path','Trường JSON chứa alias (bỏ trống nếu lấy cuối URL)',source.alias_path||'','placeholder="data.alias"')}
+ ${field('view_url','API kiểm tra lượt GET JSON',source.view_url||'','placeholder="https://.../api/view/{alias}"')}
+ ${field('view_path','Trường JSON chứa tổng view',source.view_path||'','placeholder="views hoặc data.views"')}
+ <p class="note">Dùng {destination}, {alias}, {token} theo tài liệu đối tác. Không dán token thật vào đây. Nếu cần token, tạo Secret ${esc(source.secret_name||'LINK_PROVIDER_TOKEN_MÃ_NGUỒN_VIẾT_HOA')} trong Cloudflare Worker. ${source.id?(source.token_configured?'Đã có Secret.':'Chưa có Secret (không cần nếu API công khai).'):''}</p>
+ <button class="btn" type="submit">Lưu nguồn</button></form>
+ ${source.id?`<form class="section" data-form="link-source-test"><input type="hidden" name="id" value="${esc(source.id)}">
+ ${select('kind','Kiểm tra API',[['view','Kiểm tra view'],['create','Tạo link kiểm thử (không thưởng)']],'view')}
+ ${field('alias','Alias để kiểm tra view','','placeholder="Alias thật đã có"')}
+ <button class="btn alt" type="submit">Kiểm tra kết nối</button><pre data-source-result role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></form>`:''}
+ </details>`;
+}
 async function adminTasks(){
- const d=await api('/api/admin/tasks');state.adminTasks=d.tasks;
+ const [d,s]=await Promise.all([api('/api/admin/tasks'),api('/api/admin/link-sources')]);state.adminTasks=d.tasks;
+ const sources=s.sources||[];
  const edit=state.taskEdit?d.tasks.find(x=>x.id===state.taskEdit):null;
  const rows=d.tasks.map(t=>{
   const max=Math.max(1,Math.min(20,Number(t.link_24h_limit)||1));
@@ -1187,6 +1210,7 @@ async function adminTasks(){
    <td class="num">${fmt(t.reward)} Lúa</td>
    <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
    <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
+    ${t.category==='link'&&t.link_source_id?`<p class="small">${esc(sources.find(s=>s.id===t.link_source_id)?.name||t.link_source_id)} · ${t.link_source_creation==='api'?'Link riêng qua API':'Link thủ công'}</p>`:''}
     ${t.category==='link'&&t.bbmkts_creation&&t.bbmkts_creation!=='manual'?`<p class="small">BBMKTS: ${esc(t.bbmkts_creation)} · ${t.bbmkts_verification==='api_view'?'API Check View':'Admin đối soát'} (nháp)</p>`:''}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
@@ -1194,8 +1218,10 @@ async function adminTasks(){
   </tr>`;
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
- <section class="info-split">${taskForm(edit||{})}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, Lúa và hạn mức của từng nhiệm vụ. Thẻ thành viên tự lấy các số liệu này.</p><p>2. Với Link tự quay về, đặt chế độ <strong>Admin kiểm tra bằng chứng</strong>; lấy trang đích từ nút bên dưới để tạo link rút gọn.</p><p>3. Khi thành viên vượt link, quay về và giải phép tính, lượt sẽ được đưa vào <strong>Chờ đối soát</strong>.</p><p>4. Kiểm tra khoản thu hợp lệ rồi mới duyệt, chỉ bật công khai sau khi kiểm thử.</p><div class="callout">Quay về và giải CAPTCHA không chứng minh nhà cung cấp đã tính tiền. Chỉ dùng nguồn cho phép hình thức nhiệm vụ thưởng.</div></article></section>
- <section class="card section"><h3>🔗 BBMKTS — Xác minh tự động</h3>
+ <section class="info-split">${taskForm(edit||{},sources)}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, Lúa và hạn mức của từng nhiệm vụ. Thẻ thành viên tự lấy các số liệu này.</p><p>2. Với Link tự quay về, đặt chế độ <strong>Admin kiểm tra bằng chứng</strong>; lấy trang đích từ nút bên dưới để tạo link rút gọn.</p><p>3. Khi thành viên vượt link, quay về và giải phép tính, lượt sẽ được đưa vào <strong>Chờ đối soát</strong>.</p><p>4. Kiểm tra khoản thu hợp lệ rồi mới duyệt, chỉ bật công khai sau khi kiểm thử.</p><div class="callout">Quay về và giải CAPTCHA không chứng minh nhà cung cấp đã tính tiền. Chỉ dùng nguồn cho phép hình thức nhiệm vụ thưởng.</div></article></section>
+ <section class="card section"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
+ ${sources.map(sourceSettingsForm).join('')}${sourceSettingsForm()}
+ <details><summary>Công cụ đọc JSON thô BBMKTS (cũ)</summary>
  <p><strong>Chế độ hiện tại: Admin đối soát thủ công.</strong> API Check View đã được hỗ trợ để thử tra cứu trực tiếp. Chưa bật tự động cấp link hoặc cộng Lúa.</p>
  <form data-form="bbmkts-check-view">
  ${field('alias','Alias của link BBMKTS','', 'required maxlength="128" pattern="[A-Za-z0-9_\\-]+" placeholder="Ví dụ: krjkB" autocapitalize="off" autocomplete="off"')}
@@ -1203,8 +1229,7 @@ async function adminTasks(){
  <p class="note">Không cần API Token để kiểm tra. Dữ liệu trả về chỉ dùng đối soát, không sửa số dư. Không có view chưa có nghĩa là gian lận.</p>
  <pre data-bbmkts-result role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
  </form>
- <label class="note"><input type="checkbox" disabled> Tự động duyệt và cộng Lúa qua BBMKTS (chưa sẵn sàng)</label>
- <p class="note">Cần cấu hình API tạo link riêng, xác nhận cấu trúc JSON và lượt view được tính tiền trước khi mở chế độ này.</p>
+ </details>
  </section>
  <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${d.tasks.length})</h3><p class="note">Số lượt hôm nay được tính theo giờ Việt Nam. Số lượt giới hạn mỗi tài khoản có thể cấu hình riêng cho từng nhiệm vụ.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>`;
 }
@@ -2013,6 +2038,15 @@ app.addEventListener('submit',async e=>{
     toast(saveError?'Yêu cầu rút đã gửi, nhưng chưa lưu được tài khoản: '+saveError:savedOk?'Đã gửi yêu cầu rút và lưu tài khoản nhận tiền mặc định.':r.message,!!saveError);
   }
   if(kind==='settings'){await api('/api/admin/settings','PUT',b);state.meta=await api('/api/meta');toast('Đã lưu cài đặt.');await navigate('admin-settings');}
+  if(kind==='link-source-save'){
+    await api('/api/admin/link-sources','POST',b);toast('Đã lưu nguồn rút gọn.');await navigate('admin-tasks');return;
+  }
+  if(kind==='link-source-test'){
+    const output=form.querySelector('[data-source-result]');
+    if(output)output.textContent='Đang kiểm tra...';
+    try{const r=await api('/api/admin/link-sources/check','POST',b);if(output)output.textContent=JSON.stringify(r,null,2);}
+    catch(error){if(output)output.textContent=error.message||'Kiểm tra thất bại';throw error;}return;
+  }
   if(kind==='bbmkts-check-view'){
     const output=form.querySelector('[data-bbmkts-result]');
     if(output)output.textContent='Đang kiểm tra BBMKTS...';
