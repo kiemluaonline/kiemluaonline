@@ -1665,7 +1665,9 @@ async function handler(req, env) {
           WHERE e.user_id=w.user_id AND e.reference_type='withdraw_hold' AND e.reference_id=w.id LIMIT 1),0) AS fee_lua
         FROM withdrawals w WHERE w.user_id=? ORDER BY w.created_at DESC LIMIT 80`).bind(me.id).all()
     ]);
-    return json({ wallet_entries: walletEntries.results, completions: completionRows.results,
+    // Member history reports the outcome; the ledger and Admin audit retain original reasons.
+    return json({ wallet_entries: walletEntries.results.map(w=>w.reference_type==='task'&&w.amount>0?{...w,reason:'Nhiệm vụ đã duyệt'}:w),
+      completions: completionRows.results.map(c=>String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?{...c,evidence:'Đã gửi xác minh nhiệm vụ'}:c),
       withdrawals: withdrawals.results.map(presentWithdrawal) });
   }
   if (m === 'GET' && p === '/api/referrals') {
