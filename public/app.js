@@ -1163,8 +1163,8 @@ function taskForm(task={},sources=[]){
  <button type="button" class="btn alt sm" data-action="add-link-source">＋ Thêm nguồn rút gọn</button>
  <div id="task-source-api-options" ${sourceId?'':'hidden'}>
  ${select('link_source_creation','Cách tạo link',[['manual','Nhập link thủ công'],['api','Tự động cấp link riêng qua API']],sourceId&&task.link_source_creation==='api'?'api':'manual')}
- ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng']],sourceId&&task.link_source_verification==='api_view'?'api_view':'manual')}
- <p class="note">Chỉ bật API sau khi kiểm tra kết nối. View chưa xác nhận doanh thu.</p></div>
+ ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng'],['api_auto','Tự động Check View và cộng Lúa (nguồn đã xác nhận)']],sourceId&&['api_view','api_auto'].includes(task.link_source_verification)?task.link_source_verification:'manual')}
+ <p class="note">Chỉ bật API sau khi kiểm tra kết nối. Tự động cộng Lúa cần xác nhận điều kiện tính tiền của nguồn trước; chưa đủ điều kiện thì lưu nháp.</p></div>
  <input type="hidden" name="bbmkts_creation" value="manual"><input type="hidden" name="bbmkts_verification" value="manual">
 
  ${field('url','URL link rút gọn (nếu nhập thủ công)',task.url||'', 'type="url" placeholder="https://..."')}
@@ -1183,7 +1183,7 @@ function taskForm(task={},sources=[]){
  <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?`<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button><button class="btn danger" type="button" data-action="delete-task" data-id="${esc(task.id)}" data-title="${esc(task.title)}">🗑 Xóa nhiệm vụ</button>`:''}</div></form>`;
 }
 function sourceSettingsForm(source={}){
- return `<details class="section" ${source.id?'':'id="new-link-source"'}><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}</summary>
+ return `<details class="section" ${source.id?'':'id="new-link-source"'}><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}${source.id&&source.auto_reward_ready?' · Đã xác nhận tự động thưởng':''}</summary>
  <form data-form="link-source-save" class="section">
  ${field('id','Mã nguồn (ví dụ trafficvn)',source.id||'','required maxlength="32" '+(source.id?'readonly':''))}
  ${field('name','Tên nhà cung cấp',source.name||'','required maxlength="80"')}

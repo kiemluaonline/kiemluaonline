@@ -2178,3 +2178,31 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  await browserApi('/api/admin/tasks');assert.equal(sent[1].body,undefined);assert.equal(sent[1].headers['X-Tram-Lua'],undefined);
  console.log('PASS: browser DELETE sends required request authentication headers; GET remains bodyless.');
 }
+
+// Automatic credit is opt-in, gated and tested only in the isolated mock database.
+{
+ const source={id:'auto_fixture',name:'Nguồn mô phỏng tự động',host:'example.com',short_host:'example.com',create_url:'https://example.com/create?url={destination}',short_path:'shortenedUrl',view_url:'https://example.com/view/{alias}',view_path:'views'};
+ assert.equal((await call('/api/admin/link-sources','POST',source,admCookie)).status,200);
+ const cfg={title:'Tự duyệt mô phỏng',category:'link',url:'',reward:19,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'auto_fixture',link_source_creation:'api',link_source_verification:'api_auto'};
+ assert.equal((await call('/api/admin/tasks','POST',cfg,admCookie)).status,400);
+ const draft=await call('/api/admin/tasks','POST',{...cfg,is_active:false},admCookie);assert.equal(draft.status,201);
+ env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE='confirmed';
+ assert.equal((await call('/api/admin/tasks/'+draft.data.id,'PATCH',cfg,admCookie)).status,200);
+ const taskId=draft.data.id,ip='203.0.113.232',device='e1234567-1234-4123-8123-123456789abc';
+ const member=await call('/api/auth/register','POST',{name:'Test tự duyệt',email:'auto-link-fixture@example.com',password:'test-password-2026',accept_terms:'yes'},'',ip,device);assert.equal(member.status,201);
+ const before=(await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance;
+ let views=0;const oldFetch=globalThis.fetch;
+ globalThis.fetch=async raw=>{const path=new URL(raw).pathname;return new Response(JSON.stringify(path==='/create'?{shortenedUrl:'https://example.com/go/autoFixture'}:{views}),{headers:{'Content-Type':'application/json'}});};
+ try{
+  const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);assert.equal(start.status,200,JSON.stringify(start));
+  sqlite.prepare("UPDATE task_attempts SET created_at=datetime('now','-1 minute') WHERE id=?").run(start.data.attempt_id);
+  views=1;const path='/api/tasks/'+taskId+'/return';const challenge=await call(path,'POST',{},member.cookie,ip,device);assert.equal(challenge.status,200);
+  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b},member.cookie,ip,device);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'approved',JSON.stringify(result));
+  const completion=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(taskId);assert.equal(completion.status,'approved');
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
+  assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
+  assert.equal((await call(path,'POST',{answer:challenge.data.a+challenge.data.b},member.cookie,ip,device)).status,409);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
+ }finally{globalThis.fetch=oldFetch;delete env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE;}
+ console.log('PASS: opt-in auto reward gated, zero baseline then one view, one wallet entry, replay blocked.');
+}

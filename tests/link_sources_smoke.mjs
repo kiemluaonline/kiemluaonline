@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {normalizeSource,createSourceLink,checkSourceView,taskSourceConfig,secretName,valueAt,SourceDiagnosticError,sourceToken} from '../src/link-sources.js';
+import {normalizeSource,createSourceLink,checkSourceView,taskSourceConfig,secretName,valueAt,SourceDiagnosticError,sourceToken,autoRewardEnabled,autoRewardEligible} from '../src/link-sources.js';
 const source=normalizeSource({id:'trafficvn',name:'TrafficVN',host:'trafficvn.com',short_host:'trafficvn.com',create_url:'https://trafficvn.com/apidevelop?api={token}&url={destination}',short_path:'shortenedUrl',view_url:'https://trafficvn.com/api/views/{alias}',view_path:'data.views'});
 assert.equal(secretName(source.id),'LINK_PROVIDER_TOKEN_TRAFFICVN');
 const response=x=>new Response(JSON.stringify(x),{headers:{'Content-Type':'application/json'}});
@@ -39,3 +39,9 @@ assert.throws(()=>normalizeSource({...source,view_path:'data.chart.*.__proto__'}
 assert.throws(()=>normalizeSource({...source,view_path:'data.*.chart.*.views'}));
 assert.throws(()=>normalizeSource({...source,short_path:'data.chart.*.views'}));
 console.log('PASS: generic view array aggregation, zero, missing values and overflow fail closed.');
+
+assert.equal(autoRewardEnabled({},source),false);
+assert.equal(autoRewardEnabled({LINK_PROVIDER_PAID_VIEW_CONFIRMED_TRAFFICVN:'confirmed'},source),true);
+const valid={views:1,baseline:0,fastReturn:false,confirmed:true,unchanged:true};
+assert.equal(autoRewardEligible(valid),true);
+for(const x of [{views:0},{views:2},{views:null},{baseline:null},{baseline:1},{fastReturn:true},{confirmed:false},{unchanged:false}])assert.equal(autoRewardEligible({...valid,...x}),false);

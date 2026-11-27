@@ -131,11 +131,18 @@ export function sourceToken(env,source){return typeof env[secretName(source.id)]
 export function sourceReady(env,source){
   return Boolean(source?.create_url&&source.short_path&&(!source.create_url.includes('{token}')||sourceToken(env,source)));
 }
-export function presentSource(env,source){return {...source,secret_name:secretName(source.id),token_configured:Boolean(sourceToken(env,source)),create_ready:sourceReady(env,source)};}
+// Separate deployment gate. Never enabled merely by saving a provider or task.
+export function autoRewardEnabled(env,source){
+  return Boolean(source&&env['LINK_PROVIDER_PAID_VIEW_CONFIRMED_'+source.id.toUpperCase()]==='confirmed');
+}
+export function autoRewardEligible({views,baseline,fastReturn,confirmed,unchanged}){
+  return confirmed===true&&unchanged===true&&fastReturn===false&&baseline===0&&views===1;
+}
+export function presentSource(env,source){return {...source,secret_name:secretName(source.id),token_configured:Boolean(sourceToken(env,source)),create_ready:sourceReady(env,source),auto_reward_ready:autoRewardEnabled(env,source)};}
 export function taskSourceConfig(body,category){
   if(category!=='link')return {id:'',creation:'manual',verification:'manual'};
   const id=readText(body.link_source_id,32),creation=body.link_source_creation||'manual',verification=body.link_source_verification||'manual';
-  if(id&&!slugPattern.test(id)||!['manual','api'].includes(creation)||!['manual','api_view'].includes(verification)||(!id&&creation==='api')||(verification==='api_view'&&creation!=='api'))throw Error('Cấu hình nguồn rút gọn không hợp lệ');
+  if(id&&!slugPattern.test(id)||!['manual','api'].includes(creation)||!['manual','api_view','api_auto'].includes(verification)||(!id&&creation==='api')||(verification!=='manual'&&creation!=='api'))throw Error('Cấu hình nguồn rút gọn không hợp lệ');
   return {id,creation,verification};
 }
 export async function validateTaskSource(env,body,category){
@@ -145,7 +152,8 @@ export async function validateTaskSource(env,body,category){
   if(!source)throw Error('Không tìm thấy nguồn rút gọn');
   if(config.creation==='api'&&body.is_active){
     if(body.review_mode!=='manual'||!sourceReady(env,source))throw Error('Chưa kết nối API tạo link; chọn Tắt / nháp');
-    if(config.verification==='api_view'&&(!source.view_url||!source.view_path))throw Error('Chưa cấu hình API kiểm tra view');
+    if(config.verification!=='manual'&&(!source.view_url||!source.view_path))throw Error('Chưa cấu hình API kiểm tra view');
+    if(config.verification==='api_auto'&&!autoRewardEnabled(env,source))throw Error('Nguồn chưa được xác nhận điều kiện tính tiền. Chỉ lưu tự động ở trạng thái nháp hoặc chọn Admin duyệt.');
   }
   return config;
 }
