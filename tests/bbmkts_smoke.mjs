@@ -20,7 +20,7 @@ assert.throws(()=>bbmktsViewApiUrl('../wrong'));
 const mockJson = { sample: [{ views: 1 }] }; // deliberately not assumed to be provider schema
 const diagnostic = await fetchBbmktsViewJson('krjkB', async (url, options)=>{
   assert.equal(url,'https://bbmkts.com/api/link/chart/krjkB');
-  assert.equal(options.redirect,'error');
+  assert.equal(options.redirect,'manual');
   assert.equal(options.method,'GET');
   return new Response(JSON.stringify(mockJson),{headers:{'Content-Type':'application/json'}});
 });
@@ -36,3 +36,5 @@ assert.throws(()=>bbmktsTaskConfig({bbmkts_creation:'quicklink',review_mode:'man
 assert.throws(()=>bbmktsTaskConfig({bbmkts_verification:'api_view',review_mode:'manual'},'link'),/link riêng/);
 assert.throws(()=>bbmktsTaskConfig({bbmkts_creation:'invalid'},'link'),/không hợp lệ/);
 console.log('PASS: BBMKTS draft-only task configuration and fail-closed activation.');
+
+await assert.rejects(fetchBbmktsViewJson('krjkB',async(url,options)=>{assert.equal(options.redirect,'manual');return new Response(null,{status:302,headers:{Location:'https://example.com/'}});}),/302/);

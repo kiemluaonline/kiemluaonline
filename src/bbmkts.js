@@ -42,7 +42,7 @@ export function bbmktsViewApiUrl(alias) {
 export async function fetchBbmktsViewJson(alias, fetcher = fetch) {
   const endpoint = bbmktsViewApiUrl(alias);
   const response = await fetcher(endpoint, {
-    method: 'GET', redirect: 'error', cache: 'no-store',
+    method: 'GET', redirect: 'manual', cache: 'no-store',
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(8000)
   });

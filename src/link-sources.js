@@ -64,8 +64,9 @@ function requestUrl(source,kind,values,token){
 async function getJson(source,kind,values,token,fetcher){
   const url=requestUrl(source,kind,values,token);
   let response;
-  try{response=await fetcher(url,{method:'GET',redirect:'error',headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});}
-  catch(error){throw diagnostic(error?.name==='TimeoutError'||error?.name==='AbortError'?'API không phản hồi trong 8 giây.':'Không kết nối được API hoặc API chuyển hướng; kiểm tra đường dẫn và hỏi nhà cung cấp.');}
+  try{response=await fetcher(url,{method:'GET',redirect:'manual',headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});}
+  catch(error){throw diagnostic(error?.name==='TimeoutError'||error?.name==='AbortError'?'API không phản hồi trong 8 giây.':'Không kết nối được API; kiểm tra đường dẫn và hỏi nhà cung cấp.');}
+  if(response.status>=300&&response.status<400)throw diagnostic('API trả chuyển hướng HTTP '+Number(response.status)+'. Cần URL API trực tiếp; không chuyển tiếp Token.');
   if(!response.ok)throw diagnostic('API trả HTTP '+Number(response.status)+'. '+([401,403].includes(response.status)?'Kiểm tra Token hoặc quyền truy cập API.':'Kiểm tra đường dẫn và trạng thái nhà cung cấp.'));
   if(!/\bapplication\/(?:[\w.+-]+\+)?json\b/i.test(response.headers.get('content-type')||''))throw diagnostic('API không khai báo Content-Type JSON. Kiểm tra có chọn Developer API JSON hay không.');
   const reader=response.body?.getReader();
@@ -106,7 +107,7 @@ export async function getSource(env,id){
   const stored=await settingValue(env,SOURCE_PREFIX+id);
   return stored?normalizeSource(stored):null;
 }
-export function sourceToken(env,source){return typeof env[secretName(source.id)]==='string'?env[secretName(source.id)]:'';}
+export function sourceToken(env,source){return typeof env[secretName(source.id)]==='string'?env[secretName(source.id)].trim():'';}
 export function sourceReady(env,source){
   return Boolean(source?.create_url&&source.short_path&&(!source.create_url.includes('{token}')||sourceToken(env,source)));
 }
