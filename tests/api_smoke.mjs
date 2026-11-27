@@ -1615,8 +1615,8 @@ assert.match(rulesOverlay,/data-action="cancel-task-rules"/);
 assert.match(rulesOverlay,/data-action="confirm-task-rules"/);
 assert.doesNotMatch(rulesOverlay,/\/api\/tasks\//,
  'Mở bảng lưu ý không tạo phiên nhiệm vụ hay tiêu hao lượt');
-assert.match(rulesSource,/if\(act==='start-task'\)\{showTaskRules\(el.dataset.id\);return;\}/,
- 'Bấm nhiệm vụ phải mở thông báo trước');
+assert.match(rulesSource,/if\(act==='start-task'\)\{const t=state\.memberTasks\.find\(x=>x\.id===el\.dataset\.id\);if\(t\?\.category==='app'\)\{await startTask\(el\.dataset\.id\);return;\}showTaskRules\(el\.dataset\.id\);return;\}/,
+ 'Chỉ nhiệm vụ App mở trực tiếp; nhiệm vụ Link và các loại khác vẫn phải mở thông báo trước');
 assert.match(rulesSource,/if\(act==='confirm-task-rules'\)/);
 assert.match(rulesSource,/await startTask\(taskId\)/,
  'Chỉ bắt đầu phiên nhiệm vụ khi thành viên xác nhận');
