@@ -1542,6 +1542,9 @@ function renderTaskStartProgress(taskId){
 }
 
 async function startTask(taskId){
+ // Ignore duplicate taps while the same start request is being processed.
+ if(state.taskStartInFlight)return;
+ state.taskStartInFlight=true;
  // Không báo đã khởi tạo trước khi server xác nhận phiên nhiệm vụ thành công.
  renderTaskStartProgress(taskId);
  try{
@@ -1564,6 +1567,8 @@ async function startTask(taskId){
   if(root?.querySelector('.task-start-cover'))root.innerHTML='';
   if(state.pendingTaskRules===taskId)showTaskRules(taskId);
   throw error;
+ }finally{
+  state.taskStartInFlight=false;
  }
 }
 function renderAttemptModal(){

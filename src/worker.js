@@ -1490,19 +1490,17 @@ async function handler(req, env) {
       fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
     const sourceConfig=task.category==='link'?await getTaskSource(env,task.id):{creation:'manual'};
     const source=sourceConfig.creation==='api'?await getSource(env,sourceConfig.id):null;
+    let replaceAttempt=null;
     if(sourceConfig.creation==='api'){
       if(!sourceReady(env,source)||task.review_mode!=='manual')fail(409,'Nguồn API chưa sẵn sàng.');
       const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(me.id,task.id,now()).first();
       if(ongoing){
         const existing=await getAttemptSource(env,ongoing.id);
         if(!existing)fail(409,'Phiên đang được cấp link hoặc chưa nhận được phản hồi từ đối tác. Hệ thống không tự tạo thêm link. Nếu vẫn gặp lỗi, hãy liên hệ Admin.');
-        // Before the first recorded return, a legitimate network change is
-        // allowed on the same authenticated browser. Reuse the exact same alias.
-        // The normal account, IP and browser quotas above still apply.
-        if(ongoing.device_code!==await deviceCode(req,env))
-          fail(409,'Hãy tiếp tục bằng trình duyệt đã mở nhiệm vụ. Link cũ vẫn được giữ.');
+        // A deliberate new start replaces an unreturned, already-issued attempt.
+        // Never reuse an issued URL for a new Start. Quotas have already passed.
         if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
-        return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:'manual',category:'link',task_url:existing.shortUrl,resumed:true});
+        replaceAttempt=ongoing.id;
       }
     }
     if(task.category==='app'){
@@ -1524,15 +1522,20 @@ async function handler(req, env) {
        SELECT ?,?,?,?,?,?,?,?,? ${task.category==='link'?'WHERE NOT EXISTS (SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>?)':''}`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
       clientIP(req), await deviceCode(req, env),...(task.category==='link'?[me.id,task.id,LINK_CONFIRM_WINDOW_MS,startedNow]:[]));
     if(source){
-      // Atomic reservation before the provider request. Concurrent requests
-      // cannot replace the reservation or call the provider a second time.
-      const reserved=await env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
+      // Only the observed, fully issued, unreturned attempt can be replaced.
+      // Reserving the replacement and expiring the old attempt is atomic.
+      const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
           SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
           AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))
         )`).bind(attempt,me.id,task.id,a,b,available,startedNow+attemptSeconds*1000,
-        clientIP(req),await deviceCode(req,env),me.id,task.id,startedNow,LINK_CONFIRM_WINDOW_MS,startedNow).run();
-      if(!reserved.meta?.changes)fail(409,'Đã có phiên nhiệm vụ. Hãy tiếp tục phiên cũ; không tạo thêm link.');
+        clientIP(req),await deviceCode(req,env),me.id,task.id,startedNow,LINK_CONFIRM_WINDOW_MS,startedNow);
+      const writes=replaceAttempt?await env.DB.batch([
+        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?')
+          .bind(startedNow,replaceAttempt,me.id,task.id,startedNow),
+        reserve
+      ]):[await reserve.run()];
+      if(!writes[writes.length-1].meta?.changes)fail(409,'Đang có yêu cầu cấp link hoặc lượt chờ xác minh. Không tạo thêm link.');
     }else if(task.category==='link'){
       // Manual links have no provider creation API.
       const started=await env.DB.batch([
