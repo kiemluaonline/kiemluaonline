@@ -1010,7 +1010,7 @@ function renderMemberTaskCard(t){
    t.category==='link'?'Thực hiện qua liên kết':'Theo hướng dẫn';
  const usedLabel=isLink&&maxUses>1?`${used}/${maxUses}`:null;
  const badge=usedLabel||`${used}/${maxUses}`;
- const countText=t.link_blocked==='link_task_limit'?`Đã sử dụng ${used}/${maxUses} lượt hôm nay`:
+ const countText=t.link_needs_confirmation?'Đang chờ xác minh phép tính':t.link_blocked==='link_task_limit'?`Đã sử dụng ${used}/${maxUses} lượt hôm nay`:
    t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
    t.my_status==='pending'?'Đã gửi, đang chờ Admin đối soát':
    t.my_status==='approved'?'Nhiệm vụ đã được duyệt':
@@ -1018,7 +1018,7 @@ function renderMemberTaskCard(t){
    daily?`Còn ${left}/${maxUses} lượt hôm nay`:
    `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
  const progress=Math.round(used/maxUses*100);
- const blockNote=t.link_blocked?(
+ const blockNote=t.link_needs_confirmation?'Hoàn tất xác minh lượt cũ trước khi làm lượt mới.':t.link_blocked?(
   t.link_blocked==='link_task_limit'?'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
   t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
   t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
@@ -1027,7 +1027,9 @@ function renderMemberTaskCard(t){
   t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':
   'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
  ):'';
- const button=t.link_blocked?
+ const button=t.link_needs_confirmation?
+  `<button class="btn task-card-modern-action" type="button" data-action="resume-link-confirmation" data-id="${esc(t.id)}">Tiếp tục xác minh</button>`:
+  t.link_blocked?
   `<button class="btn task-card-modern-action is-disabled" type="button" disabled>⛔ Chưa thể bắt đầu</button>`:
   t.my_status?
    `<div class="task-card-modern-completed">${chip(t.my_status)}<span>Trạng thái được cập nhật từ hệ thống.</span></div>`:
@@ -1850,6 +1852,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
   if(act==='filter-tasks'){state.taskFilter=['app','link'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
+  if(act==='resume-link-confirmation'){await startTask(el.dataset.id);return;}
   if(act==='start-task'){const t=state.memberTasks.find(x=>x.id===el.dataset.id);if(t?.category==='app'){await startTask(el.dataset.id);return;}showTaskRules(el.dataset.id);return;}
   if(act==='cancel-task-rules'){
    state.pendingTaskRules=null;document.getElementById('modal-root').innerHTML='';return;

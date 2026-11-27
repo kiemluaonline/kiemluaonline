@@ -1573,7 +1573,11 @@ assert.equal(taskViewSecond.link_24h_count,2,'Lượt về thứ hai hiển th�
 assert.equal(taskViewSecond.link_blocked,'link_task_limit','Hết lượt phải khóa nút bắt đầu');
 const qStart3=await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{},
  returnMember.cookie,returnIP,returnDevice);
-assert.equal(qStart3.status,429,'Không cho tạo lượt thứ ba trong cùng ngày');
+assert.equal(qStart3.status,200,'Chỉ cho tiếp tục xác minh lượt hai, không tạo lượt thứ ba');
+assert.equal(qStart3.data.attempt_id,qStart2.data.attempt_id);
+assert.equal(qStart3.data.resume_confirmation,true);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_attempts WHERE task_id=?').get(quotaReturnTask.data.id).n,2);
+assert.equal(taskViewSecond.link_needs_confirmation,true);
 const qAnswer2=await call(quotaPath,'POST',{answer:qLanding2.data.a+qLanding2.data.b},
  returnMember.cookie,returnIP,returnDevice);
 assert.equal(qAnswer2.status,200,JSON.stringify(qAnswer2));
@@ -1791,7 +1795,7 @@ assert.doesNotMatch(outcomeRoot.innerHTML,/task-result-success|Bạn vừa nhậ
 assert.match(outcomeRoot.innerHTML,/task-result-pending/);
 assert.match(outcomeClient,/await afterAction\('tasks'\);renderTaskResultModal\(r\);/,
  'Task claim should show result popup only after server response and wallet refresh');
-assert.match(outcomeClient,/await afterAction\('history'\);\s*renderTaskResultModal\(/,
+assert.match(outcomeClient,/await afterAction\('history'\);[\s\S]*?renderTaskResultModal\(result,\{linkReturn:true\}\)/,
  'Link return must show amber pending popup after server response');
 assert.match(outcomeClient,/if\(act==='close-task-result'\)/);
 assert.match(outcomeClient,/e\.target\.classList\?\.contains\('task-result-cover'\)/);
@@ -2086,24 +2090,33 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
    creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');const dest=new URL(u.searchParams.get('url'));assert.equal(dest.origin,'https://nhiemvu.click');assert.equal(dest.searchParams.get('link_return'),taskId);assert.match(dest.searchParams.get('link_session'),/^[0-9a-f-]{36}$/i);
    return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
   }
-  if(u.pathname==='/view/mock1'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
+  if(u.pathname==='/view/mock2'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
   throw Error('Unexpected provider URL');
  };
  try{
+  const original=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,'203.0.113.210',device);
+  assert.equal(original.status,200,JSON.stringify(original));assert.equal(original.data.task_url,'https://example.com/go/mock1');
   const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
-  assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock1');
+  assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock2');
+  assert.notEqual(start.data.attempt_id,original.data.attempt_id);
+  assert.ok(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(original.data.attempt_id).expires_at<=Date.now());
   assert.ok(!JSON.stringify(start).includes('mock-only-secret'));
   const resumed=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
-  assert.equal(resumed.data.attempt_id,start.data.attempt_id);assert.equal(creates,1);
+  assert.equal(resumed.data.attempt_id,start.data.attempt_id);assert.equal(creates,2);
   const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id,answer:start.data.a+start.data.b,evidence:'mock proof direct bypass'},member.cookie,ip,device);
   assert.equal(direct.status,409);
   const path='/api/tasks/'+taskId+'/return';
   assert.equal((await call(path,'POST',{},member.cookie,ip,device)).status,409);
   const challenge=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
+  const blockedRestart=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,'203.0.113.210',device);
+  assert.equal(blockedRestart.status,409,'Đổi IP sau khi đã quay về không cấp lượt mới');
+  const resumeConfirm=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
+  assert.equal(resumeConfirm.status,200);assert.equal(resumeConfirm.data.resume_confirmation,true);
+  assert.equal(resumeConfirm.data.attempt_id,start.data.attempt_id);assert.equal(creates,2);
   const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
   const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
-  assert.match(record.evidence,/Alias: mock1; View API: 1/);
+  assert.match(record.evidence,/Alias: mock2; View API: 1/);
   assert.equal(record.status,'pending');
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
  }finally{globalThis.fetch=originalFetch;delete env.LINK_PROVIDER_TOKEN_MOCK_SOURCE;}
