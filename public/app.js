@@ -1184,11 +1184,32 @@ async function shrinkAppLogo(file){
   throw new Error('Không thể nén ảnh logo. Hãy thử ảnh khác.');
  }finally{image.close();}
 }
+function sourceVerificationChoices(source,creation,current='manual'){
+ const choices=[['manual','Admin đối soát']];
+ if(creation==='api'&&source?.view_url&&source?.view_path){
+  choices.push(['api_view','Tự động tra cứu view — Admin duyệt thưởng']);
+  if(source.auto_reward_ready)choices.push(['api_auto','Tự động Check View và cộng Lúa (nguồn đã xác nhận)']);
+ }
+ // Preserve previously saved selections until Admin deliberately changes them.
+ if(current!=='manual'&&!choices.some(([v])=>v===current)&&['api_view','api_auto'].includes(current))
+  choices.push([current,'Cấu hình cũ — chưa đủ điều kiện, cần chọn lại hoặc lưu nháp']);
+ return choices;
+}
+function sourceVerificationHint(source,creation){
+ if(!source||creation!=='api')return 'Link thủ công: Admin đối soát và duyệt thưởng.';
+ if(!source.create_ready)return 'Chưa đủ cấu hình tạo link hoặc Secret. Mở Quản lý nguồn rút gọn để kiểm tra trước khi bật công khai.';
+ if(!source.view_url||!source.view_path)return 'Nguồn chưa có API View: chọn Admin đối soát. Link riêng và mã Alias vẫn được lưu.';
+ if(!source.auto_reward_ready)return 'Có API View: có thể tự tra cứu, Admin duyệt. Tự động cộng Lúa chỉ bật sau khi xác nhận điều kiện tính tiền.';
+ return 'Có API View và đã xác nhận nguồn. Chỉ tự cộng Lúa khi đủ điều kiện, đúng 1 View; các trường hợp khác chờ Admin.';
+}
 function taskForm(task={},sources=[]){
  const category=state.adminTaskFilter==='app'?'app':'link';
  const link=category==='link';
  const sourceId=sources.some(s=>s.id===task.link_source_id)?task.link_source_id:'';
- return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa':'Tạo'} nhiệm vụ ${link?'Link rút gọn':'App'}</h3>
+ const source=sources.find(s=>s.id===sourceId),creation=sourceId&&task.link_source_creation==='api'?'api':'manual';
+ const verification=sourceId&&['api_view','api_auto'].includes(task.link_source_verification)?task.link_source_verification:'manual';
+ const capabilities=sources.map(({id,create_ready,view_url,view_path,auto_reward_ready})=>({id,create_ready,view_url:Boolean(view_url),view_path:Boolean(view_path),auto_reward_ready}));
+ return `<form class="card" data-form="admin-task" id="task-form" data-source-capabilities="${esc(JSON.stringify(capabilities))}"><h3>${task.id?'Sửa':'Tạo'} nhiệm vụ ${link?'Link rút gọn':'App'}</h3>
  <input type="hidden" name="id" value="${esc(task.id||'')}">
  <input type="hidden" name="category" value="${category}">
  <input type="hidden" name="review_mode" value="manual"><input type="hidden" name="min_seconds" value="5">
@@ -1200,8 +1221,8 @@ function taskForm(task={},sources=[]){
  <button type="button" class="btn alt sm" data-action="add-link-source">＋ Thêm nguồn rút gọn</button>
  <div id="task-source-api-options" ${sourceId?'':'hidden'}>
  ${select('link_source_creation','Cách tạo link',[['manual','Nhập link thủ công'],['api','Tự động cấp link riêng qua API']],sourceId&&task.link_source_creation==='api'?'api':'manual')}
- ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng'],['api_auto','Tự động Check View và cộng Lúa (nguồn đã xác nhận)']],sourceId&&['api_view','api_auto'].includes(task.link_source_verification)?task.link_source_verification:'manual')}
- <p class="note">Chỉ bật API sau khi kiểm tra kết nối. Tự động cộng Lúa cần xác nhận điều kiện tính tiền của nguồn trước; chưa đủ điều kiện thì lưu nháp.</p></div>
+ ${select('link_source_verification','Cách xác minh',sourceVerificationChoices(source,creation,verification),verification)}
+ <p class="note" data-source-verification-hint>${esc(sourceVerificationHint(source,creation))}</p></div>
  <input type="hidden" name="bbmkts_creation" value="manual"><input type="hidden" name="bbmkts_verification" value="manual">
 
  ${field('url','URL link rút gọn (nếu nhập thủ công)',task.url||'', 'type="url" placeholder="https://..."')}
@@ -1222,6 +1243,7 @@ function taskForm(task={},sources=[]){
 function sourceSettingsForm(source={}){
  return `<details class="section" ${source.id?'':'id="new-link-source"'}><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}${source.id&&source.auto_reward_ready?' · Đã xác nhận tự động thưởng':''}</summary>
  <form data-form="link-source-save" class="section">
+ <p class="note">1. Nhập tên miền và mẫu API GET/JSON theo tài liệu đối tác. 2. Lưu nguồn và thêm Secret trong Cloudflare nếu cần. 3. Tạo một link kiểm thử, rồi mới bật nhiệm vụ. Không có API View thì để trống cả hai ô View và chọn Admin đối soát.</p>
  ${field('id','Mã nguồn (ví dụ trafficvn)',source.id||'','required maxlength="32" '+(source.id?'readonly':''))}
  ${field('name','Tên nhà cung cấp',source.name||'','required maxlength="80"')}
  ${field('host','Tên miền API',source.host||'','required placeholder="example.com"')}
@@ -1234,7 +1256,8 @@ function sourceSettingsForm(source={}){
  <p class="note">Nếu API trả danh sách view theo ngày, dùng dạng data.chart.*.views để cộng các dòng trong kỳ API trả về. Dùng {destination}, {alias}, {token} theo tài liệu đối tác. Không dán token thật vào đây. Nếu cần token, tạo Secret ${esc(source.secret_name||'LINK_PROVIDER_TOKEN_MÃ_NGUỒN_VIẾT_HOA')} trong Cloudflare Worker. ${source.id?(source.token_configured?'Đã có Secret.':'Chưa có Secret (không cần nếu API công khai).'):''}</p>
  <button class="btn" type="submit">Lưu nguồn</button></form>
  ${source.id?`<form class="section" data-form="link-source-test"><input type="hidden" name="id" value="${esc(source.id)}">
- ${select('kind','Kiểm tra API',[['view','Kiểm tra view'],['create','Tạo link kiểm thử (không thưởng)']],'view')}
+ ${select('kind','Kiểm tra API',[...(source.view_url&&source.view_path?[['view','Kiểm tra view']]:[]),['create','Tạo link kiểm thử (không thưởng)']],source.view_url&&source.view_path?'view':'create')}
+ <p class="note">Tạo link kiểm thử sẽ tạo một link thật bên đối tác, kể cả khi phản hồi không hợp lệ. Chỉ bấm một lần; nếu lỗi, đọc thông báo trước khi thử lại. Không phát thưởng.</p>
  ${field('alias','Alias để kiểm tra view','','placeholder="Alias thật đã có"')}
  <button class="btn alt" type="submit">Kiểm tra kết nối</button><pre data-source-result role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></form><button type="button" class="btn danger sm" data-action="delete-link-source" data-id="${esc(source.id)}" data-name="${esc(source.name)}">Xóa nguồn</button>`:''}
  </details>`;
@@ -1773,7 +1796,14 @@ app.addEventListener('change',e=>{
   if(options)options.hidden=!e.target.value;
   form.elements.link_source_creation.value='manual';form.elements.link_source_verification.value='manual';
  }
- if(e.target.matches('#task-form [name="link_source_creation"]')&&e.target.value==='manual')e.target.closest('form').elements.link_source_verification.value='manual';
+ if(e.target.matches('#task-form [name="link_source_id"],#task-form [name="link_source_creation"]')){
+  const form=e.target.closest('form'),source=JSON.parse(form.dataset.sourceCapabilities||'[]').find(s=>s.id===form.elements.link_source_id.value);
+  const creation=form.elements.link_source_creation.value,verification=form.elements.link_source_verification;
+  const choices=sourceVerificationChoices(source,creation),previous=verification.value;
+  verification.replaceChildren(...choices.map(([value,label])=>new Option(label,value)));
+  verification.value=choices.some(([v])=>v===previous)?previous:'manual';
+  form.querySelector('[data-source-verification-hint]').textContent=sourceVerificationHint(source,creation);
+ }
  if(e.target.matches('input[data-shop-image-input]')){
   previewShopPhoto(e.target).catch(err=>toast(err.message,true));
  }
@@ -2020,6 +2050,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
 app.addEventListener('submit',async e=>{
  const form=e.target.closest('form[data-form]');if(!form)return;
  e.preventDefault();const kind=form.dataset.form;const b=formData(form),button=form.querySelector('button[type="submit"]');
+ if(kind==='link-source-test'&&button?.disabled)return;
  if(button)button.disabled=true;
  try{
   if(kind==='link-return-captcha'){
@@ -2094,6 +2125,7 @@ app.addEventListener('submit',async e=>{
   }
   if(kind==='link-source-test'){
     const output=form.querySelector('[data-source-result]');
+    if(b.kind==='create'&&!localizedConfirm('Thao tác này tạo một link thật bên đối tác, không thưởng. Bạn muốn tạo một link kiểm thử mới?'))return;
     if(output)output.textContent='Đang kiểm tra...';
     try{const r=await api('/api/admin/link-sources/check','POST',b);if(output)output.textContent=JSON.stringify(r,null,2);}
     catch(error){if(output)output.textContent=error.message||'Kiểm tra thất bại';throw error;}return;
