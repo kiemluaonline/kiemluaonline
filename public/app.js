@@ -1028,7 +1028,7 @@ function renderMemberTaskCard(t){
   t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
   t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
   t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':
-  t.link_blocked==='link_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. IP đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
+  t.link_blocked==='link_owner'?'IP này đã được tài khoản khác sử dụng cho nhiệm vụ này hôm nay. Bạn vẫn có thể làm nhiệm vụ khác đủ điều kiện. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
   t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':
   'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
  ):'';
@@ -1505,8 +1505,8 @@ async function adminSettings(){
  ${field('quota_device_accounts_daily','Tài khoản/mã trình duyệt/ngày',s.quota_device_accounts_daily,'type="number" min="0" max="100" required')}</div>
  <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
  <h3>🔗 Bảo vệ link rút gọn theo ngày</h3>
- <p class="note">IP được dành cho tài khoản gửi nhiệm vụ đầu tiên trong ngày. Tài khoản khác cùng IP bị chặn toàn bộ link rút gọn. Nhiệm vụ chờ duyệt cũng giữ chỗ; bị từ chối sẽ không giữ chỗ. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).</p>
- ${select('quota_link_ip_exclusive','Chặn tài khoản khác trên cùng IP',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}
+ <p class="note">IP được dành cho tài khoản gửi từng nhiệm vụ đầu tiên trong ngày. Tài khoản khác cùng IP chỉ bị chặn nhiệm vụ đó; vẫn có thể làm nhiệm vụ khác đủ điều kiện. Nhiệm vụ chờ duyệt cũng giữ chỗ; bị từ chối sẽ không giữ chỗ. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).</p>
+ ${select('quota_link_ip_exclusive','Chặn trùng IP theo từng nhiệm vụ',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}
  ${select('quota_link_device_exclusive','Chặn đổi tài khoản trên cùng mã trình duyệt',[['1','Bật'],['0','Tắt']],s.quota_link_device_exclusive)}
  <p class="note">Đã bỏ giới hạn tổng 2 lượt. Tài khoản giữ IP được làm các link khác theo số lượt riêng tại Quản lý nhiệm vụ. Các giới hạn chung phía trên áp dụng cho App, Video và Khác.</p>
  <p class="note">Mã trình duyệt không phải IMEI, có thể bị thay đổi. Dùng chung IP là dấu hiệu cần xem xét, không tự khóa tài khoản hoặc xóa Lúa. Xem cảnh báo tại Chống gian lận.</p>
