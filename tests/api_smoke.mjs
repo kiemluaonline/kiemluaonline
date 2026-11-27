@@ -2089,7 +2089,7 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  let creates=0,checks=0;
  const originalFetch=globalThis.fetch;
  globalThis.fetch=async (raw,options)=>{
-  const u=new URL(raw);assert.equal(u.hostname,'example.com');assert.equal(options.redirect,'error');
+  const u=new URL(raw);assert.equal(u.hostname,'example.com');assert.equal(options.redirect,'manual');
   if(u.pathname==='/create'){
    creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');assert.equal(u.searchParams.get('url'),'https://nhiemvu.click/?link_return='+taskId);
    return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
