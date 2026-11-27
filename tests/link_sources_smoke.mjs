@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {normalizeSource,createSourceLink,checkSourceView,taskSourceConfig,secretName,valueAt} from '../src/link-sources.js';
+import {normalizeSource,createSourceLink,checkSourceView,taskSourceConfig,secretName,valueAt,SourceDiagnosticError} from '../src/link-sources.js';
 const source=normalizeSource({id:'trafficvn',name:'TrafficVN',host:'trafficvn.com',short_host:'trafficvn.com',create_url:'https://trafficvn.com/apidevelop?api={token}&url={destination}',short_path:'shortenedUrl',view_url:'https://trafficvn.com/api/views/{alias}',view_path:'data.views'});
 assert.equal(secretName(source.id),'LINK_PROVIDER_TOKEN_TRAFFICVN');
 const response=x=>new Response(JSON.stringify(x),{headers:{'Content-Type':'application/json'}});
@@ -15,3 +15,9 @@ assert.throws(()=>normalizeSource({...source,create_url:'https://trafficvn.com/?
 assert.throws(()=>taskSourceConfig({link_source_verification:'api_view'},'link'));
 assert.equal(valueAt({},'constructor'),undefined);
 console.log('PASS: configurable source GET JSON adapter, token handling, URL validation and mapped view metric.');
+
+await assert.rejects(createSourceLink(source,'https://nhiemvu.click/','fake-secret',async()=>new Response('',{status:403})),e=>e instanceof SourceDiagnosticError&&e.message.includes('HTTP 403'));
+await assert.rejects(createSourceLink(source,'https://nhiemvu.click/','fake-secret',async()=>response({status:'error',message:'fake-secret'})),e=>e instanceof SourceDiagnosticError&&!e.message.includes('fake-secret'));
+await assert.rejects(createSourceLink(source,'https://nhiemvu.click/','fake-secret',async()=>response({unexpected:'fake-secret'})),e=>e instanceof SourceDiagnosticError&&e.message.includes('trường JSON')&&!e.message.includes('fake-secret'));
+await assert.rejects(createSourceLink(source,'https://nhiemvu.click/','fake-secret',async()=>{throw Error('fake-secret');}),e=>e instanceof SourceDiagnosticError&&!e.message.includes('fake-secret'));
+console.log('PASS: safe admin diagnostics never echo provider payload or credentials.');

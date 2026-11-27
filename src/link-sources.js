@@ -52,39 +52,49 @@ export function valueAt(data,path){
   }
   return data;
 }
+// Only fixed, locally authored messages may be displayed to admins.
+export class SourceDiagnosticError extends Error {}
+const diagnostic=(message)=>new SourceDiagnosticError(message);
 function requestUrl(source,kind,values,token){
   const tpl=kind==='create'?source.create_url:source.view_url;
-  if(!tpl)throw Error('Chưa cấu hình API '+kind);
-  if(tpl.includes('{token}')&&!token)throw Error('Chưa cài Secret '+secretName(source.id));
+  if(!tpl)throw diagnostic(kind==='create'?'Chưa cấu hình API tạo link.':'Chưa cấu hình API kiểm tra view.');
+  if(tpl.includes('{token}')&&!token)throw diagnostic('Chưa cài Secret cho nguồn này.');
   return tpl.replace(/\{(destination|alias|token)\}/g,(_,k)=>encodeURIComponent(k==='token'?token:values[k]||''));
 }
 async function getJson(source,kind,values,token,fetcher){
-  const response=await fetcher(requestUrl(source,kind,values,token),{method:'GET',redirect:'error',headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});
-  if(!response.ok||!/\bapplication\/(?:[\w.+-]+\+)?json\b/i.test(response.headers.get('content-type')||''))throw Error('API không trả JSON thành công');
+  const url=requestUrl(source,kind,values,token);
+  let response;
+  try{response=await fetcher(url,{method:'GET',redirect:'error',headers:{Accept:'application/json'},signal:AbortSignal.timeout(8000)});}
+  catch(error){throw diagnostic(error?.name==='TimeoutError'||error?.name==='AbortError'?'API không phản hồi trong 8 giây.':'Không kết nối được API hoặc API chuyển hướng; kiểm tra đường dẫn và hỏi nhà cung cấp.');}
+  if(!response.ok)throw diagnostic('API trả HTTP '+Number(response.status)+'. '+([401,403].includes(response.status)?'Kiểm tra Token hoặc quyền truy cập API.':'Kiểm tra đường dẫn và trạng thái nhà cung cấp.'));
+  if(!/\bapplication\/(?:[\w.+-]+\+)?json\b/i.test(response.headers.get('content-type')||''))throw diagnostic('API không khai báo Content-Type JSON. Kiểm tra có chọn Developer API JSON hay không.');
   const reader=response.body?.getReader();
-  if(!reader)throw Error('API không trả dữ liệu');
+  if(!reader)throw diagnostic('API không trả dữ liệu.');
   let size=0,raw='';const decoder=new TextDecoder();
-  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536)throw Error('JSON quá lớn');raw+=decoder.decode(value,{stream:true});}raw+=decoder.decode();}
+  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536)throw diagnostic('JSON vượt giới hạn 64 KB.');raw+=decoder.decode(value,{stream:true});}raw+=decoder.decode();}
   finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
-  return JSON.parse(raw);
+  let data;try{data=JSON.parse(raw);}catch{throw diagnostic('API trả nội dung không phải JSON hợp lệ.');}
+  if(data?.status==='error'||data?.success===false)throw diagnostic('Nhà cung cấp báo lỗi trong JSON. Kiểm tra Token, URL đích và quyền tạo link.');
+  return data;
 }
 export async function createSourceLink(source,destination,token,fetcher=fetch){
   const data=await getJson(source,'create',{destination},token,fetcher);
   const link=valueAt(data,source.short_path);
-  if(typeof link!=='string'||link.length>700||(token&&link.includes(token)))throw Error('Link trả về không hợp lệ');
-  const u=new URL(link);
-  if(u.protocol!=='https:'||u.hostname!==source.short_host||u.port||u.username||u.password||u.hash)throw Error('Link trả về khác tên miền cấu hình');
+  if(typeof link!=='string')throw diagnostic('Không tìm thấy link trong trường JSON đã cấu hình. Kiểm tra tên trường chứa link, phân biệt chữ hoa và chữ thường.');
+  if(link.length>700||(token&&link.includes(token)))throw diagnostic('Link trả về không hợp lệ.');
+  let u;try{u=new URL(link);}catch{throw diagnostic('Trường JSON chứa link không phải URL hợp lệ.');}
+  if(u.protocol!=='https:'||u.hostname!==source.short_host||u.port||u.username||u.password||u.hash)throw diagnostic('Link trả về khác tên miền cấu hình.');
   const alias=source.alias_path?valueAt(data,source.alias_path):u.pathname.split('/').filter(Boolean).pop();
-  if(typeof alias!=='string'||!aliasPattern.test(alias)||(token&&alias.includes(token)))throw Error('Alias trả về không hợp lệ');
+  if(typeof alias!=='string'||!aliasPattern.test(alias)||(token&&alias.includes(token)))throw diagnostic('Alias trả về không hợp lệ.');
   return {alias,shortUrl:u.href};
 }
 export async function checkSourceView(source,alias,token,fetcher=fetch){
-  if(typeof alias!=='string'||!aliasPattern.test(alias))throw Error('Alias không hợp lệ');
-  if(!source.view_path)throw Error('Chưa cấu hình trường JSON chứa view');
+  if(typeof alias!=='string'||!aliasPattern.test(alias))throw diagnostic('Alias không hợp lệ.');
+  if(!source.view_path)throw diagnostic('Chưa cấu hình trường JSON chứa view.');
   const data=await getJson(source,'view',{alias},token,fetcher);
   const n=valueAt(data,source.view_path);
   const v=typeof n==='string'&&/^\d+$/.test(n)?Number(n):n;
-  if(!Number.isSafeInteger(v)||v<0)throw Error('API không trả số lượt hợp lệ theo trường đã chọn');
+  if(!Number.isSafeInteger(v)||v<0)throw diagnostic('API không trả số lượt hợp lệ theo trường đã chọn.');
   return v;
 }
 export async function settingValue(env,key){

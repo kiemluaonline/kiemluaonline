@@ -4,7 +4,7 @@ import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
 import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
 import { fetchBbmktsViewJson, bbmktsTaskConfig } from './bbmkts.js';
-import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
+import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,SourceDiagnosticError,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -1687,7 +1687,7 @@ async function handler(req, env) {
         if(body.kind!=='view')fail(400,'Loại kiểm tra không hợp lệ.');
         const views=await checkSourceView(source,String(body.alias||''),sourceToken(env,source));
         return json({ok:true,views,message:'Chỉ là số view được API báo; chưa xác minh doanh thu.'});
-      }catch{fail(502,'Chưa kiểm tra được API nguồn. Kiểm tra cấu hình, Secret hoặc phản hồi JSON.');}
+      }catch(error){fail(502,error instanceof SourceDiagnosticError?error.message:'Không đọc được phản hồi API. Kiểm tra kết nối hoặc thử lại.');}
     }
     // Admin-only diagnostic. No database writes, no member reward, no provider credentials.
     if (m === 'POST' && p === '/api/admin/bbmkts/check-view') {
