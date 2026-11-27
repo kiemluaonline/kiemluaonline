@@ -1178,7 +1178,7 @@ function taskForm(task={},sources=[]){
  <p class="note">Mỗi thành viên làm một lần, Admin duyệt thưởng. Không cần CAPTCHA.</p>`}
  ${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
  ${select('is_active','Trạng thái',[['1','Bật công khai'],['0','Tắt / nháp']],Number(task.is_active||0).toString())}
- <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?'<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button>':''}</div></form>`;
+ <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?`<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button><button class="btn danger" type="button" data-action="delete-task" data-id="${esc(task.id)}" data-title="${esc(task.title)}">🗑 Xóa nhiệm vụ</button>`:''}</div></form>`;
 }
 function sourceSettingsForm(source={}){
  return `<details class="section" ${source.id?'':'id="new-link-source"'}><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}</summary>
@@ -1211,7 +1211,7 @@ async function adminTasks(){
   const max=Math.max(1,Math.min(20,Number(t.link_24h_limit)||1));
   const quota=t.category==='link'?(max>1||t.repeat_policy==='daily'?max+' lượt/ngày':'1 lượt/tài khoản'):(t.repeat_policy==='daily'?'1 lượt/ngày':'1 lượt/tài khoản');
   return `<tr>
-   <td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div>
+   <td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">Xóa</button></div>
     ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
    </td>
    <td class="num">${fmt(t.reward)} Lúa</td>
@@ -1220,7 +1220,7 @@ async function adminTasks(){
     ${t.category==='link'&&t.link_source_id?`<p class="small">${esc(sources.find(s=>s.id===t.link_source_id)?.name||t.link_source_id)} · ${t.link_source_creation==='api'?'Link riêng qua API':'Link thủ công'}</p>`:''}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
-   <td><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">🗑 Xóa</button></div></td>
+   <td><span class="small muted">Sửa / Xóa ở tên nhiệm vụ</span></td>
   </tr>`;
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
@@ -1870,10 +1870,10 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='delete-task'){
-   if(!localizedConfirm('Xóa nhiệm vụ "'+el.dataset.title+'"? Chỉ xóa được nhiệm vụ chưa có lượt thực hiện. Hành động này không thể hoàn tác.'))return;
+   if(!localizedConfirm('Xóa nhiệm vụ "'+el.dataset.title+'"? Nhiệm vụ sẽ biến mất khỏi danh sách Admin và thành viên. Lịch sử và số Lúa đã phát sinh vẫn được giữ; yêu cầu đã gửi vẫn có thể duyệt. Không thể bật lại nhiệm vụ đã xóa.'))return;
    await api('/api/admin/tasks/'+encodeURIComponent(el.dataset.id),'DELETE');
    if(state.taskEdit===el.dataset.id)state.taskEdit=null;
-   toast('Đã xóa nhiệm vụ chưa sử dụng.');await navigate('admin-tasks');return;
+   toast('Đã xóa nhiệm vụ khỏi danh sách.');await navigate('admin-tasks');return;
   }
   if(act==='change-user'){
    let reason='',evidence='';

@@ -1703,7 +1703,7 @@ async function handler(req, env) {
     }
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings,activity]=await Promise.all([
-        env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
+        env.DB.prepare("SELECT t.* FROM tasks t WHERE NOT EXISTS (SELECT 1 FROM settings s WHERE s.key='task_deleted:'||t.id) ORDER BY t.created_at DESC LIMIT 200").all(),
         env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%' OR key LIKE 'link_source_task:%' OR key LIKE 'app_confirmation_mode:%'").all(),
         env.DB.prepare(`SELECT task_id,COUNT(*) AS submitted_today,
           SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_today
@@ -1742,7 +1742,7 @@ async function handler(req, env) {
     if (m === 'PUT' && taskLogo) {
       const body = await readBody(req, 30000);
       if (!validAppLogo(body.logo)) fail(400,'Logo không hợp lệ hoặc vượt quá dung lượng cho phép.');
-      const task = await env.DB.prepare('SELECT * FROM tasks WHERE id=?').bind(taskLogo[1]).first();
+      const task = await env.DB.prepare("SELECT * FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM settings WHERE key='task_deleted:'||tasks.id)").bind(taskLogo[1]).first();
       if (!task || await resolveTaskCategory(env,task) !== 'app') fail(404,'Không tìm thấy nhiệm vụ App.');
       await env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
         .bind(APP_LOGO_PREFIX+task.id,body.logo).run();
@@ -1753,15 +1753,16 @@ async function handler(req, env) {
       const taskId = taskDelete[1];
       const task = await env.DB.prepare('SELECT id FROM tasks WHERE id=?').bind(taskId).first();
       if (!task) fail(404,'Không tìm thấy nhiệm vụ.');
-      const [attempts,completions] = await Promise.all([
-        env.DB.prepare('SELECT COUNT(*) AS n FROM task_attempts WHERE task_id=?').bind(taskId).first(),
-        env.DB.prepare('SELECT COUNT(*) AS n FROM task_completions WHERE task_id=?').bind(taskId).first()
-      ]);
-      if (Number(attempts.n)>0 || Number(completions.n)>0)
-        fail(409,'Nhiệm vụ đã có lịch sử thực hiện. Không thể xóa để bảo vệ dữ liệu và Lúa của thành viên; hãy chuyển sang Tắt / nháp.');
+      // Delete unused definitions; otherwise retain history and pending reviews.
       const result = await env.DB.prepare('DELETE FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM task_attempts WHERE task_id=?) AND NOT EXISTS (SELECT 1 FROM task_completions WHERE task_id=?)')
         .bind(taskId,taskId,taskId).run();
-      if (!result.meta?.changes) fail(409,'Nhiệm vụ vừa phát sinh lượt thực hiện. Không thể xóa.');
+      if (!result.meta?.changes) {
+        await env.DB.batch([
+          env.DB.prepare('UPDATE tasks SET is_active=0 WHERE id=?').bind(taskId),
+          env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING").bind('task_deleted:'+taskId,new Date().toISOString())
+        ]);
+        return json({ok:true,history_preserved:true});
+      }
       await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?,?,?,?,?)")
         .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId,'bbmkts_task_creation:'+taskId,'bbmkts_task_verification:'+taskId,TASK_SOURCE_PREFIX+taskId,APP_CONFIRM_PREFIX+taskId).run();
       return json({ok:true});
@@ -1781,11 +1782,11 @@ async function handler(req, env) {
       for(const key of ['id','creation','verification'])if(!Object.hasOwn(body,'link_source_'+key))body['link_source_'+key]=previousSource[key];
       const t = validateTaskBody(body);
       let source;try{source=await validateTaskSource(env,body,t.category);}catch(error){fail(400,error.message);}
-      const exists=await env.DB.prepare('SELECT id FROM tasks WHERE id=?').bind(taskEdit[1]).first();
+      const exists=await env.DB.prepare("SELECT id FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM settings WHERE key='task_deleted:'||tasks.id)").bind(taskEdit[1]).first();
       if(!exists)fail(404,'Không tìm thấy nhiệm vụ.');
       await env.DB.batch([
         env.DB.prepare(`UPDATE tasks SET title=?,description=?,category=?,url=?,reward=?,min_seconds=?,
-          review_mode=?,repeat_policy=?,is_active=? WHERE id=?`)
+          review_mode=?,repeat_policy=?,is_active=? WHERE id=? AND NOT EXISTS (SELECT 1 FROM settings WHERE key='task_deleted:'||tasks.id)`)
           .bind(t.title,t.description,storedTaskCategory(t.category),t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active,taskEdit[1]),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
           .bind('link_task_limit:'+taskEdit[1],String(t.linkLimit)),
