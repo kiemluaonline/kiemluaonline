@@ -1686,7 +1686,7 @@ async function handler(req, env) {
         }
         if(body.kind!=='view')fail(400,'Loại kiểm tra không hợp lệ.');
         const views=await checkSourceView(source,String(body.alias||''),sourceToken(env,source));
-        return json({ok:true,views,message:'Chỉ là số view được API báo; chưa xác minh doanh thu.'});
+        return json({ok:true,views,message:'Số view trong dữ liệu API trả về (có thể chỉ là kỳ thống kê hiện tại); chưa xác minh doanh thu.'});
       }catch(error){fail(502,error instanceof SourceDiagnosticError?error.message:'Không đọc được phản hồi API. Kiểm tra kết nối hoặc thử lại.');}
     }
     // Admin-only diagnostic. No database writes, no member reward, no provider credentials.

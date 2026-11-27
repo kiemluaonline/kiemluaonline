@@ -30,6 +30,13 @@ function jsonPath(v){
   if(v&&(!pathPattern.test(v)||v.split('.').some(k=>forbidden.has(k))))throw Error('Đường dẫn JSON không hợp lệ');
   return v;
 }
+// A single wildcard in the view path sums an array of numeric values.
+function viewPath(v){
+  if(!v.includes('*'))return jsonPath(v);
+  const parts=v.split('.*.');
+  if(parts.length!==2||!parts[0]||!parts[1])throw Error('Đường dẫn tổng view cần dạng danh_sach.*.views');
+  jsonPath(parts[0]);jsonPath(parts[1]);return v;
+}
 export function normalizeSource(b){
   const id=readText(b.id,32).toLowerCase();
   if(!slugPattern.test(id))throw Error('Mã nguồn: 2–32 chữ thường, số hoặc gạch dưới');
@@ -38,7 +45,7 @@ export function normalizeSource(b){
   const host=domain(readText(b.host,253)),short_host=domain(readText(b.short_host,253)||host);
   const create_url=template(readText(b.create_url,1500),host,'destination');
   const view_url=template(readText(b.view_url,1500),host,'alias');
-  const short_path=jsonPath(readText(b.short_path,180)),alias_path=jsonPath(readText(b.alias_path,180)),view_path=jsonPath(readText(b.view_path,180));
+  const short_path=jsonPath(readText(b.short_path,180)),alias_path=jsonPath(readText(b.alias_path,180)),view_path=viewPath(readText(b.view_path,180));
   if(create_url&&!short_path)throw Error('Nhập trường JSON chứa link rút gọn');
   if(view_url.includes('{destination}')||create_url.includes('{alias}'))throw Error('Biến API không đúng loại');
   // The diagnostic never approves rewards. Paid semantics still need independent reconciliation.
@@ -93,10 +100,23 @@ export async function checkSourceView(source,alias,token,fetcher=fetch){
   if(typeof alias!=='string'||!aliasPattern.test(alias))throw diagnostic('Alias không hợp lệ.');
   if(!source.view_path)throw diagnostic('Chưa cấu hình trường JSON chứa view.');
   const data=await getJson(source,'view',{alias},token,fetcher);
-  const n=valueAt(data,source.view_path);
-  const v=typeof n==='string'&&/^\d+$/.test(n)?Number(n):n;
-  if(!Number.isSafeInteger(v)||v<0)throw diagnostic('API không trả số lượt hợp lệ theo trường đã chọn.');
-  return v;
+  return readViewCount(data,source.view_path);
+}
+// Sums only the rows returned by the API, not a lifetime total.
+export function readViewCount(data,path){
+  const count=n=>{
+    const v=typeof n==='string'&&/^\d+$/.test(n)?Number(n):n;
+    if(!Number.isSafeInteger(v)||v<0)throw diagnostic('API không trả số lượt hợp lệ theo trường đã chọn.');
+    return v;
+  };
+  if(!path.includes('*'))return count(valueAt(data,path));
+  viewPath(path);
+  const [listPath,itemPath]=path.split('.*.');
+  const rows=valueAt(data,listPath);
+  if(!Array.isArray(rows)||!rows.length)throw diagnostic('API không trả danh sách view có dữ liệu.');
+  let total=0;
+  for(const row of rows){total+=count(valueAt(row,itemPath));if(!Number.isSafeInteger(total))throw diagnostic('Tổng view vượt giới hạn.');}
+  return total;
 }
 export async function settingValue(env,key){
   const row=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind(key).first();
