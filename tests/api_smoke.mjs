@@ -2116,3 +2116,18 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
 assert.match(latestAdminClient,/data-action="admin-task-filter"/);
 assert.match(latestAdminClient,/data-action="admin-review-filter"/);
 assert.match(latestAdminClient,/app_confirmation_mode/);
+
+{
+ const body={title:'App xác nhận đơn giản',category:'app',url:'https://example.com/app',app_referral_code:'SIMPLE123',app_confirmation_mode:'simple',reward:13,review_mode:'manual',repeat_policy:'once',is_active:true};
+ const created=await call('/api/admin/tasks','POST',body,admCookie);assert.equal(created.status,201,JSON.stringify(created));
+ const taskId=created.data.id,ip='203.0.113.225',device='f1234567-1234-4123-8123-123456789abc';
+ const member=await call('/api/auth/register','POST',{name:'Thử App đơn giản',email:'simple-app-test@example.com',password:'test-password-2026',accept_terms:'yes'},'',ip,device);assert.equal(member.status,201);
+ const before=(await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance;
+ const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.app_simple_confirmation,true);
+ const sent=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id},member.cookie,ip,device);assert.equal(sent.status,200,JSON.stringify(sent));assert.equal(sent.data.status,'pending');
+ assert.match(sqlite.prepare('SELECT evidence FROM task_completions WHERE task_id=?').get(taskId).evidence,/APP_CONFIRM_V1/);
+ assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before);
+ assert.equal((await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device)).status,409);
+ const listing=await call('/api/tasks','GET',undefined,member.cookie,ip,device);assert.equal(listing.status,200);assert.ok(listing.data.tasks.every(t=>['link','app'].includes(t.category)));
+ console.log('PASS: simple App confirmation without photo or CAPTCHA, manual pending, no duplicate, legacy tasks hidden from members.');
+}
