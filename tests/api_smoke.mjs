@@ -1694,17 +1694,17 @@ const taskTabsView=taskTabsCode.slice(taskTabsCode.indexOf('async function tasks
  taskTabsCode.indexOf('async function referrals(){'));
 assert.match(taskTabsView,/\['app','📱 Nhiệm vụ App'\]/);
 assert.match(taskTabsView,/\['link','🔗 Link'\]/);
-assert.match(taskTabsView,/\['other','Khác'\]/);
+assert.doesNotMatch(taskTabsView,/\['other','Khác'\]/);
 assert.doesNotMatch(taskTabsView,/\['all','Tất cả'\]|\['video','🎬 Video'\]/,
  'Neither All nor Video filter should be visible to members');
 assert.match(taskTabsCode,/taskFilter:'link'/,'Link should be the default task tab');
-assert.match(taskTabsView,/\['app','link','other'\]\.includes\(t\.category\)/,
+assert.match(taskTabsView,/\['app','link'\]\.includes\(t\.category\)/,
  'Do not display video tasks in remaining member tabs');
-assert.match(taskTabsCode,/\['app','link','other'\]\.includes\(el\.dataset\.filter\)/,
- 'Only App, Link and Khác filters can be selected');
+assert.match(taskTabsCode,/\['app','link'\]\.includes\(el\.dataset\.filter\)/,
+ 'Only App and Link filters can be selected');
 assert.match(taskTabsCode,/function renderMemberTaskCard\(t\)/,
  'Existing member task card design must remain unchanged');
-console.log('PASS: member task tabs show App, Link and Khác only, with Link default and no video tasks.');
+console.log('PASS: member task tabs show App and Link only, with Link default and no video tasks.');
 
 const cleanedReturnClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const cleanedReturnMethod=cleanedReturnClient.slice(
@@ -2112,3 +2112,7 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  }finally{globalThis.fetch=originalFetch;delete env.LINK_PROVIDER_TOKEN_MOCK_SOURCE;}
  console.log('PASS: real member start path with mock provider, one alias reused, direct submit blocked, API view audit, wallet untouched.');
 }
+
+assert.match(latestAdminClient,/data-action="admin-task-filter"/);
+assert.match(latestAdminClient,/data-action="admin-review-filter"/);
+assert.match(latestAdminClient,/app_confirmation_mode/);

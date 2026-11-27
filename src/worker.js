@@ -409,6 +409,8 @@ async function readBody(req, limit = 12000) {
 
 const APP_PHOTO_PREFIX = 'APP_PHOTO_V1|';
 const APP_LOGO_PREFIX = 'app_logo:';
+const APP_CONFIRM_PREFIX='app_confirmation_mode:';
+async function appSimpleConfirmation(env,task){if(task.category!=='app')return false;const r=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind(APP_CONFIRM_PREFIX+task.id).first();return r?.value==='simple';}
 const validAppLogo = value => typeof value === 'string' && (value === '' || (/^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(value) && value.length <= 24000));
 const COLOR_SORT_NO_PHOTO = 'COLOR_SORT_NO_PHOTO_V1';
 async function isColorSortReferralTask(env, task) {
@@ -890,6 +892,8 @@ function validateTaskBody(b) {
   if (!Number.isInteger(minSeconds) || minSeconds < 5 || minSeconds > 3600) fail(400, 'Thời gian thực hiện từ 5–3600 giây.');
   if (!['manual', 'auto'].includes(review) || !['once', 'daily'].includes(repeat)) fail(400, 'Cấu hình nhiệm vụ không hợp lệ.');
   const appCode = str(b.app_referral_code, 80);
+  const appConfirmation=b.app_confirmation_mode||'photo';
+  if(category==='app'&&!['simple','photo'].includes(appConfirmation))fail(400,'Cách gửi App không hợp lệ.');
   if (category === 'app' && (review !== 'manual' || repeat !== 'once'))
     fail(400, 'Nhiệm vụ App bắt buộc Admin duyệt và mỗi tài khoản chỉ làm một lần.');
   if (category === 'app' && (!url || appCode.length < 2))
@@ -899,7 +903,7 @@ function validateTaskBody(b) {
   let bbmkts;
   try { bbmkts = bbmktsTaskConfig(b,category); }
   catch (error) { fail(400,error.message); }
-  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit,appCode:category==='app'?appCode:'',bbmkts};
+  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit,appCode:category==='app'?appCode:'',appConfirmation:category==='app'?appConfirmation:'photo',bbmkts};
 }
 const isPath = (p, prefix) => p.startsWith(prefix);
 async function handler(req, env) {
@@ -1209,7 +1213,7 @@ async function handler(req, env) {
     const results = await env.DB.prepare(`SELECT t.*, c.status AS my_status FROM tasks t
       LEFT JOIN task_completions c ON c.task_id=t.id AND c.user_id=?
       AND c.period_key=CASE WHEN t.repeat_policy='daily' THEN ? ELSE '*' END
-      WHERE t.is_active=1 ORDER BY t.created_at DESC LIMIT 100`).bind(me.id, vnDay()).all();
+      WHERE t.is_active=1 AND (t.category='link' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings s WHERE s.key='app_referral_code:'||t.id AND s.value<>''))) ORDER BY t.created_at DESC LIMIT 100`).bind(me.id, vnDay()).all();
     const settings=await getSettings(env),ip=clientIP(req);
     const used=await linkIPUsage(env,ip,me.id),limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
     const browserCode=browserDeviceId(req)?await deviceCode(req,env):'';
@@ -1433,7 +1437,7 @@ async function handler(req, env) {
       if(ongoing)return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,
         available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),
         review_mode:task.review_mode,category:task.category,task_url:task.url,
-        app_no_photo:await isColorSortReferralTask(env,task),resumed:true});
+        app_no_photo:await isColorSortReferralTask(env,task),app_simple_confirmation:await appSimpleConfirmation(env,task),resumed:true});
     }
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
@@ -1475,7 +1479,7 @@ async function handler(req, env) {
     await recordTaskDevice(env, req, me.id, attempt, 'start');
     return json({ attempt_id: attempt, a, b, available_at: available, expires_in_seconds: attemptSeconds,
       review_mode: task.review_mode, category: task.category, task_url: assignedUrl,
-      app_no_photo: await isColorSortReferralTask(env, task) });
+      app_no_photo: await isColorSortReferralTask(env, task), app_simple_confirmation:await appSimpleConfirmation(env,task) });
   }
   const submitMatch = p.match(/^\/api\/tasks\/([^/]+)\/submit$/);
   if (m === 'POST' && submitMatch) {
@@ -1494,7 +1498,8 @@ async function handler(req, env) {
       fail(422, 'Phép tính chưa đúng. Hãy giải phép tính mới.', { a, b });
     }
     const colorSortNoPhoto = await isColorSortReferralTask(env, task);
-    const evidence = colorSortNoPhoto ? COLOR_SORT_NO_PHOTO : task.category === 'app' ? appPhotoEvidence(body.evidence, body.photo) : str(body.evidence, 2000);
+    const simpleApp=await appSimpleConfirmation(env,task);
+    const evidence = colorSortNoPhoto ? COLOR_SORT_NO_PHOTO : simpleApp?'[APP_CONFIRM_V1] Thành viên xác nhận đã thực hiện hướng dẫn. Chờ Admin xét duyệt.':task.category === 'app' ? appPhotoEvidence(body.evidence, body.photo) : str(body.evidence, 2000);
     if (task.category !== 'app' && task.review_mode === 'manual' && evidence.length < 12) fail(400, 'Nhiệm vụ này cần bằng chứng ít nhất 12 ký tự.');
     if(task.category==='link'&&attempt.ip!==clientIP(req))
       fail(409,'IP mạng thay đổi trong lúc thực hiện link. Hãy mở nhiệm vụ lại trên mạng hiện tại.');
@@ -1687,7 +1692,7 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings,activity]=await Promise.all([
         env.DB.prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT 200').all(),
-        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%' OR key LIKE 'link_source_task:%'").all(),
+        env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%' OR key LIKE 'link_source_task:%' OR key LIKE 'app_confirmation_mode:%'").all(),
         env.DB.prepare(`SELECT task_id,COUNT(*) AS submitted_today,
           SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_today
           FROM task_completions WHERE date(created_at,'+7 hours')=date('now','+7 hours')
@@ -1699,7 +1704,7 @@ async function handler(req, env) {
         const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
         const usage=dailyActivity.get(t.id);
         const source=JSON.parse(settings.results.find(r=>r.key===TASK_SOURCE_PREFIX+t.id)?.value||'{}');
-        return {...t,link_source_id:source.id||'',link_source_creation:source.creation||'manual',link_source_verification:source.verification||'manual',
+        return {...t,app_confirmation_mode:settings.results.find(r=>r.key===APP_CONFIRM_PREFIX+t.id)?.value||'photo',link_source_id:source.id||'',link_source_creation:source.creation||'manual',link_source_verification:source.verification||'manual',
           bbmkts_creation:settings.results.find(r=>r.key==='bbmkts_task_creation:'+t.id)?.value||'manual',
           bbmkts_verification:settings.results.find(r=>r.key==='bbmkts_task_verification:'+t.id)?.value||'manual',category:t.category==='other'&&appCode?'app':t.category,
           link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
@@ -1716,7 +1721,8 @@ async function handler(req, env) {
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_creation:'+taskId,t.bbmkts.creation),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_verification:'+taskId,t.bbmkts.verification),
-        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(TASK_SOURCE_PREFIX+taskId,JSON.stringify(source))
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(TASK_SOURCE_PREFIX+taskId,JSON.stringify(source)),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(APP_CONFIRM_PREFIX+taskId,t.appConfirmation)
       ]);
       return json({ ok: true, id: taskId }, 201);
     }
@@ -1744,8 +1750,8 @@ async function handler(req, env) {
       const result = await env.DB.prepare('DELETE FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM task_attempts WHERE task_id=?) AND NOT EXISTS (SELECT 1 FROM task_completions WHERE task_id=?)')
         .bind(taskId,taskId,taskId).run();
       if (!result.meta?.changes) fail(409,'Nhiệm vụ vừa phát sinh lượt thực hiện. Không thể xóa.');
-      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?,?,?,?)")
-        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId,'bbmkts_task_creation:'+taskId,'bbmkts_task_verification:'+taskId,TASK_SOURCE_PREFIX+taskId).run();
+      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?,?,?,?,?)")
+        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId,'bbmkts_task_creation:'+taskId,'bbmkts_task_verification:'+taskId,TASK_SOURCE_PREFIX+taskId,APP_CONFIRM_PREFIX+taskId).run();
       return json({ok:true});
     }
     const taskEdit = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
@@ -1758,6 +1764,7 @@ async function handler(req, env) {
           body[key]=previous?.value||'manual';
         }
       }
+      if(!Object.hasOwn(body,'app_confirmation_mode')){const old=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind(APP_CONFIRM_PREFIX+taskEdit[1]).first();body.app_confirmation_mode=old?.value||'photo';}
       const previousSource=await getTaskSource(env,taskEdit[1]);
       for(const key of ['id','creation','verification'])if(!Object.hasOwn(body,'link_source_'+key))body['link_source_'+key]=previousSource[key];
       const t = validateTaskBody(body);
@@ -1776,7 +1783,8 @@ async function handler(req, env) {
           .bind('bbmkts_task_creation:'+taskEdit[1],t.bbmkts.creation),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
           .bind('bbmkts_task_verification:'+taskEdit[1],t.bbmkts.verification),
-        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(TASK_SOURCE_PREFIX+taskEdit[1],JSON.stringify(source))
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(TASK_SOURCE_PREFIX+taskEdit[1],JSON.stringify(source)),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(APP_CONFIRM_PREFIX+taskEdit[1],t.appConfirmation)
       ]);
       return json({ ok: true });
     }
