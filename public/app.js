@@ -1197,7 +1197,7 @@ function sourceSettingsForm(source={}){
  ${source.id?`<form class="section" data-form="link-source-test"><input type="hidden" name="id" value="${esc(source.id)}">
  ${select('kind','Kiểm tra API',[['view','Kiểm tra view'],['create','Tạo link kiểm thử (không thưởng)']],'view')}
  ${field('alias','Alias để kiểm tra view','','placeholder="Alias thật đã có"')}
- <button class="btn alt" type="submit">Kiểm tra kết nối</button><pre data-source-result role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></form>`:''}
+ <button class="btn alt" type="submit">Kiểm tra kết nối</button><pre data-source-result role="status" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></form><button type="button" class="btn danger sm" data-action="delete-link-source" data-id="${esc(source.id)}" data-name="${esc(source.name)}">Xóa nguồn</button>`:''}
  </details>`;
 }
 async function adminTasks(){
@@ -1218,7 +1218,6 @@ async function adminTasks(){
    <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
    <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
     ${t.category==='link'&&t.link_source_id?`<p class="small">${esc(sources.find(s=>s.id===t.link_source_id)?.name||t.link_source_id)} · ${t.link_source_creation==='api'?'Link riêng qua API':'Link thủ công'}</p>`:''}
-    ${t.category==='link'&&t.bbmkts_creation&&t.bbmkts_creation!=='manual'?`<p class="small">BBMKTS: ${esc(t.bbmkts_creation)} · ${t.bbmkts_verification==='api_view'?'API Check View':'Admin đối soát'} (nháp)</p>`:''}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
    <td><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">🗑 Xóa</button></div></td>
@@ -1230,15 +1229,7 @@ async function adminTasks(){
  ${taskForm(edit||{},sources)}
  ${category==='link'?` <section class="card section" id="link-source-manager"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
  ${sources.length?sources.map(sourceSettingsForm).join(''):'<p class="note">Chưa thêm nguồn nào. Link thủ công vẫn hoạt động bình thường.</p>'}${sourceSettingsForm()}
- ${sources.some(s=>s.id==='bbmkts')?`<details><summary>Công cụ đọc JSON thô BBMKTS</summary>
- <p><strong>Chế độ hiện tại: Admin đối soát thủ công.</strong> API Check View đã được hỗ trợ để thử tra cứu trực tiếp. Chưa bật tự động cấp link hoặc cộng Lúa.</p>
- <form data-form="bbmkts-check-view">
- ${field('alias','Alias của link BBMKTS','', 'required maxlength="128" pattern="[A-Za-z0-9_\\-]+" placeholder="Ví dụ: krjkB" autocapitalize="off" autocomplete="off"')}
- <button class="btn" type="submit">Kiểm tra View qua API</button>
- <p class="note">Không cần API Token để kiểm tra. Dữ liệu trả về chỉ dùng đối soát, không sửa số dư. Không có view chưa có nghĩa là gian lận.</p>
- <pre data-bbmkts-result role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
- </form>
- </details>`:''}
+
  </section>`:''}
  <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${selected.length})</h3><p class="note">Admin kiểm tra bằng chứng theo từng loại nhiệm vụ. Số lượt hôm nay tính theo giờ Việt Nam.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>
  ${retired.length?`<details class="card section"><summary>Lưu trữ nhiệm vụ cũ (${retired.length})</summary><p class="note">Không hiển thị cho thành viên. Giữ lịch sử và dữ liệu cũ.</p>${retired.map(t=>`<p>${esc(t.title)} · ${esc(t.category)}</p>`).join('')}</details>`:''}`;
@@ -1871,6 +1862,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='view-fraud-account'){await showFraudAccount(el.dataset.id);return;}
 
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
+  if(act==='delete-link-source'){if(!localizedConfirm('Xóa nguồn '+el.dataset.name+'? Chỉ xóa được nguồn chưa gắn với nhiệm vụ hoặc phiên đã tạo.'))return;await api('/api/admin/link-sources/remove','POST',{id:el.dataset.id});toast('Đã xóa nguồn.');await navigate('admin-tasks');return;}
   if(act==='add-link-source'){const panel=document.getElementById('new-link-source');if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});}return;}
   if(act==='admin-task-filter'){state.adminTaskFilter=el.dataset.filter==='app'?'app':'link';state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='admin-open-reviews'){state.adminReviewFilter=state.adminTaskFilter;await navigate('admin-reviews');return;}
@@ -2060,23 +2052,9 @@ app.addEventListener('submit',async e=>{
     try{const r=await api('/api/admin/link-sources/check','POST',b);if(output)output.textContent=JSON.stringify(r,null,2);}
     catch(error){if(output)output.textContent=error.message||'Kiểm tra thất bại';throw error;}return;
   }
-  if(kind==='bbmkts-check-view'){
-    const output=form.querySelector('[data-bbmkts-result]');
-    if(output)output.textContent='Đang kiểm tra BBMKTS...';
-    try{
-      const result=await api('/api/admin/bbmkts/check-view','POST',{alias:String(b.alias||'').trim()});
-      if(output)output.textContent=JSON.stringify(result.data,null,2);
-      toast('Đã đọc dữ liệu BBMKTS. Chưa cộng Lúa.');
-    }catch(error){
-      if(output)output.textContent=error.message||'Không thể kiểm tra BBMKTS.';
-      throw error;
-    }
-    return;
-  }
   if(kind==='admin-task'){
     if(b.category==='link'&&!b.link_source_id){b.link_source_creation='manual';b.link_source_verification='manual';}
-    if(b.category==='link'&&(b.bbmkts_creation!=='manual'||b.bbmkts_verification!=='manual')&&b.is_active==='1')
-      throw new Error('BBMKTS chưa kết nối hoàn chỉnh. Chọn Tắt / nháp để lưu cấu hình tự động.');
+
     if(b.category==='link'&&b.review_mode!=='manual')
       throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');
     const data={...b,reward:Number(b.reward),min_seconds:Number(b.min_seconds),is_active:b.is_active==='1'};

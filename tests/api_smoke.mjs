@@ -2068,8 +2068,11 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  const made=await call('/api/admin/tasks','POST',{...cfg,is_active:false},admCookie);assert.equal(made.status,201);
  const listed=await call('/api/admin/tasks','GET',undefined,admCookie);
  assert.equal(listed.data.tasks.find(t=>t.id===made.data.id).link_source_id,'example_source');
+ assert.equal((await call('/api/admin/link-sources/remove','POST',{id:'example_source'},admCookie)).status,409);
  assert.equal((await call('/api/admin/tasks/'+made.data.id,'DELETE',{},admCookie)).status,200);
- console.log('PASS: generic source registry persists, built-in BBMKTS retained, incomplete source cannot publish.');
+ assert.equal((await call('/api/admin/link-sources/remove','POST',{id:'example_source'},admCookie)).status,200);
+ assert.ok(!(await call('/api/admin/link-sources','GET',undefined,admCookie)).data.sources.some(s=>s.id==='example_source'));
+ console.log('PASS: explicit source registration, safe deletion, incomplete source cannot publish.');
 }
 
 {
@@ -2135,3 +2138,6 @@ assert.match(latestAdminClient,/app_confirmation_mode/);
 
 assert.match(latestAdminClient,/data-action="add-link-source"/);
 assert.match(latestAdminClient,/Link thủ công \(không cần nguồn\)/);
+
+assert.doesNotMatch(latestAdminClient,/Công cụ đọc JSON thô BBMKTS|data-form="bbmkts-check-view"|BBMKTS: /);
+assert.match(latestAdminClient,/data-action="delete-link-source"/);

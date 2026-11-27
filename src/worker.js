@@ -1664,6 +1664,18 @@ async function handler(req, env) {
       await env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SOURCE_PREFIX+source.id,JSON.stringify(source)).run();
       return json({ok:true,source:presentSource(env,source)});
     }
+    if(m==='POST'&&p==='/api/admin/link-sources/remove'){
+      const body=await readBody(req),source=await getSource(env,String(body.id||''));
+      if(!source)fail(404,'Không tìm thấy nguồn.');
+      // Keep task assignments and historical aliases. The deletion is guarded
+      // in a single statement, so no referenced source is removed.
+      const result=await env.DB.prepare(`DELETE FROM settings WHERE key=? AND NOT EXISTS (
+        SELECT 1 FROM settings AS s WHERE (s.key LIKE 'link_source_task:%' OR s.key LIKE 'link_source_attempt:%')
+        AND json_valid(s.value) AND json_extract(s.value,'$.id')=?
+      )`).bind(SOURCE_PREFIX+source.id,source.id).run();
+      if(!result.meta?.changes)fail(409,'Nguồn đang được dùng hoặc có lịch sử. Hãy bỏ liên kết nhiệm vụ trước; dữ liệu phiên cũ được bảo vệ.');
+      return json({ok:true});
+    }
     if(m==='POST'&&p==='/api/admin/link-sources/check'){
       const body=await readBody(req),source=await getSource(env,String(body.id||''));
       if(!source)fail(404,'Không tìm thấy nguồn.');
