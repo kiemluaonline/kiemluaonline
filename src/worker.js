@@ -1485,15 +1485,15 @@ async function handler(req, env) {
       const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(me.id,task.id,now()).first();
       if(ongoing){
         const existing=await getAttemptSource(env,ongoing.id);
-        if(!existing)fail(409,'Đang cấp link riêng. Hãy thử lại sau.');
+        if(!existing)fail(409,'Phiên đang được cấp link hoặc chưa nhận được phản hồi từ đối tác. Hệ thống không tự tạo thêm link. Nếu vẫn gặp lỗi, hãy liên hệ Admin.');
         const sameContext=ongoing.ip===clientIP(req)&&ongoing.device_code===await deviceCode(req,env);
         if(sameContext){
           if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
           return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:'manual',category:'link',task_url:existing.shortUrl,resumed:true});
         }
-        // Network/browser changed before a recorded return. The ordinary quotas
-        // above still apply; the old alias is invalidated only if not yet returned.
-        if(ongoing.available_at<0)fail(409,'Bạn còn lượt chưa xác minh. Hãy tiếp tục phiên cũ.');
+        // Preserve the previously issued alias on every context error.
+        // Never create a second provider link as a side effect of a rejected start.
+        fail(409,'Hãy tiếp tục trên cùng mạng và trình duyệt ban đầu. Link cũ vẫn được giữ; nếu không thể tiếp tục, hãy liên hệ Admin.');
       }
     }
     if(task.category==='app'){
@@ -1514,9 +1514,18 @@ async function handler(req, env) {
     const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
        SELECT ?,?,?,?,?,?,?,?,? ${task.category==='link'?'WHERE NOT EXISTS (SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>?)':''}`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
       clientIP(req), await deviceCode(req, env),...(task.category==='link'?[me.id,task.id,LINK_CONFIRM_WINDOW_MS,startedNow]:[]));
-    if(task.category==='link'){
-      // Mỗi nhiệm vụ link chỉ được có một phiên còn hiệu lực trên một tài khoản.
-      // Tạo mới làm hết hạn phiên cũ; không sửa lịch sử nhiệm vụ đã hoàn thành.
+    if(source){
+      // Atomic reservation before the provider request. Concurrent requests
+      // cannot replace the reservation or call the provider a second time.
+      const reserved=await env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
+          SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
+          AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))
+        )`).bind(attempt,me.id,task.id,a,b,available,startedNow+attemptSeconds*1000,
+        clientIP(req),await deviceCode(req,env),me.id,task.id,startedNow,LINK_CONFIRM_WINDOW_MS,startedNow).run();
+      if(!reserved.meta?.changes)fail(409,'Đã có phiên nhiệm vụ. Hãy tiếp tục phiên cũ; không tạo thêm link.');
+    }else if(task.category==='link'){
+      // Manual links have no provider creation API.
       const started=await env.DB.batch([
         env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?')
           .bind(startedNow,me.id,task.id,startedNow),
@@ -1543,7 +1552,8 @@ async function handler(req, env) {
         ]);
         assignedUrl=link.shortUrl;
       }catch(error){
-        await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL').bind(now(),attempt).run();
+        // An error/timeout does not prove that the provider failed to create
+        // the link. Keep the reservation until its original expiry; no auto retry.
         const reason=error instanceof SourceDiagnosticError?error.message:'Không lưu được phiên hoặc Alias đã tồn tại.';
         await event(env,req,'link_source_create_failed',me.id,'Nguồn '+source.id+': '+reason).catch(()=>{});
         fail(502,'Không thể cấp link riêng: '+reason);

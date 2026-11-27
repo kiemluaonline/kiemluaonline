@@ -2113,19 +2113,19 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
    creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');const dest=new URL(u.searchParams.get('url'));assert.equal(dest.origin,'https://nhiemvu.click');assert.equal(dest.searchParams.get('link_return'),taskId);assert.match(dest.searchParams.get('link_session'),/^[0-9a-f-]{36}$/i);
    return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
   }
-  if(u.pathname==='/view/mock2'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
+  if(u.pathname==='/view/mock1'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
   throw Error('Unexpected provider URL');
  };
  try{
-  const original=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,'203.0.113.210',device);
-  assert.equal(original.status,200,JSON.stringify(original));assert.equal(original.data.task_url,'https://example.com/go/mock1');
   const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
-  assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock2');
-  assert.notEqual(start.data.attempt_id,original.data.attempt_id);
-  assert.ok(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(original.data.attempt_id).expires_at<=Date.now());
+  assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock1');
+  const wrongNetwork=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,'203.0.113.210',device);
+  assert.equal(wrongNetwork.status,409,'Network mismatch must not create a replacement link');
+  assert.equal(creates,1);
+  assert.ok(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(start.data.attempt_id).expires_at>Date.now());
   assert.ok(!JSON.stringify(start).includes('mock-only-secret'));
   const resumed=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
-  assert.equal(resumed.data.attempt_id,start.data.attempt_id);assert.equal(creates,2);
+  assert.equal(resumed.data.attempt_id,start.data.attempt_id);assert.equal(creates,1);
   const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id,answer:start.data.a+start.data.b,evidence:'mock proof direct bypass'},member.cookie,ip,device);
   assert.equal(direct.status,409);
   const path='/api/tasks/'+taskId+'/return';
@@ -2135,13 +2135,23 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
   assert.equal(blockedRestart.status,409,'Đổi IP sau khi đã quay về không cấp lượt mới');
   const resumeConfirm=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(resumeConfirm.status,200);assert.equal(resumeConfirm.data.resume_confirmation,true);
-  assert.equal(resumeConfirm.data.attempt_id,start.data.attempt_id);assert.equal(creates,2);
+  assert.equal(resumeConfirm.data.attempt_id,start.data.attempt_id);assert.equal(creates,1);
   const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
   const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
-  assert.match(record.evidence,/Alias: mock2; View API: 1/);
+  assert.match(record.evidence,/Alias: mock1; View API: 1/);
   assert.equal(record.status,'pending');
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
+  const failedTask=await call('/api/admin/tasks','POST',{title:'Mock timeout guard',category:'link',url:'',reward:3,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'mock_source',link_source_creation:'api',link_source_verification:'api_view'},admCookie);
+  assert.equal(failedTask.status,201,JSON.stringify(failedTask));
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;throw new Error('mock upstream timeout');};
+  const failedPath='/api/tasks/'+failedTask.data.id+'/start';
+  const firstFailure=await call(failedPath,'POST',{},member.cookie,ip,device);
+  assert.equal(firstFailure.status,502,JSON.stringify(firstFailure));
+  const secondFailure=await call(failedPath,'POST',{},member.cookie,ip,device);
+  assert.equal(secondFailure.status,409,JSON.stringify(secondFailure));
+  assert.equal(calls,1,'Uncertain upstream error must never trigger another create automatically');
  }finally{globalThis.fetch=originalFetch;delete env.LINK_PROVIDER_TOKEN_MOCK_SOURCE;}
  console.log('PASS: real member start path with mock provider, one alias reused, direct submit blocked, API view audit, wallet untouched.');
 }
