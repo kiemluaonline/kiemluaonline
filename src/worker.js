@@ -1315,6 +1315,7 @@ async function handler(req, env) {
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
     const sourceLink=await getAttemptSource(env,attempt.id);
     if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
+    if(sourceLink?.returnSession&&body.link_session!==sourceLink.returnSession)fail(409,'Link quay về không thuộc phiên này. Hãy mở lại đúng link nhiệm vụ đã cấp.');
     if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
       fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
     const hasAnswer=Object.prototype.hasOwnProperty.call(body,'answer');
@@ -1474,21 +1475,26 @@ async function handler(req, env) {
     let assignedUrl=task.url;
     if(source){
       try{
-        const destination='https://nhiemvu.click/?link_return='+encodeURIComponent(task.id);
+        const returnSession=attempt;
+        const destination='https://nhiemvu.click/?link_return='+encodeURIComponent(task.id)+'&link_session='+encodeURIComponent(returnSession);
         const link=await createSourceLink(source,destination,sourceToken(env,source));
         let baseline=null;
         if(sourceConfig.verification==='api_auto'&&autoRewardEnabled(env,source))try{baseline=await checkSourceView(source,link.alias,sourceToken(env,source));}catch{}
         // Alias cannot be assigned to two attempts. No fallback to a shared link.
         const current=await env.DB.prepare('SELECT id FROM task_attempts WHERE id=? AND consumed_by IS NULL AND expires_at>?').bind(attempt,now()).first();
         if(!current)throw Error('Phiên đã thay đổi');
+        const aliasKey='link_source_alias:'+source.id+':'+link.alias;
+        if(await env.DB.prepare('SELECT key FROM settings WHERE key=?').bind(aliasKey).first())throw new SourceDiagnosticError('Nhà cung cấp trả lại Alias đã cấp. Không thể sử dụng chung link.');
         await env.DB.batch([
-          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_source_alias:'+source.id+':'+link.alias,attempt),
-          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind(ATTEMPT_SOURCE_PREFIX+attempt,JSON.stringify({id:source.id,...link,config:JSON.stringify(source),verification:sourceConfig.verification,baseline}))
+          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind(aliasKey,attempt),
+          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind(ATTEMPT_SOURCE_PREFIX+attempt,JSON.stringify({id:source.id,...link,config:JSON.stringify(source),verification:sourceConfig.verification,baseline,returnSession}))
         ]);
         assignedUrl=link.shortUrl;
-      }catch{
+      }catch(error){
         await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL').bind(now(),attempt).run();
-        fail(502,'Không thể cấp link riêng từ nguồn. Vui lòng thử lại sau.');
+        const reason=error instanceof SourceDiagnosticError?error.message:'Không lưu được phiên hoặc Alias đã tồn tại.';
+        await event(env,req,'link_source_create_failed',me.id,'Nguồn '+source.id+': '+reason).catch(()=>{});
+        fail(502,'Không thể cấp link riêng: '+reason);
       }
     }
     await recordTaskDevice(env, req, me.id, attempt, 'start');

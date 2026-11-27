@@ -2091,7 +2091,7 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  globalThis.fetch=async (raw,options)=>{
   const u=new URL(raw);assert.equal(u.hostname,'example.com');assert.equal(options.redirect,'manual');
   if(u.pathname==='/create'){
-   creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');assert.equal(u.searchParams.get('url'),'https://nhiemvu.click/?link_return='+taskId);
+   creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');const dest=new URL(u.searchParams.get('url'));assert.equal(dest.origin,'https://nhiemvu.click');assert.equal(dest.searchParams.get('link_return'),taskId);assert.match(dest.searchParams.get('link_session'),/^[0-9a-f-]{36}$/i);
    return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
   }
   if(u.pathname==='/view/mock1'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
@@ -2106,8 +2106,9 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
   const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id,answer:start.data.a+start.data.b,evidence:'mock proof direct bypass'},member.cookie,ip,device);
   assert.equal(direct.status,409);
   const path='/api/tasks/'+taskId+'/return';
-  const challenge=await call(path,'POST',{},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
-  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b},member.cookie,ip,device);
+  assert.equal((await call(path,'POST',{},member.cookie,ip,device)).status,409);
+  const challenge=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
+  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
   const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
   assert.match(record.evidence,/Alias: mock1; View API: 1/);
@@ -2196,12 +2197,12 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  try{
   const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);assert.equal(start.status,200,JSON.stringify(start));
   sqlite.prepare("UPDATE task_attempts SET created_at=datetime('now','-1 minute') WHERE id=?").run(start.data.attempt_id);
-  views=1;const path='/api/tasks/'+taskId+'/return';const challenge=await call(path,'POST',{},member.cookie,ip,device);assert.equal(challenge.status,200);
-  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b},member.cookie,ip,device);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'approved',JSON.stringify(result));
+  views=1;const path='/api/tasks/'+taskId+'/return';const challenge=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200);
+  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'approved',JSON.stringify(result));
   const completion=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(taskId);assert.equal(completion.status,'approved');
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
-  assert.equal((await call(path,'POST',{answer:challenge.data.a+challenge.data.b},member.cookie,ip,device)).status,409);
+  assert.equal((await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device)).status,409);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
  }finally{globalThis.fetch=oldFetch;delete env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE;}
  console.log('PASS: opt-in auto reward gated, zero baseline then one view, one wallet entry, replay blocked.');
