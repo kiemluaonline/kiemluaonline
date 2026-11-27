@@ -1148,6 +1148,7 @@ async function shrinkAppLogo(file){
 function taskForm(task={},sources=[]){
  const category=state.adminTaskFilter==='app'?'app':'link';
  const link=category==='link';
+ const sourceId=sources.some(s=>s.id===task.link_source_id)?task.link_source_id:'';
  return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa':'Tạo'} nhiệm vụ ${link?'Link rút gọn':'App'}</h3>
  <input type="hidden" name="id" value="${esc(task.id||'')}">
  <input type="hidden" name="category" value="${category}">
@@ -1156,11 +1157,14 @@ function taskForm(task={},sources=[]){
  <div class="field"><label for="description">Hướng dẫn</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
  ${link?`<div class="admin-link-task-hint" id="admin-link-task-hint">
  <h4>Nguồn rút gọn</h4>
- ${select('link_source_id','Nhà cung cấp',[['','Không chọn / link thủ công'],...sources.map(s=>[s.id,s.name])],task.link_source_id||((task.bbmkts_creation&&task.bbmkts_creation!=='manual')?'bbmkts':''))}
- ${select('link_source_creation','Cách tạo link',[['manual','Nhập link thủ công'],['api','Tự động cấp link riêng qua API']],task.link_source_creation==='api'||(task.bbmkts_creation&&task.bbmkts_creation!=='manual')?'api':'manual')}
- ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng']],task.link_source_verification==='api_view'||task.bbmkts_verification==='api_view'?'api_view':'manual')}
+ ${select('link_source_id','Nhà cung cấp',[['','Link thủ công (không cần nguồn)'],...sources.map(s=>[s.id,s.name])],sourceId)}
+ <button type="button" class="btn alt sm" data-action="add-link-source">＋ Thêm nguồn rút gọn</button>
+ <div id="task-source-api-options" ${sourceId?'':'hidden'}>
+ ${select('link_source_creation','Cách tạo link',[['manual','Nhập link thủ công'],['api','Tự động cấp link riêng qua API']],sourceId&&task.link_source_creation==='api'?'api':'manual')}
+ ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng']],sourceId&&task.link_source_verification==='api_view'?'api_view':'manual')}
+ <p class="note">Chỉ bật API sau khi kiểm tra kết nối. View chưa xác nhận doanh thu.</p></div>
  <input type="hidden" name="bbmkts_creation" value="manual"><input type="hidden" name="bbmkts_verification" value="manual">
- <p class="note">Thêm nguồn trong mục Quản lý nguồn rút gọn bên dưới. Cấp link qua API không cần dán URL rút gọn. Chỉ mở nhiệm vụ sau khi thử API thật. View chưa được coi là doanh thu; vẫn duyệt thưởng thủ công.</p>
+
  ${field('url','URL link rút gọn (nếu nhập thủ công)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('link_24h_limit','Số lượt / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
  ${select('repeat_policy','Lặp lại',[['once','Mỗi người một lần'],['daily','Mỗi ngày một lần']],task.repeat_policy||'daily')}
@@ -1177,7 +1181,7 @@ function taskForm(task={},sources=[]){
  <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?'<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button>':''}</div></form>`;
 }
 function sourceSettingsForm(source={}){
- return `<details class="section"><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}</summary>
+ return `<details class="section" ${source.id?'':'id="new-link-source"'}><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}</summary>
  <form data-form="link-source-save" class="section">
  ${field('id','Mã nguồn (ví dụ trafficvn)',source.id||'','required maxlength="32" '+(source.id?'readonly':''))}
  ${field('name','Tên nhà cung cấp',source.name||'','required maxlength="80"')}
@@ -1224,9 +1228,9 @@ async function adminTasks(){
  <div class="task-filter-row">${[['link','🔗 Link rút gọn'],['app','📱 App']].map(([value,label])=>`<button type="button" class="btn ${category===value?'':'alt'}" data-action="admin-task-filter" data-filter="${value}">${label}</button>`).join('')}</div>
  <div class="btn-row section"><button type="button" class="btn alt" data-action="admin-open-reviews">Duyệt nhiệm vụ ${category==='link'?'Link':'App'}</button></div>
  ${taskForm(edit||{},sources)}
- ${category==='link'?` <section class="card section"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
- ${sources.map(sourceSettingsForm).join('')}${sourceSettingsForm()}
- <details><summary>Công cụ đọc JSON thô BBMKTS (cũ)</summary>
+ ${category==='link'?` <section class="card section" id="link-source-manager"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
+ ${sources.length?sources.map(sourceSettingsForm).join(''):'<p class="note">Chưa thêm nguồn nào. Link thủ công vẫn hoạt động bình thường.</p>'}${sourceSettingsForm()}
+ ${sources.some(s=>s.id==='bbmkts')?`<details><summary>Công cụ đọc JSON thô BBMKTS</summary>
  <p><strong>Chế độ hiện tại: Admin đối soát thủ công.</strong> API Check View đã được hỗ trợ để thử tra cứu trực tiếp. Chưa bật tự động cấp link hoặc cộng Lúa.</p>
  <form data-form="bbmkts-check-view">
  ${field('alias','Alias của link BBMKTS','', 'required maxlength="128" pattern="[A-Za-z0-9_\\-]+" placeholder="Ví dụ: krjkB" autocapitalize="off" autocomplete="off"')}
@@ -1234,7 +1238,7 @@ async function adminTasks(){
  <p class="note">Không cần API Token để kiểm tra. Dữ liệu trả về chỉ dùng đối soát, không sửa số dư. Không có view chưa có nghĩa là gian lận.</p>
  <pre data-bbmkts-result role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
  </form>
- </details>
+ </details>`:''}
  </section>`:''}
  <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${selected.length})</h3><p class="note">Admin kiểm tra bằng chứng theo từng loại nhiệm vụ. Số lượt hôm nay tính theo giờ Việt Nam.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>
  ${retired.length?`<details class="card section"><summary>Lưu trữ nhiệm vụ cũ (${retired.length})</summary><p class="note">Không hiển thị cho thành viên. Giữ lịch sử và dữ liệu cũ.</p>${retired.map(t=>`<p>${esc(t.title)} · ${esc(t.category)}</p>`).join('')}</details>`:''}`;
@@ -1728,6 +1732,12 @@ app.addEventListener('input',e=>{
  }
 });
 app.addEventListener('change',e=>{
+ if(e.target.matches('#task-form [name="link_source_id"]')){
+  const form=e.target.closest('form'),options=form.querySelector('#task-source-api-options');
+  if(options)options.hidden=!e.target.value;
+  form.elements.link_source_creation.value='manual';form.elements.link_source_verification.value='manual';
+ }
+ if(e.target.matches('#task-form [name="link_source_creation"]')&&e.target.value==='manual')e.target.closest('form').elements.link_source_verification.value='manual';
  if(e.target.matches('input[data-shop-image-input]')){
   previewShopPhoto(e.target).catch(err=>toast(err.message,true));
  }
@@ -1861,6 +1871,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='view-fraud-account'){await showFraudAccount(el.dataset.id);return;}
 
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
+  if(act==='add-link-source'){const panel=document.getElementById('new-link-source');if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});}return;}
   if(act==='admin-task-filter'){state.adminTaskFilter=el.dataset.filter==='app'?'app':'link';state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='admin-open-reviews'){state.adminReviewFilter=state.adminTaskFilter;await navigate('admin-reviews');return;}
   if(act==='admin-review-filter'){state.adminReviewFilter=['app','link','archive'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('admin-reviews');return;}
@@ -2063,6 +2074,7 @@ app.addEventListener('submit',async e=>{
     return;
   }
   if(kind==='admin-task'){
+    if(b.category==='link'&&!b.link_source_id){b.link_source_creation='manual';b.link_source_verification='manual';}
     if(b.category==='link'&&(b.bbmkts_creation!=='manual'||b.bbmkts_verification!=='manual')&&b.is_active==='1')
       throw new Error('BBMKTS chưa kết nối hoàn chỉnh. Chọn Tắt / nháp để lưu cấu hình tự động.');
     if(b.category==='link'&&b.review_mode!=='manual')

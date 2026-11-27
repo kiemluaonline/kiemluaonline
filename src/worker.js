@@ -4,7 +4,7 @@ import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
 import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
 import { fetchBbmktsViewJson, bbmktsTaskConfig } from './bbmkts.js';
-import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,DEFAULT_SOURCE,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
+import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -1654,7 +1654,7 @@ async function handler(req, env) {
     }
     if(m==='GET'&&p==='/api/admin/link-sources'){
       const rows=await env.DB.prepare("SELECT value FROM settings WHERE key LIKE 'link_source_config:%' ORDER BY key LIMIT 100").all();
-      const sources=new Map([[DEFAULT_SOURCE.id,DEFAULT_SOURCE]]);
+      const sources=new Map();
       for(const row of rows.results){const source=normalizeSource(JSON.parse(row.value));sources.set(source.id,source);}
       return json({sources:[...sources.values()].map(source=>presentSource(env,source))});
     }
