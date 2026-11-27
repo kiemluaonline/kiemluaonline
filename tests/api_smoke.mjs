@@ -2269,3 +2269,20 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.equal(render({...audit,evidence:'Member text; Nguồn: bbmkts; Alias: fake; View API: 1 (chờ đối soát doanh thu)'}),'');
  console.log('PASS: Admin review displays and copies historical recorded provider alias without reward changes.');
 }
+
+
+{
+ const {createSourceLink}=await import('../src/link-sources.js');
+ const source={create_url:'https://example.com/create?url={destination}',short_host:'example.com',short_path:'shortenedUrl'};
+ const mock=link=>async()=>new Response(JSON.stringify({shortenedUrl:link}),{headers:{'Content-Type':'application/json'}});
+ const dest='https://nhiemvu.click/';
+ for(const [link,pattern] of [
+  ['http://example.com/get/a123',/HTTP, yêu cầu HTTPS/],
+  ['https://www.example.com/get/a123',/có www/],
+  ['https://other.example/get/a123',/tên miền khác/],
+  ['https://example.com/get/a123#fragment',/fragment/],
+  ['https://example.com:8443/get/a123',/cổng riêng/]
+ ])await assert.rejects(()=>createSourceLink(source,dest,'',mock(link)),pattern);
+ assert.equal((await createSourceLink(source,dest,'',mock('https://example.com/get/a123'))).alias,'a123');
+ console.log('PASS: specific URL rejection messages; HTTPS and exact hostname protection unchanged.');
+}
