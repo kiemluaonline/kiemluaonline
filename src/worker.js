@@ -1703,7 +1703,7 @@ async function handler(req, env) {
     }
     if (m === 'GET' && p === '/api/admin/tasks') {
       const [rows,settings,activity]=await Promise.all([
-        env.DB.prepare('SELECT t.* FROM tasks t WHERE NOT EXISTS (SELECT 1 FROM settings s WHERE s.key='task_deleted:'||t.id) ORDER BY t.created_at DESC LIMIT 200').all(),
+        env.DB.prepare("SELECT t.* FROM tasks t WHERE NOT EXISTS (SELECT 1 FROM settings s WHERE s.key='task_deleted:'||t.id) ORDER BY t.created_at DESC LIMIT 200").all(),
         env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%' OR key LIKE 'link_source_task:%' OR key LIKE 'app_confirmation_mode:%'").all(),
         env.DB.prepare(`SELECT task_id,COUNT(*) AS submitted_today,
           SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_today
