@@ -1747,7 +1747,7 @@ console.log('PASS: anti-fraud flags very fast returns, allows only one active Li
 const oneReturnWorker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 assert.match(oneReturnWorker,/async function linkReturnUsage\(/);
 assert.match(oneReturnWorker,/UPDATE task_attempts SET available_at=\?/);
-assert.match(oneReturnWorker,/attemptSeconds=task.category==='link'\?86400:1200/);
+assert.match(oneReturnWorker,/attemptSeconds=task\.category==='app'\?7\*86400:task\.category==='link'\?86400:1200/);
 assert.match(oneReturnWorker,/link_24h_count:used/);
 console.log('PASS: unique counted destination returns, 0/2 -> 1/2 -> 2/2, long genuine sessions, no duplicate or rejected return refunds.');
 
