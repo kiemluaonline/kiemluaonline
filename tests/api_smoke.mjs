@@ -1550,7 +1550,10 @@ assert.equal(qLanding1.data.challenge,true);
 const taskViewFirst=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
  .find(t=>t.id===quotaReturnTask.data.id);
 assert.equal(taskViewFirst.link_24h_count,1,'Lượt quay về đầu tiên hiển thị 1/2 trước cả CAPTCHA');
+const confirmationDeadline=qLanding1.data.expires_at;
+assert.ok(Math.abs(confirmationDeadline-Date.now()-3600000)<3000,'Exactly 60 minutes from recorded return');
 const qLandingSame=await call(quotaPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
+assert.equal(qLandingSame.data.expires_at,confirmationDeadline,'Reload must not extend the deadline');
 assert.equal(qLandingSame.status,200,'Tải lại cùng phiên không dùng thêm lượt; khách vẫn giải được CAPTCHA');
 const taskViewSame=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks
  .find(t=>t.id===quotaReturnTask.data.id);
@@ -1590,6 +1593,30 @@ assert.equal((await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{
  returnMember.cookie,returnIP,returnDevice)).status,429,
  'Hai lần đến đích vẫn hết lượt dù một lần bị Admin từ chối');
 
+// Expired confirmation uses the slot but cannot grant any Lúa.
+{
+ const created=await call('/api/admin/tasks','POST',{title:'BBMKTS hết hạn xác minh',category:'link',url:'https://example.com/timeout',reward:9,review_mode:'manual',repeat_policy:'daily',link_24h_limit:2,is_active:true},admCookie);
+ assert.equal(created.status,201,JSON.stringify(created));
+ const taskId=created.data.id,path='/api/tasks/'+taskId+'/return';
+ const start=await call('/api/tasks/'+taskId+'/start','POST',{},returnMember.cookie,returnIP,returnDevice);
+ assert.equal(start.status,200,JSON.stringify(start));
+ const landing=await call(path,'POST',{},returnMember.cookie,returnIP,returnDevice);
+ assert.equal(landing.status,200);assert.ok(Math.abs(landing.data.expires_at-Date.now()-3600000)<3000);
+ const old=Date.now()-3600001;
+ sqlite.prepare('UPDATE task_attempts SET available_at=?,expires_at=? WHERE id=?').run(-old,old+3600000,start.data.attempt_id);
+ const before=(await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance;
+ const expired=await call(path,'POST',{attempt_id:start.data.attempt_id,answer:landing.data.a+landing.data.b},returnMember.cookie,returnIP,returnDevice);
+ assert.equal(expired.status,410);assert.equal(expired.data.confirmation_expired,true);
+ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.balance,before);
+ const today=sqlite.prepare("SELECT date('now','+7 hours') d").get().d;
+ const day=sqlite.prepare("SELECT date(datetime(?/1000,'unixepoch'),'+7 hours') d").get(old).d;
+ if(today===day){
+  assert.equal((await call('/api/tasks/'+taskId+'/start','POST',{},returnMember.cookie,returnIP,returnDevice)).status,429);
+  const listing=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks.find(t=>t.id===taskId);
+  assert.equal(listing.link_24h_count,1);assert.equal(listing.link_needs_confirmation,false);
+ }
+ assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(taskId).n,0);
+}
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/Sao chép trang đích/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/async function processLinkReturn/);
 assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/renderLinkReturnModal/);
@@ -1849,24 +1876,20 @@ const startProgressFns=new Function(
 );
 const startProgressPromise=startProgressFns.startTask('link4m-id');
 assert.match(startProgressRoot.innerHTML,/task-start-modal is-checking/);
-assert.match(startProgressRoot.innerHTML,/Đang kiểm tra nhiệm vụ/);
-assert.match(startProgressRoot.innerHTML,/Vui lòng chờ phản hồi từ hệ thống/);
+assert.match(startProgressRoot.innerHTML,/Đang kiểm tra phiên nhiệm vụ/);
+assert.match(startProgressRoot.innerHTML,/Hệ thống đang kiểm tra tài khoản và giới hạn/);
 assert.doesNotMatch(startProgressRoot.innerHTML,/Đã khởi tạo nhiệm vụ/);
 resolveStartProgress({attempt_id:'attempt-test',category:'link',
  review_mode:'manual',task_url:'https://example.com/short-link'});
 await startProgressPromise;
-assert.match(startProgressReadyAtTimer,/task-start-modal is-ready/);
-assert.match(startProgressReadyAtTimer,/Đã khởi tạo nhiệm vụ/);
-assert.match(startProgressReadyAtTimer,/Lượt thực hiện đã được tạo từ hệ thống/);
-assert.match(startProgressReadyAtTimer,/href="https:\/\/example.com\/short-link"/);
+assert.equal(startProgressReadyAtTimer,'','No artificial delay after a successful start');
 assert.deepEqual(startProgressNavigated,['https://example.com/short-link'],
  'After server-created stage, manual link must open in same tab');
 assert.equal(startProgressAttemptShown,0,'Do not show CAPTCHA/evidence before link redirect');
 assert.equal(startProgressRulesRestored,0,'Successful task start must not restore rules modal');
 assert.match(startProgressEvents[0],/Link4M &amp; thật/,'Task name must be HTML escaped');
-assert.ok(startProgressEvents.findIndex(v=>v.includes('is-checking'))<
- startProgressEvents.findIndex(v=>v.includes('is-ready')),
- 'Checking stage must be visible before created stage');
+assert.ok(startProgressEvents.some(v=>v.includes('is-checking')),
+ 'Checking stage must be visible before redirect');
 let apiRejectCount=0,recoveredRules=0;
 const errorStartFns=new Function(
  'state','document','esc','safeUrl','api','location','showTaskRules','renderAttemptModal','setTimeout',
@@ -1893,7 +1916,7 @@ assert.match(startProgressCss,/min-height:44px/,'Touch-accessible fallback link 
 const startProgressHmoob=readFileSync(new URL('../public/i18n-extra.js',import.meta.url),'utf8');
 assert.match(startProgressHmoob,/"Đang kiểm tra nhiệm vụ\.\.\.":/);
 assert.match(startProgressHmoob,/"Đã khởi tạo nhiệm vụ":/);
-console.log('PASS: start-task modal shows checking then server-verified created before redirect, with error rollback and mobile/Hmoob support.');
+console.log('PASS: start-task modal shows checking, redirects only after server success, restores rules on failure.');
 
 const memberSafeWorker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 const memberSafeClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');

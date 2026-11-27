@@ -263,7 +263,8 @@ function showReturnGate(content){
 function renderLinkReturnModal(){
  const c=state.returnChallenge;
  if(!c)return;
- showReturnGate(`<form data-form="link-return-captcha">
+ showReturnGate(`<p class="note">Bạn có 60 phút kể từ khi quay về để xác minh. Hết giờ không nhận Lúa; lượt đã sử dụng không được hoàn lại.</p>
+ <p class="note">Hạn xác minh: ${esc(new Date(c.expiresAt).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))}</p><form data-form="link-return-captcha">
  <label for="return-answer">${Number(c.a)} + ${Number(c.b)} =</label>
  <input id="return-answer" name="answer" aria-label="Kết quả phép tính" type="number"
  inputmode="numeric" min="0" max="30" required autocomplete="off">
@@ -283,10 +284,14 @@ async function processLinkReturn(){
   params.set('return_attempt',result.attempt_id);
   window.history.replaceState(null,'',location.pathname+'?'+params.toString());
   rememberReturn(result.expires_at);
-  state.returnChallenge={taskId,linkSession,attemptId:result.attempt_id,a:result.a,b:result.b};
+  state.returnChallenge={taskId,linkSession,attemptId:result.attempt_id,a:result.a,b:result.b,expiresAt:result.expires_at};
   renderLinkReturnModal();
  }catch(error){
-  showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
+  if(error.confirmation_expired){
+   try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
+   clearLinkReturnQuery();
+   showReturnGate(`<p role="alert">${esc(error.message)}</p><a class="btn" href="/">Về trang chủ</a>`);
+  }else showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
  }
  return true;
 }
@@ -2010,6 +2015,9 @@ app.addEventListener('submit',async e=>{
     if(!result.ok||!['approved','pending','rejected'].includes(result.status))throw new Error('Máy chủ chưa xác nhận kết quả.');
     await finishLinkReturn({...result,reward:result.reward??state.memberTasks.find(t=>t.id===c.taskId)?.reward});
    }catch(err){
+    if(err.confirmation_expired){
+     await processLinkReturn();return;
+    }
     if(err.status===422 && Number.isInteger(err.a) && Number.isInteger(err.b)){
      c.a=err.a;c.b=err.b;renderLinkReturnModal();
     }
