@@ -2141,3 +2141,27 @@ assert.match(latestAdminClient,/Link thủ công \(không cần nguồn\)/);
 
 assert.doesNotMatch(latestAdminClient,/Công cụ đọc JSON thô BBMKTS|data-form="bbmkts-check-view"|BBMKTS: /);
 assert.match(latestAdminClient,/data-action="delete-link-source"/);
+
+// An already used task can disappear permanently without losing its financial history.
+{
+ const cfg={title:'App dùng rồi cần xóa',category:'app',url:'https://example.com/app',app_referral_code:'DELTEST',app_confirmation_mode:'simple',reward:17,review_mode:'manual',repeat_policy:'once',is_active:true};
+ const made=await call('/api/admin/tasks','POST',cfg,admCookie);assert.equal(made.status,201);
+ const taskId=made.data.id,ip='203.0.113.228',device='d1234567-1234-4123-8123-123456789abc';
+ const member=await call('/api/auth/register','POST',{name:'Test xóa nhiệm vụ',email:'delete-used-task@example.com',password:'test-password-2026',accept_terms:'yes'},'',ip,device);assert.equal(member.status,201);
+ const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);assert.equal(start.status,200);
+ const sent=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id},member.cookie,ip,device);assert.equal(sent.status,200);
+ const completion=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(taskId);assert.equal(completion.status,'pending');
+ const balance=(await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance;
+ const removed=await call('/api/admin/tasks/'+taskId,'DELETE',{},admCookie);assert.equal(removed.status,200);assert.equal(removed.data.history_preserved,true);
+ const list=await call('/api/admin/tasks','GET',undefined,admCookie);assert.ok(!list.data.tasks.some(t=>t.id===taskId));
+ const memberList=await call('/api/tasks','GET',undefined,member.cookie,ip,device);assert.ok(!memberList.data.tasks.some(t=>t.id===taskId));
+ assert.equal(sqlite.prepare('SELECT is_active FROM tasks WHERE id=?').get(taskId).is_active,0);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',cfg,admCookie)).status,404);
+ assert.equal((await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device)).status,404);
+ assert.equal(sqlite.prepare('SELECT status FROM task_completions WHERE id=?').get(completion.id).status,'pending');
+ assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
+ const newTask=await call('/api/admin/tasks','POST',{...cfg,title:'App thay thế'},admCookie);assert.equal(newTask.status,201);
+ assert.equal((await call('/api/admin/tasks/'+newTask.data.id,'PATCH',{...cfg,is_active:false},admCookie)).status,200);
+ assert.ok((await call('/api/admin/tasks','GET',undefined,admCookie)).data.tasks.some(t=>t.id===newTask.data.id&&!t.is_active));
+ console.log('PASS: delete used task hides admin and member lists, pending completion and wallet preserved, off remains editable.');
+}
