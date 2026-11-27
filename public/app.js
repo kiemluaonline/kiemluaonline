@@ -215,6 +215,7 @@ function clearLinkReturnQuery(){
  const params=new URLSearchParams(location.search);
  if(!params.has('link_return'))return;
  params.delete('link_return');
+ params.delete('link_session');
  const remain=params.toString();
  window.history.replaceState(null,'',location.pathname+(remain?'?'+remain:'')+location.hash);
 }
@@ -243,15 +244,16 @@ function renderLinkReturnModal(){
  root.querySelector('#return-answer')?.focus({preventScroll:true});
 }
 async function processLinkReturn(){
- const taskId=new URLSearchParams(location.search).get('link_return');
+ const params=new URLSearchParams(location.search);
+ const taskId=params.get('link_return'),linkSession=params.get('link_session')||'';
  if(!taskId||!state.me||state.me.user.role!=='member')return false;
  if(!/^[0-9a-f-]{36}$/i.test(taskId)){
   clearLinkReturnQuery();await navigate('tasks');toast('Đường dẫn quay về không hợp lệ.',true);return true;
  }
  try{
-  const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',{});
+  const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',linkSession?{link_session:linkSession}:{});
   if(!result.challenge)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
-  state.returnChallenge={taskId,a:result.a,b:result.b};
+  state.returnChallenge={taskId,linkSession,a:result.a,b:result.b};
   // URL của trang đích Link4M là công khai. Sau khi nhận phiên và phép tính,
   // xóa mã nhiệm vụ khỏi thanh địa chỉ bằng replaceState (không tạo trang lịch sử mới).
   // Mã vẫn được giữ trong bộ nhớ của trang để xác minh mà không cần URL query.
@@ -1984,7 +1986,7 @@ app.addEventListener('submit',async e=>{
    const c=state.returnChallenge;
    if(!c)throw new Error('Phiên xác minh không còn. Hãy mở lại nhiệm vụ.');
    try{
-    const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer});
+    const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer,...(c.linkSession?{link_session:c.linkSession}:{})});
     state.returnChallenge=null;
     document.getElementById('modal-root').innerHTML='';
     clearLinkReturnQuery();
