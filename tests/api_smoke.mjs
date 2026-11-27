@@ -1476,6 +1476,9 @@ assert.equal((await call('/api/me','GET',undefined,returnMember.cookie,returnIP,
  memberBefore,'Quay về trang đích KHÔNG tự cộng Lúa');
 const returnRow=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(returnTask.data.id);
 assert.equal(returnRow.status,'pending');
+const recoveredReturn=await call(returnPath,'POST',{attempt_id:startedReturnAgain.data.attempt_id},returnMember.cookie,returnIP,returnDevice);
+assert.equal(recoveredReturn.status,200);assert.equal(recoveredReturn.data.status,'pending');assert.equal(recoveredReturn.data.recovered,true);
+assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM task_completions WHERE task_id=?').get(returnTask.data.id).n,1);
 // New Admin-only audit: server logs device stages without changing the existing D1 schema.
 const deviceAuditReview=await call('/api/admin/reviews','GET',undefined,admCookie);
 assert.equal(deviceAuditReview.status,200,JSON.stringify(deviceAuditReview.data));
@@ -1711,24 +1714,13 @@ const cleanedReturnMethod=cleanedReturnClient.slice(
  cleanedReturnClient.indexOf('async function processLinkReturn(){'),
  cleanedReturnClient.indexOf('async function boot(){')
 );
-const cleanedReturnSuccess=cleanedReturnMethod.slice(
- cleanedReturnMethod.indexOf('state.returnChallenge={taskId,'),
- cleanedReturnMethod.indexOf('renderLinkReturnModal();')
-);
-assert.match(cleanedReturnSuccess,/clearLinkReturnQuery\(\)/,
- 'Browser address bar must be cleaned after capturing returned task challenge');
-assert.ok(cleanedReturnSuccess.indexOf('clearLinkReturnQuery()') <
- cleanedReturnSuccess.indexOf("await navigate('tasks')"),
- 'Remove task identifier before displaying post-return verification');
-const cleanedHelper=cleanedReturnClient.slice(cleanedReturnClient.indexOf('function clearLinkReturnQuery(){'),
- cleanedReturnClient.indexOf('function renderLinkReturnModal(){'));
-assert.match(cleanedHelper,/params\.delete\('link_return'\)/,
- 'Only shortlink query parameter is removed');
-assert.match(cleanedHelper,/window\.history\.replaceState\(null,'',location\.pathname/,
- 'Use history.replaceState without adding navigation to history');
-assert.match(cleanedReturnClient,/\+encodeURIComponent\(c\.taskId\)\+'\/return'/,
- 'CAPTCHA submission must still use the captured task ID from in-memory state');
-console.log('PASS: shortlink destination query is removed from address bar without breaking CAPTCHA verification.');
+assert.match(cleanedReturnMethod,/params\.set\('return_attempt',result\.attempt_id\)/);
+assert.match(cleanedReturnMethod,/rememberReturn\(\)/);
+const finishReturnClient=cleanedReturnClient.slice(cleanedReturnClient.indexOf('async function finishLinkReturn('),cleanedReturnClient.indexOf('function showReturnGate('));
+assert.ok(finishReturnClient.indexOf('renderTaskResultModal')<finishReturnClient.indexOf('clearLinkReturnQuery()'));
+assert.match(cleanedReturnClient,/params\.delete\('link_return'\)/);
+assert.match(cleanedReturnClient,/attempt_id:c\.attemptId/);
+console.log('PASS: exact return session retained until server receipt is displayed.');
 
 const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 assert.match(linkFraudWorkerSource,/LINK_RETURN_FAST_SECONDS = 20/);
@@ -2202,7 +2194,11 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
   const completion=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(taskId);assert.equal(completion.status,'approved');
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
-  assert.equal((await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device)).status,409);
+  const replay=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
+  assert.equal(replay.status,200);assert.equal(replay.data.status,'approved');assert.equal(replay.data.recovered,true);
+  const refreshed=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);
+  assert.equal(refreshed.data.status,'approved');
+  assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
  }finally{globalThis.fetch=oldFetch;delete env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE;}
  console.log('PASS: opt-in auto reward gated, zero baseline then one view, one wallet entry, replay blocked.');

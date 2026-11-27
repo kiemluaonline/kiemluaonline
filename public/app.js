@@ -217,8 +217,35 @@ function clearLinkReturnQuery(){
  document.documentElement.classList.remove('link-return-entry');
  params.delete('link_return');
  params.delete('link_session');
+ params.delete('return_attempt');
  const remain=params.toString();
- window.history.replaceState(null,'',location.pathname+(remain?'?'+remain:'')+location.hash);
+ const destination=location.pathname==='/verify-link'?'/':location.pathname;
+ window.history.replaceState(null,'',destination+(remain?'?'+remain:'')+location.hash);
+}
+function returnStorageKey(){
+ return state.me?.user?.id?'tram-lua.return.'+state.me.user.id:'';
+}
+function rememberReturn(){
+ try{const key=returnStorageKey();if(key)localStorage.setItem(key,location.pathname+location.search);}catch{}
+}
+function resumeStoredReturn(){
+ try{
+  const key=returnStorageKey(),value=key&&localStorage.getItem(key);
+  if(!value)return false;
+  const target=new URL(value,location.origin);
+  if(target.origin!==location.origin||!['/','/verify-link'].includes(target.pathname)||!target.searchParams.has('link_return'))return false;
+  location.replace(target.pathname+target.search);return true;
+ }catch{return false;}
+}
+async function finishLinkReturn(result){
+ // Keep the recovery URL until the member page and real server receipt are displayed.
+ state.returnChallenge=null;
+ renderShell();
+ await afterAction('history');
+ if(result.status==='rejected')toast('Nhiệm vụ đã được xử lý: Từ chối.',true);
+ else renderTaskResultModal(result,{linkReturn:true});
+ try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
+ clearLinkReturnQuery();
 }
 function showReturnGate(content){
  app.className='';
@@ -237,14 +264,18 @@ function renderLinkReturnModal(){
 async function processLinkReturn(){
  const params=new URLSearchParams(location.search);
  if(!params.has('link_return'))return false;
- const taskId=params.get('link_return'),linkSession=params.get('link_session')||'';
+ const taskId=params.get('link_return'),linkSession=params.get('link_session')||'',attemptId=params.get('return_attempt')||'';
  showReturnGate('<p role="status">Đang kiểm tra phiên…</p>');
  try{
   if(!/^[0-9a-f-]{36}$/i.test(taskId))throw new Error('Đường dẫn quay về không hợp lệ.');
   if(state.me?.user?.role!=='member')throw new Error('Hãy đăng nhập đúng tài khoản thành viên đã mở nhiệm vụ.');
-  const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',linkSession?{link_session:linkSession}:{});
-  if(!result.challenge)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
-  state.returnChallenge={taskId,linkSession,a:result.a,b:result.b};
+  const result=await api('/api/tasks/'+encodeURIComponent(taskId)+'/return','POST',{...(linkSession?{link_session:linkSession}:{}),...(attemptId?{attempt_id:attemptId}:{})});
+  if(result.ok&&['approved','pending','rejected'].includes(result.status)){await finishLinkReturn(result);return true;}
+  if(!result.challenge||!result.attempt_id)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
+  params.set('return_attempt',result.attempt_id);
+  window.history.replaceState(null,'',location.pathname+'?'+params.toString());
+  rememberReturn();
+  state.returnChallenge={taskId,linkSession,attemptId:result.attempt_id,a:result.a,b:result.b};
   renderLinkReturnModal();
  }catch(error){
   showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
@@ -261,6 +292,7 @@ async function boot(){
    else await processLinkReturn();
    return;
   }
+  if(state.me?.user?.role==='member'&&resumeStoredReturn())return;
   if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
   else if(state.accountHold){renderLocked();}
   else {
@@ -1204,7 +1236,7 @@ async function adminTasks(){
   const quota=t.category==='link'?(max>1||t.repeat_policy==='daily'?max+' lượt/ngày':'1 lượt/tài khoản'):(t.repeat_policy==='daily'?'1 lượt/ngày':'1 lượt/tài khoản');
   return `<tr>
    <td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">Xóa</button></div>
-    ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
+    ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/verify-link?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
    </td>
    <td class="num">${fmt(t.reward)} Lúa</td>
    <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
@@ -1963,13 +1995,9 @@ app.addEventListener('submit',async e=>{
    const c=state.returnChallenge;
    if(!c)throw new Error('Phiên xác minh không còn. Hãy mở lại nhiệm vụ.');
    try{
-    const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer,...(c.linkSession?{link_session:c.linkSession}:{})});
-    if(!result.ok||!['approved','pending'].includes(result.status))throw new Error('Máy chủ chưa xác nhận kết quả.');
-    state.returnChallenge=null;
-    clearLinkReturnQuery();
-    renderShell();
-    await afterAction('history');
-    renderTaskResultModal({...result,reward:result.reward??state.memberTasks.find(t=>t.id===c.taskId)?.reward},{linkReturn:true});
+    const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{answer:b.answer,attempt_id:c.attemptId,...(c.linkSession?{link_session:c.linkSession}:{})});
+    if(!result.ok||!['approved','pending','rejected'].includes(result.status))throw new Error('Máy chủ chưa xác nhận kết quả.');
+    await finishLinkReturn({...result,reward:result.reward??state.memberTasks.find(t=>t.id===c.taskId)?.reward});
    }catch(err){
     if(err.status===422 && Number.isInteger(err.a) && Number.isInteger(err.b)){
      c.a=err.a;c.b=err.b;renderLinkReturnModal();
@@ -2003,6 +2031,7 @@ app.addEventListener('submit',async e=>{
     await loadMe();
     if(state.accountHold){renderLocked();return;}
     if(await processLinkReturn())return;
+    if(state.me?.user?.role==='member'&&resumeStoredReturn())return;
     renderShell();await navigate(state.me.user.role==='admin'?'admin-overview':'overview');toast(kind==='login'?'Đăng nhập thành công.':'Đăng ký thành công.');
 
   }

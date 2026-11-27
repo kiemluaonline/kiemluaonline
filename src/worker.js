@@ -1301,6 +1301,20 @@ async function handler(req, env) {
   if (m === 'POST' && returnMatch) {
     const me = await auth(req, env);
     const body=await readBody(req); // POST cùng nguồn gốc, không xử lý phép tính ở trình duyệt.
+    // Recovery is read-only, tied to the authenticated member and exact attempt.
+    const returnTaskId=returnMatch[1];
+    const exactAttempt=str(body.link_session||body.attempt_id,60);
+    async function savedReturn(){
+      if(!exactAttempt)return null;
+      const old=await env.DB.prepare('SELECT id,consumed_by FROM task_attempts WHERE id=? AND user_id=? AND task_id=?').bind(exactAttempt,me.id,returnTaskId).first();
+      if(!old?.consumed_by)return null;
+      const source=await getAttemptSource(env,old.id);
+      if(source?.returnSession&&body.link_session!==source.returnSession)return null;
+      const receipt=await env.DB.prepare('SELECT status,reward FROM task_completions WHERE id=? AND user_id=? AND task_id=?').bind(old.consumed_by,me.id,returnTaskId).first();
+      return receipt?{ok:true,status:receipt.status,reward:receipt.reward,attempt_id:old.id,recovered:true}:null;
+    }
+    const receipt=await savedReturn();
+    if(receipt)return json(receipt);
     const task = await env.DB.prepare("SELECT * FROM tasks WHERE id=? AND category='link' AND is_active=1")
       .bind(returnMatch[1]).first();
     if (!task) fail(404, 'Link nhiệm vụ không còn hoạt động.');
@@ -1308,10 +1322,9 @@ async function handler(req, env) {
     if(!task.url&&sourceConfig.creation!=='api')fail(404,'Link nhiệm vụ không còn hoạt động.');
     if (task.review_mode !== 'manual')
       fail(409, 'Admin cần chọn chế độ duyệt thủ công cho nhiệm vụ Link trước khi sử dụng xác minh quay về.');
-    const attempt = await env.DB.prepare(
-      'SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ' +
-      'ORDER BY created_at DESC,id DESC LIMIT 1'
-    ).bind(me.id, task.id, now()).first();
+    const attempt = exactAttempt
+      ? await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>?').bind(exactAttempt,me.id,task.id,now()).first()
+      : await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
     if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
     const sourceLink=await getAttemptSource(env,attempt.id);
     if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
@@ -1350,7 +1363,7 @@ async function handler(req, env) {
     // Nạp lại link cùng phiên chỉ lấy lại phép tính, không tạo thêm lượt quay về.
     if (!hasAnswer)
       return json({ok:true,challenge:true,a:attempt.captcha_a,b:attempt.captcha_b,
-        expires_at:attempt.expires_at});
+        attempt_id:attempt.id,expires_at:attempt.expires_at});
     if (!/^\d+$/.test(String(body.answer)) ||
         Number(body.answer)!==attempt.captcha_a+attempt.captcha_b) {
       const a=rand(),b=rand();
@@ -1396,8 +1409,11 @@ async function handler(req, env) {
       ).bind(completionId,me.id,task.id,completionPeriod,task.reward,evidence,
         clientIP(req),await deviceCode(req,env),attempt.id,me.id,completionId)
     ]);
-    if (!batch[0].meta?.changes || !batch[1].meta?.changes)
+    if (!batch[0].meta?.changes || !batch[1].meta?.changes){
+      const existing=await savedReturn();
+      if(existing)return json(existing);
       fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
+    }
     await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
     if(sourceLink?.verification==='api_auto'&&sourceConfig.verification==='api_auto'&&autoRewardEligible({views,baseline:sourceLink.baseline,fastReturn:Boolean(fastReturn),confirmed:autoRewardEnabled(env,verifiedSource),unchanged:sourceConfig.id===sourceLink.id})){
       // Re-check current settings, task and user inside the atomic write; no client-supplied view.
@@ -1476,7 +1492,7 @@ async function handler(req, env) {
     if(source){
       try{
         const returnSession=attempt;
-        const destination='https://nhiemvu.click/?link_return='+encodeURIComponent(task.id)+'&link_session='+encodeURIComponent(returnSession);
+        const destination='https://nhiemvu.click/verify-link?link_return='+encodeURIComponent(task.id)+'&link_session='+encodeURIComponent(returnSession);
         const link=await createSourceLink(source,destination,sourceToken(env,source));
         let baseline=null;
         if(sourceConfig.verification==='api_auto'&&autoRewardEnabled(env,source))try{baseline=await checkSourceView(source,link.alias,sourceToken(env,source));}catch{}
@@ -2195,7 +2211,9 @@ export default {
     ]);
   },
   async fetch(req, env) {
-    if (!new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    const path=new URL(req.url).pathname;
+    if(path==='/verify-link')return env.ASSETS.fetch(new Request(new URL('/',req.url),req));
+    if (!path.startsWith('/api/')) return env.ASSETS.fetch(req);
     if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return json({ error: 'Phương thức không được hỗ trợ.' }, 405);
     try { return await handler(req, env); }
     catch (e) {
