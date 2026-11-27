@@ -518,7 +518,7 @@ async function event(env, req, type, userId = null, detail = '') {
 async function recordTaskDevice(env, req, userId, attemptId, stage) {
   try {
     await event(env, req, 'task_device_' + stage, userId,
-      taskDeviceEventDetail(attemptId, req.headers.get('user-agent')));
+      taskDeviceEventDetail(attemptId, req.headers.get('user-agent'), req.headers.get('sec-ch-ua-model')));
   } catch (error) {
     // Không báo nhiệm vụ thất bại nếu phiên đã ghi thành công nhưng nhật ký phụ lỗi.
     console.warn('Task device audit unavailable:', String(error?.message || error));

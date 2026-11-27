@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { bbmktsChartUrl, createBbmktsSessionLink, bbmktsReviewState } from '../src/bbmkts.js';
+const attemptId = '12345678-1234-4123-8123-123456789abc';
+assert.equal(bbmktsChartUrl('krjkB'), 'https://bbmkts.com/site/link/chart/krjkB');
+assert.throws(()=>bbmktsChartUrl('../test'));
+const result=await createBbmktsSessionLink({attemptId,destination:'https://example.test/return',createLink:async () => ({alias:'demo1',shortUrl:'https://example.test/demo1'})});
+assert.equal(result.alias,'demo1');
+assert.equal(result.attemptId,attemptId);
+await assert.rejects(createBbmktsSessionLink({attemptId,destination:'https://example.test/return'}),/Chưa cấu hình/);
+assert.equal(bbmktsReviewState({views:1,captchaPassed:true}),'manual_review');
+assert.equal(bbmktsReviewState({views:0,captchaPassed:true,paidMetricConfirmed:true}),'awaiting_views');
+assert.equal(bbmktsReviewState({views:1,captchaPassed:true,paidMetricConfirmed:true}),'eligible_for_review');
+assert.equal(bbmktsReviewState({views:2,captchaPassed:true,paidMetricConfirmed:true}),'manual_review');
+assert.equal(bbmktsReviewState({views:1,paidMetricConfirmed:true}),'awaiting_return');
+assert.equal(bbmktsReviewState({views:null}),'stats_unavailable');
+console.log('PASS: BBMKTS foundation (mock provider only, no wallet credit).');
