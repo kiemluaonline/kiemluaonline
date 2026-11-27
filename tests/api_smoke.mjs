@@ -1704,7 +1704,7 @@ assert.match(adminTaskCode,/Admin kiểm tra bằng chứng/,'Show manual shortl
 assert.match(latestAdminClient,/admin-link-task-hint/,'Admin link setup notes present');
 assert.match(latestAdminClient,/if\(b\.category==='link'&&b\.review_mode!=='manual'\)/,
  'Admin form must not allow automatic credit mode for returned link');
-const adminReviewCode=latestAdminClient.slice(latestAdminClient.indexOf('async function adminReviews(){'),
+const adminReviewCode=latestAdminClient.slice(latestAdminClient.indexOf('function renderReviewEvidence(c){'),
  latestAdminClient.indexOf('async function adminWithdrawals(){'));
 assert.match(adminReviewCode,/pendingReturns/);
 assert.match(adminReviewCode,/Đã quay về và giải phép tính/);
