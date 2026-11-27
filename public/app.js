@@ -1156,6 +1156,10 @@ function taskForm(task={}){
  <div class="callout admin-link-task-hint" id="admin-link-task-hint" ${linkHint}>
  <strong>🔗 Link tự quay về:</strong> Chọn <strong>Admin kiểm tra bằng chứng</strong>, tạo nhiệm vụ <strong>Tắt / nháp</strong> rồi lưu. Sao chép trang đích ở danh sách bên dưới làm URL gốc khi rút gọn. Sau đó dán link đã rút gọn vào URL nhiệm vụ và bật công khai.
  <p class="note">Thành viên xem lưu ý → Bắt đầu → quay về → giải phép tính → Chờ đối soát. Chỉ duyệt sau khi xác minh nguồn thu hợp lệ; phép tính không chứng minh đối tác đã tính tiền.</p>
+ <h4>Cấu hình link riêng BBMKTS</h4>
+ ${select('bbmkts_creation','Cách tạo link',[['manual','Nhập link rút gọn thủ công'],['quicklink','Tự động — Quicklink (nháp)'],['developer','Tự động — Developer API (nháp)']],task.bbmkts_creation||'manual')}
+ ${select('bbmkts_verification','Cách xác minh BBMKTS',[['manual','Admin đối soát'],['api_view','Tự động — API Check View (nháp)']],task.bbmkts_verification||'manual')}
+ <p class="note">Hai lựa chọn tự động hiện chỉ lưu cấu hình nháp, chưa cấp link thật. Chọn Tắt / nháp và Admin kiểm tra bằng chứng khi lưu. Token sẽ được cấu hình ở máy chủ sau khi có tài liệu chính thức.</p>
  </div>
  ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
@@ -1183,6 +1187,7 @@ async function adminTasks(){
    <td class="num">${fmt(t.reward)} Lúa</td>
    <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
    <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
+    ${t.category==='link'&&t.bbmkts_creation&&t.bbmkts_creation!=='manual'?`<p class="small">BBMKTS: ${esc(t.bbmkts_creation)} · ${t.bbmkts_verification==='api_view'?'API Check View':'Admin đối soát'} (nháp)</p>`:''}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
    <td><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">🗑 Xóa</button></div></td>
@@ -1190,6 +1195,17 @@ async function adminTasks(){
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
  <section class="info-split">${taskForm(edit||{})}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, Lúa và hạn mức của từng nhiệm vụ. Thẻ thành viên tự lấy các số liệu này.</p><p>2. Với Link tự quay về, đặt chế độ <strong>Admin kiểm tra bằng chứng</strong>; lấy trang đích từ nút bên dưới để tạo link rút gọn.</p><p>3. Khi thành viên vượt link, quay về và giải phép tính, lượt sẽ được đưa vào <strong>Chờ đối soát</strong>.</p><p>4. Kiểm tra khoản thu hợp lệ rồi mới duyệt, chỉ bật công khai sau khi kiểm thử.</p><div class="callout">Quay về và giải CAPTCHA không chứng minh nhà cung cấp đã tính tiền. Chỉ dùng nguồn cho phép hình thức nhiệm vụ thưởng.</div></article></section>
+ <section class="card section"><h3>🔗 BBMKTS — Xác minh tự động</h3>
+ <p><strong>Chế độ hiện tại: Admin đối soát thủ công.</strong> API Check View đã được hỗ trợ để thử tra cứu trực tiếp. Chưa bật tự động cấp link hoặc cộng Lúa.</p>
+ <form data-form="bbmkts-check-view">
+ ${field('alias','Alias của link BBMKTS','', 'required maxlength="128" pattern="[A-Za-z0-9_\\-]+" placeholder="Ví dụ: krjkB" autocapitalize="off" autocomplete="off"')}
+ <button class="btn" type="submit">Kiểm tra View qua API</button>
+ <p class="note">Không cần API Token để kiểm tra. Dữ liệu trả về chỉ dùng đối soát, không sửa số dư. Không có view chưa có nghĩa là gian lận.</p>
+ <pre data-bbmkts-result role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
+ </form>
+ <label class="note"><input type="checkbox" disabled> Tự động duyệt và cộng Lúa qua BBMKTS (chưa sẵn sàng)</label>
+ <p class="note">Cần cấu hình API tạo link riêng, xác nhận cấu trúc JSON và lượt view được tính tiền trước khi mở chế độ này.</p>
+ </section>
  <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${d.tasks.length})</h3><p class="note">Số lượt hôm nay được tính theo giờ Việt Nam. Số lượt giới hạn mỗi tài khoản có thể cấu hình riêng cho từng nhiệm vụ.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>`;
 }
 async function adminUsers(){
@@ -1997,7 +2013,22 @@ app.addEventListener('submit',async e=>{
     toast(saveError?'Yêu cầu rút đã gửi, nhưng chưa lưu được tài khoản: '+saveError:savedOk?'Đã gửi yêu cầu rút và lưu tài khoản nhận tiền mặc định.':r.message,!!saveError);
   }
   if(kind==='settings'){await api('/api/admin/settings','PUT',b);state.meta=await api('/api/meta');toast('Đã lưu cài đặt.');await navigate('admin-settings');}
+  if(kind==='bbmkts-check-view'){
+    const output=form.querySelector('[data-bbmkts-result]');
+    if(output)output.textContent='Đang kiểm tra BBMKTS...';
+    try{
+      const result=await api('/api/admin/bbmkts/check-view','POST',{alias:String(b.alias||'').trim()});
+      if(output)output.textContent=JSON.stringify(result.data,null,2);
+      toast('Đã đọc dữ liệu BBMKTS. Chưa cộng Lúa.');
+    }catch(error){
+      if(output)output.textContent=error.message||'Không thể kiểm tra BBMKTS.';
+      throw error;
+    }
+    return;
+  }
   if(kind==='admin-task'){
+    if(b.category==='link'&&(b.bbmkts_creation!=='manual'||b.bbmkts_verification!=='manual')&&b.is_active==='1')
+      throw new Error('BBMKTS chưa kết nối hoàn chỉnh. Chọn Tắt / nháp để lưu cấu hình tự động.');
     if(b.category==='link'&&b.review_mode!=='manual')
       throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');
     const data={...b,reward:Number(b.reward),min_seconds:Number(b.min_seconds),is_active:b.is_active==='1'};

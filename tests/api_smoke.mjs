@@ -1615,8 +1615,8 @@ assert.match(rulesOverlay,/data-action="cancel-task-rules"/);
 assert.match(rulesOverlay,/data-action="confirm-task-rules"/);
 assert.doesNotMatch(rulesOverlay,/\/api\/tasks\//,
  'Mở bảng lưu ý không tạo phiên nhiệm vụ hay tiêu hao lượt');
-assert.match(rulesSource,/if\(act==='start-task'\)\{showTaskRules\(el.dataset.id\);return;\}/,
- 'Bấm nhiệm vụ phải mở thông báo trước');
+assert.match(rulesSource,/if\(act==='start-task'\)\{const t=state\.memberTasks\.find\(x=>x\.id===el\.dataset\.id\);if\(t\?\.category==='app'\)\{await startTask\(el\.dataset\.id\);return;\}showTaskRules\(el\.dataset\.id\);return;\}/,
+ 'Chỉ nhiệm vụ App mở trực tiếp; nhiệm vụ Link và các loại khác vẫn phải mở thông báo trước');
 assert.match(rulesSource,/if\(act==='confirm-task-rules'\)/);
 assert.match(rulesSource,/await startTask\(taskId\)/,
  'Chỉ bắt đầu phiên nhiệm vụ khi thành viên xác nhận');
@@ -1747,7 +1747,7 @@ console.log('PASS: anti-fraud flags very fast returns, allows only one active Li
 const oneReturnWorker=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 assert.match(oneReturnWorker,/async function linkReturnUsage\(/);
 assert.match(oneReturnWorker,/UPDATE task_attempts SET available_at=\?/);
-assert.match(oneReturnWorker,/attemptSeconds=task.category==='link'\?86400:1200/);
+assert.match(oneReturnWorker,/attemptSeconds=task\.category==='app'\?7\*86400:task\.category==='link'\?86400:1200/);
 assert.match(oneReturnWorker,/link_24h_count:used/);
 console.log('PASS: unique counted destination returns, 0/2 -> 1/2 -> 2/2, long genuine sessions, no duplicate or rejected return refunds.');
 
@@ -2037,3 +2037,21 @@ assert.equal(swipeAdmin.reloadCount,0,'Admin work must not be interrupted by mem
 assert.doesNotMatch(swipeGuardSource,/api\s*\(|\/api\/tasks|startTask\s*\(|processLinkReturn\s*\(/,
  'Returning without completing a task must never create a claim, consume quota or submit a return');
 console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, but normal navigation and Admin stay intact.');
+
+// BBMKTS draft settings persist without publishing or touching existing wallets.
+{
+ const config={title:'BBMKTS thử nghiệm cấu hình',category:'link',url:'',reward:10,review_mode:'manual',repeat_policy:'daily',is_active:false,bbmkts_creation:'developer',bbmkts_verification:'api_view'};
+ const made=await call('/api/admin/tasks','POST',config,admCookie);
+ assert.equal(made.status,201);
+ const taskId=made.data.id;
+ const listed=await call('/api/admin/tasks','GET',undefined,admCookie);
+ const item=listed.data.tasks.find(x=>x.id===taskId);
+ assert.equal(item.bbmkts_creation,'developer');
+ assert.equal(item.bbmkts_verification,'api_view');
+ assert.equal(Number(item.is_active),0);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',{...config,is_active:true},admCookie)).status,400);
+ const oldClient={...config,is_active:true};delete oldClient.bbmkts_creation;delete oldClient.bbmkts_verification;
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',oldClient,admCookie)).status,400);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'DELETE',{},admCookie)).status,200);
+ console.log('PASS: admin BBMKTS draft saved, old-client activation blocked, clean deletion.');
+}
