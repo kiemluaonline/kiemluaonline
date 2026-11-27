@@ -2055,3 +2055,18 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  assert.equal((await call('/api/admin/tasks/'+taskId,'DELETE',{},admCookie)).status,200);
  console.log('PASS: admin BBMKTS draft saved, old-client activation blocked, clean deletion.');
 }
+
+{
+ const source={id:'example_source',name:'Nguồn thử',host:'example.com',short_host:'example.com',create_url:'https://example.com/create?token={token}&url={destination}',short_path:'shortenedUrl',view_url:'https://example.com/view/{alias}',view_path:'views'};
+ assert.equal((await call('/api/admin/link-sources','POST',source,admCookie)).status,200);
+ const list=await call('/api/admin/link-sources','GET',undefined,admCookie);
+ assert.ok(list.data.sources.some(s=>s.id==='example_source'&&!s.create_ready));
+ assert.ok(list.data.sources.some(s=>s.id==='bbmkts'));
+ const cfg={title:'Nguồn chung thử nghiệm',category:'link',url:'',reward:1,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'example_source',link_source_creation:'api',link_source_verification:'api_view'};
+ assert.equal((await call('/api/admin/tasks','POST',cfg,admCookie)).status,400);
+ const made=await call('/api/admin/tasks','POST',{...cfg,is_active:false},admCookie);assert.equal(made.status,201);
+ const listed=await call('/api/admin/tasks','GET',undefined,admCookie);
+ assert.equal(listed.data.tasks.find(t=>t.id===made.data.id).link_source_id,'example_source');
+ assert.equal((await call('/api/admin/tasks/'+made.data.id,'DELETE',{},admCookie)).status,200);
+ console.log('PASS: generic source registry persists, built-in BBMKTS retained, incomplete source cannot publish.');
+}
