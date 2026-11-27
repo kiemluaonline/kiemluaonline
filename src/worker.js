@@ -743,7 +743,7 @@ const TASK_CLAIM_UPDATE=`UPDATE task_attempts SET consumed_by=?
       AND date(c.created_at,'+7 hours')=date('now','+7 hours'))<?)
  AND (?=0 OR NOT EXISTS
    (SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
-    WHERE c.ip LIKE ? AND c.user_id<>? AND t.category='link'
+    WHERE c.ip LIKE ? AND c.user_id<>? AND c.task_id=task_attempts.task_id AND t.category='link'
      AND c.status IN ('pending','approved')
      AND date(c.created_at,'+7 hours')=date('now','+7 hours')))
  AND (?=0 OR
@@ -773,14 +773,14 @@ function linkNetworkPattern(ip){
   return parts.slice(0,4).join(':')+':%';
  return value;
 }
-async function linkIPUsage(env,ip,userId){
+async function linkIPUsage(env,ip,userId,taskId=null){
  if(!ip||ip==='unknown'||ip==='local')return {total:0,other:0};
  const row=await env.DB.prepare(
   "SELECT COUNT(*) total, COALESCE(SUM(CASE WHEN c.user_id<>? THEN 1 ELSE 0 END),0) other "+
   "FROM task_completions c JOIN tasks t ON t.id=c.task_id "+
   "WHERE t.category='link' AND c.ip LIKE ? AND c.status IN ('pending','approved') "+
-  "AND date(c.created_at,'+7 hours')=date('now','+7 hours')"
- ).bind(userId,linkNetworkPattern(ip)).first();
+  "AND date(c.created_at,'+7 hours')=date('now','+7 hours') AND (? IS NULL OR c.task_id=?)"
+ ).bind(userId,linkNetworkPattern(ip),taskId,taskId).first();
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
 
@@ -829,7 +829,7 @@ async function linkIPQuota(env,req,userId,task,settings){
  if(ip==='unknown'||ip==='local')fail(429,'Không xác minh được IP mạng cho nhiệm vụ link. Vui lòng thử lại.',{quota_scope:'link_missing_ip'});
  const limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
  const exclusive=settings.quota_link_ip_exclusive!=='0';
- const used=await linkIPUsage(env,ip,userId);
+ const used=await linkIPUsage(env,ip,userId,task.id);
  const perTaskLimit=await linkTaskPerAccountLimit(env,task);
  const own=await env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND task_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours')")
    .bind(userId,task.id).first();
@@ -837,7 +837,7 @@ async function linkIPQuota(env,req,userId,task,settings){
  if(denied){
   await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id);
   fail(429,denied==='link_owner'
-   ?'Bạn đã làm hết nhiệm vụ hôm nay. IP này đã được tài khoản khác sử dụng để làm link rút gọn. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
+   ?'IP này đã được tài khoản khác sử dụng cho nhiệm vụ này hôm nay. Bạn vẫn có thể làm các nhiệm vụ khác đủ điều kiện. Lượt mới mở lúc 00:00 (giờ Việt Nam).'
    :denied==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
    :'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).',
    {quota_scope:denied});
@@ -1227,16 +1227,26 @@ async function handler(req, env) {
     const browserDenied=!browserCode?'link_browser_missing':
       settings.quota_link_device_exclusive!=='0'&&browserUsed.other>0?'link_browser_owner':
       browserLimit>0&&browserUsed.total>=browserLimit?'link_browser_limit':null;
-    const denied=settings.quota_link_ip_exclusive!=='0'&&used.other>0?'link_owner':
-      limit>0&&used.total>=limit?'link_limit':null;
-    // Record a shared-network warning even when the disabled task button prevents a POST.
-    const conflict=denied==='link_owner'?'link_ip_quota_denied':browserDenied==='link_browser_owner'?'link_browser_quota_denied':null;
-    if(conflict){
+    const denied=limit>0&&used.total>=limit?'link_limit':null;
+    const ipOwners=settings.quota_link_ip_exclusive!=='0'&&ip!=='unknown'&&ip!=='local'
+      ?await env.DB.prepare(`SELECT DISTINCT c.task_id FROM task_completions c JOIN tasks t ON t.id=c.task_id
+        WHERE t.category='link' AND t.is_active=1 AND c.ip LIKE ? AND c.user_id<>?
+          AND c.status IN ('pending','approved') AND date(c.created_at,'+7 hours')=date('now','+7 hours')`).bind(linkNetworkPattern(ip),me.id).all()
+      :{results:[]};
+    const ipBlockedTasks=new Set(ipOwners.results.map(r=>r.task_id));
+    // Record at most one passive warning per task/day on this network.
+    if(ipBlockedTasks.size){
+      const seen=await env.DB.prepare(`SELECT detail FROM risk_events WHERE user_id=? AND ip=? AND device_code=?
+        AND event_type='link_ip_quota_denied' AND date(created_at,'+7 hours')=date('now','+7 hours')`).bind(me.id,ip,browserCode).all();
+      const recorded=new Set(seen.results.map(r=>r.detail));
+      for(const taskId of ipBlockedTasks)if(!recorded.has('link_owner:'+taskId))
+        await event(env,req,'link_ip_quota_denied',me.id,'link_owner:'+taskId);
+    }
+    if(browserDenied==='link_browser_owner'){
       const seen=await env.DB.prepare(`SELECT id FROM risk_events WHERE user_id=? AND ip=? AND device_code=?
-        AND event_type=? AND (detail LIKE 'link_owner:%' OR detail LIKE 'link_browser_owner:%')
-        AND date(created_at,'+7 hours')=date('now','+7 hours') LIMIT 1`)
-        .bind(me.id,ip,browserCode,conflict).first();
-      if(!seen)await event(env,req,conflict,me.id,(denied==='link_owner'?'link_owner':'link_browser_owner')+':list');
+        AND event_type='link_browser_quota_denied' AND detail LIKE 'link_browser_owner:%'
+        AND date(created_at,'+7 hours')=date('now','+7 hours') LIMIT 1`).bind(me.id,ip,browserCode).first();
+      if(!seen)await event(env,req,'link_browser_quota_denied',me.id,'link_browser_owner:list');
     }
     const [overrides,counts,linkReturnCounts,unfinishedReturns]=await Promise.all([
       env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'link_source_task:%'").all(),
@@ -1265,11 +1275,11 @@ async function handler(req, env) {
       const max=t.category==='link'&&!isBbmktsTask(t,taskSource)?limits.get('link_task_limit:'+t.id)||1:1;
       const entry=done.get(t.id)||{n:0,pending:0};
       const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
-      const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||denied)):null;
+      const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||(ipBlockedTasks.has(t.id)?'link_owner':denied))):null;
       return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,link_needs_confirmation:t.category==='link'&&unfinished.has(t.id),
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
-    return json({tasks,link_quota:{limit,used:used.total,blocked:denied,
+    return json({tasks,link_quota:{limit,used:used.total,blocked:denied,scope:'task',
       exclusive:settings.quota_link_ip_exclusive!=='0',reset_timezone:'Asia/Ho_Chi_Minh',reset_at_hour:0},
       browser_quota:{limit:browserLimit,used:browserUsed.total,blocked:browserDenied,
         exclusive:settings.quota_link_device_exclusive!=='0',reset_timezone:'Asia/Ho_Chi_Minh',reset_at_hour:0}});
@@ -2200,7 +2210,7 @@ async function handler(req, env) {
         (SELECT u2.email FROM task_completions c JOIN tasks lt ON lt.id=c.task_id JOIN users u2 ON u2.id=c.user_id
          WHERE lt.category='link' AND c.user_id<>r.user_id AND c.status IN ('pending','approved')
           AND date(c.created_at,'+7 hours')=date(r.created_at,'+7 hours')
-          AND ((r.event_type='link_ip_quota_denied' AND c.ip=r.ip)
+          AND ((r.event_type='link_ip_quota_denied' AND c.ip=r.ip AND c.task_id=substr(r.detail,instr(r.detail,':')+1))
             OR (r.event_type='link_browser_quota_denied' AND c.device_code=r.device_code))
          ORDER BY c.created_at LIMIT 1) AS owner_email
         FROM risk_events r LEFT JOIN users u ON u.id=r.user_id

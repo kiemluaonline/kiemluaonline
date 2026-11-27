@@ -740,12 +740,13 @@ const linkC=await call('/api/admin/tasks','POST',{
 },admCookie);
 assert.equal(linkA.status,201);assert.equal(linkB.status,201);assert.equal(linkC.status,201);
 assert.equal((await claimFor(user2.cookie,linkA.data.id,linkIp,user2Device)).status,200);
-const wrongOwner=await call('/api/tasks/'+linkB.data.id+'/start','POST',{},user3.cookie,linkIp,user3Device);
+const wrongOwner=await call('/api/tasks/'+linkA.data.id+'/start','POST',{},user3.cookie,linkIp,user3Device);
 assert.equal(wrongOwner.status,429,JSON.stringify(wrongOwner));
 assert.equal(wrongOwner.data.quota_scope,'link_owner');
 const listWrongOwner=await call('/api/tasks','GET',undefined,user3.cookie,linkIp,user3Device);
-assert.equal(listWrongOwner.data.link_quota.blocked,'link_owner');
-assert.equal(listWrongOwner.data.tasks.find(x=>x.id===linkB.data.id).link_blocked,'link_owner');
+assert.equal(listWrongOwner.data.link_quota.blocked,null);
+assert.equal(listWrongOwner.data.tasks.find(x=>x.id===linkA.data.id).link_blocked,'link_owner');
+assert.equal(listWrongOwner.data.tasks.find(x=>x.id===linkB.data.id).link_blocked,null);
 assert.equal((await call('/api/me','GET',undefined,user3.cookie,linkIp)).status,200,'Người dùng vẫn đăng nhập được');
 assert.equal((await claimFor(user2.cookie,linkB.data.id,linkIp,user2Device)).status,200);
 const exceeded2=await call('/api/tasks/'+linkC.data.id+'/start','POST',{},user2.cookie,linkIp,user2Device);
@@ -768,7 +769,7 @@ assert.equal(v6Task1.status,201);assert.equal(v6Task2.status,201);
 const v6IPa='2401:d800:f641:5dcd:b19f:6845:c9c4:af71';
 const v6IPb='2401:d800:f641:5dcd:abcd:1234:5678:9abc';
 assert.equal((await claimFor(user2.cookie,v6Task1.data.id,v6IPa,user2Device)).status,200);
-const sharedV6=await call('/api/tasks/'+v6Task2.data.id+'/start','POST',{},user3.cookie,v6IPb,user3Device);
+const sharedV6=await call('/api/tasks/'+v6Task1.data.id+'/start','POST',{},user3.cookie,v6IPb,user3Device);
 assert.equal(sharedV6.status,429,JSON.stringify(sharedV6));
 assert.equal(sharedV6.data.quota_scope,'link_owner');
 // Dải IPv6 /64 khác có thể bắt đầu lại, vẫn chịu các quota toàn hệ thống.
@@ -796,13 +797,13 @@ const pendingSubmit=await call('/api/tasks/'+pendingTask.data.id+'/submit','POST
 },user2.cookie,pendingIP,user2Device);
 assert.equal(pendingSubmit.status,200,JSON.stringify(pendingSubmit));
 assert.equal(pendingSubmit.data.status,'pending');
-const pendingBlocked=await call('/api/tasks/'+pendingTask2.data.id+'/start','POST',{},user3.cookie,pendingIP,user3Device);
+const pendingBlocked=await call('/api/tasks/'+pendingTask.data.id+'/start','POST',{},user3.cookie,pendingIP,user3Device);
 assert.equal(pendingBlocked.status,429);
 assert.equal(pendingBlocked.data.quota_scope,'link_owner');
 const pendingRecord=sqlite.prepare('SELECT id FROM task_completions WHERE user_id=(SELECT user_id FROM task_completions WHERE task_id=? LIMIT 1) AND task_id=? ORDER BY created_at DESC LIMIT 1').get(pendingTask.data.id,pendingTask.data.id);
 const rejection=await call('/api/admin/reviews/'+pendingRecord.id,'POST',{status:'rejected'},admCookie);
 assert.equal(rejection.status,200);
-assert.equal((await claimFor(user3.cookie,pendingTask2.data.id,pendingIP,user3Device)).status,200);
+assert.equal((await claimFor(user3.cookie,pendingTask.data.id,pendingIP,user3Device)).status,200);
 // Kiểm thử Admin đặt một nhiệm vụ link cho cùng tài khoản làm 2 lần trong ngày Việt Nam.
 assert.equal((await call('/api/admin/settings','PUT',{quota_link_tasks_ip_24h:'4'},admCookie)).status,200);
 const twice=await call('/api/admin/tasks','POST',{
@@ -1045,39 +1046,42 @@ const staleClaim=await call('/api/tasks/'+ten[0]+'/submit','POST',{attempt_id:pr
 assert.equal(staleClaim.status,429);
 assert.equal(staleClaim.data.quota_scope,'link_owner');
 assert.equal((await call('/api/me','GET',undefined,secondPhone.cookie,sharedIP,phone2)).data.balance,0);
-for(const task of ten){
- const blocked=await call('/api/tasks/'+task+'/start','POST',{},secondPhone.cookie,sharedIP,phone2);
- assert.equal(blocked.status,429);assert.equal(blocked.data.quota_scope,'link_owner');
- assert.ok(blocked.data.error.startsWith('Bạn đã làm hết nhiệm vụ hôm nay.'));
-}
-// First owner can use remaining per-task allowance and all nine other links.
+const blocked=await call('/api/tasks/'+ten[0]+'/start','POST',{},secondPhone.cookie,sharedIP,phone2);
+assert.equal(blocked.status,429);assert.equal(blocked.data.quota_scope,'link_owner');
+assert.match(blocked.data.error,/nhiệm vụ này/);
+const openList=await call('/api/tasks','GET',undefined,secondPhone.cookie,sharedIP,phone2);
+assert.equal(openList.data.tasks.find(t=>t.id===ten[0]).link_blocked,'link_owner');
+assert.ok(ten.slice(1).every(id=>openList.data.tasks.find(t=>t.id===id).link_blocked===null));
+// Second phone can use another task on the same IP; first phone then cannot.
+assert.equal((await claimFor(secondPhone.cookie,ten[1],sharedIP,phone2)).status,200);
+assert.equal((await call('/api/tasks/'+ten[1]+'/start','POST',{},firstPhone.cookie,sharedIP,phone1)).data.quota_scope,'link_owner');
 assert.equal((await claimFor(firstPhone.cookie,ten[0],sharedIP,phone1)).status,200);
 assert.equal((await claimFor(firstPhone.cookie,ten[0],sharedIP,phone1)).data.quota_scope,'link_task_limit');
-for(const task of ten.slice(1))assert.equal((await claimFor(firstPhone.cookie,task,sharedIP,phone1)).status,200);
-assert.equal((await call('/api/me','GET',undefined,firstPhone.cookie,sharedIP,phone1)).data.balance,11);
-const sameDeviceNewIP=await call('/api/tasks/'+ten[1]+'/start','POST',{},secondPhone.cookie,'203.0.113.241',phone1);
+for(const task of ten.slice(2))assert.equal((await claimFor(firstPhone.cookie,task,sharedIP,phone1)).status,200);
+assert.equal((await call('/api/me','GET',undefined,firstPhone.cookie,sharedIP,phone1)).data.balance,10);
+const sameDeviceNewIP=await call('/api/tasks/'+ten[2]+'/start','POST',{},secondPhone.cookie,'203.0.113.241',phone1);
 assert.equal(sameDeviceNewIP.status,429);assert.equal(sameDeviceNewIP.data.quota_scope,'link_browser_owner');
-const warnings=await call('/api/admin/risk-events','GET',undefined,admCookie);
-assert.ok(warnings.data.link_alert_count>=12);
-assert.ok(warnings.data.link_alerts.some(r=>r.email==='phonetwo@example.com'&&r.owner_email==='phoneone@example.com'&&r.task_title==='Shared network task 0'));
-assert.equal((await call('/api/admin/risk-events','GET',undefined,secondPhone.cookie,sharedIP,phone2)).status,403);
 const blockedList=await call('/api/tasks','GET',undefined,secondPhone.cookie,sharedIP,phone2);
 assert.equal(blockedList.data.link_quota.reset_at_hour,0);
-assert.ok(ten.every(id=>blockedList.data.tasks.find(t=>t.id===id).link_blocked==='link_owner'));
+assert.ok(ten.filter((_,i)=>i!==1).every(id=>blockedList.data.tasks.find(t=>t.id===id).link_blocked==='link_owner'));
+const warnings=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.ok(warnings.data.link_alerts.some(r=>r.email==='phonetwo@example.com'&&r.owner_email==='phoneone@example.com'&&r.task_title==='Shared network task 0'));
+assert.equal((await call('/api/admin/risk-events','GET',undefined,secondPhone.cookie,sharedIP,phone2)).status,403);
 // Previous VN day, even if less than 24 hours ago: ownership and daily counts reset.
 const firstUserId=sqlite.prepare('SELECT id FROM users WHERE email=?').get('phoneone@example.com').id;
 sqlite.prepare("UPDATE task_completions SET created_at=datetime('now','+7 hours','start of day','-7 hours','-1 second') WHERE user_id=?").run(firstUserId);
 assert.equal((await claimFor(secondPhone.cookie,ten[0],sharedIP,phone2)).status,200);
 const nextDayList=await call('/api/tasks','GET',undefined,secondPhone.cookie,sharedIP,phone2);
 assert.equal(nextDayList.data.tasks.find(t=>t.id===ten[0]).link_24h_count,1);
-console.log('PASS: 10 links allowed for first owner; second account blocked on shared IP; remaining per-task slots protected; changed IP/same device blocked; midnight reset; named Admin alerts; Admin-only access.');
+console.log('PASS: shared IP ownership per task in both directions; remaining per-task slots protected; changed IP/same device blocked; midnight reset; named Admin alerts; Admin-only access.');
 
 const passive=await call('/api/tasks','GET',undefined,firstPhone.cookie,sharedIP,phone1);
-assert.equal(passive.data.link_quota.blocked,'link_owner');
-const countPassive=()=>sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND detail='link_owner:list'").get(firstUserId).n;
-assert.equal(countPassive(),1);
+assert.equal(passive.data.link_quota.blocked,null);
+assert.equal(passive.data.tasks.find(t=>t.id===ten[0]).link_blocked,'link_owner');
+const countPassive=()=>sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND detail=?").get(firstUserId,'link_owner:'+ten[0]).n;
+const beforePassive=countPassive();assert.ok(beforePassive>=1);
 await call('/api/tasks','GET',undefined,firstPhone.cookie,sharedIP,phone1);
-assert.equal(countPassive(),1,'Refresh does not duplicate daily shared-IP warning');
+assert.equal(countPassive(),beforePassive,'Refresh does not duplicate daily shared-IP warning');
 console.log('PASS: passive shared-IP warning appears when listing tasks, deduplicated per day.');
 
 // ==== Cảnh báo IP thật và trạng thái tài khoản tạm khóa/chi trả ====
