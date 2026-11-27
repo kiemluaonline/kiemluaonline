@@ -800,10 +800,11 @@ assert.equal(pendingSubmit.data.status,'pending');
 const pendingBlocked=await call('/api/tasks/'+pendingTask.data.id+'/start','POST',{},user3.cookie,pendingIP,user3Device);
 assert.equal(pendingBlocked.status,429);
 assert.equal(pendingBlocked.data.quota_scope,'link_owner');
+assert.equal((await claimFor(user3.cookie,pendingTask2.data.id,pendingIP,user3Device)).status,200,'Pending on one task must not block another task');
 const pendingRecord=sqlite.prepare('SELECT id FROM task_completions WHERE user_id=(SELECT user_id FROM task_completions WHERE task_id=? LIMIT 1) AND task_id=? ORDER BY created_at DESC LIMIT 1').get(pendingTask.data.id,pendingTask.data.id);
 const rejection=await call('/api/admin/reviews/'+pendingRecord.id,'POST',{status:'rejected'},admCookie);
 assert.equal(rejection.status,200);
-assert.equal((await claimFor(user3.cookie,pendingTask.data.id,pendingIP,user3Device)).status,200);
+assert.equal((await call('/api/tasks/'+pendingTask.data.id+'/start','POST',{},user3.cookie,pendingIP,user3Device)).status,200);
 // Kiểm thử Admin đặt một nhiệm vụ link cho cùng tài khoản làm 2 lần trong ngày Việt Nam.
 assert.equal((await call('/api/admin/settings','PUT',{quota_link_tasks_ip_24h:'4'},admCookie)).status,200);
 const twice=await call('/api/admin/tasks','POST',{
