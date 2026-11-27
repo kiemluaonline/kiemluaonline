@@ -1704,7 +1704,7 @@ assert.match(adminTaskCode,/Admin kiểm tra bằng chứng/,'Show manual shortl
 assert.match(latestAdminClient,/admin-link-task-hint/,'Admin link setup notes present');
 assert.match(latestAdminClient,/if\(b\.category==='link'&&b\.review_mode!=='manual'\)/,
  'Admin form must not allow automatic credit mode for returned link');
-const adminReviewCode=latestAdminClient.slice(latestAdminClient.indexOf('async function adminReviews(){'),
+const adminReviewCode=latestAdminClient.slice(latestAdminClient.indexOf('function renderReviewEvidence(c){'),
  latestAdminClient.indexOf('async function adminWithdrawals(){'));
 assert.match(adminReviewCode,/pendingReturns/);
 assert.match(adminReviewCode,/Đã quay về và giải phép tính/);
@@ -1973,7 +1973,7 @@ console.log('PASS: public paid ticker cycles old -> new, polls automatically eve
 // Giao diện compact dùng chung: được nạp SAU các stylesheet cũ để thay đổi
 // khoảng trắng mà không sửa dữ liệu, điều kiện xét thưởng hay API.
 const compactStyle=readFileSync(new URL('../public/compact.css',import.meta.url),'utf8');
-const compactLink='/compact.css?v=20261118-admin-device-audit-v1';
+const compactLink='/compact.css?v=20261128-compact-review-v2';
 assert.ok(publicHomepage.includes(compactLink),'Compact CSS must be loaded on the public app shell');
 assert.ok(publicHomepage.indexOf(compactLink)>publicHomepage.indexOf('/payout-accounts.css?'),
  'Compact stylesheet must load last to override member/Admin page styles');
@@ -2321,4 +2321,24 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(hint(manual,'api'),/Alias vẫn được lưu/);
  assert.match(hint({...views,auto_reward_ready:true},'api'),/đúng 1 View/);
  console.log('PASS: Admin source capability choices, old settings preserved, helpful guidance.');
+}
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function renderReviewCheckView('),client.indexOf('async function adminReviews()'));
+ const render=new Function('esc','fmt','dt','chip',code+'\nreturn renderCompactReview;')(v=>String(v??''),String,String,String);
+ const ip='2401:d800:abcd:1234:1111:2222:3333:4444';
+ const sample={category:'link',id:'fixture',name:'Test',email:'test@example.com',title:'TrafficVN',reward:250,status:'pending',started_device:'Android · Chrome',submitted_device:'Android · Chrome',started_ip:ip,submitted_ip:ip,attempt_id:'session-fixture',started_device_code:'device-start',device_code:'device-end',evidence:'[LINK_RETURN_V1] test; Nguồn: trafficvn; Alias: test_alias; View API: Chưa xác nhận (chờ đối soát doanh thu)'};
+ const html=render(sample);
+ assert.match(html,/data-review-card/);assert.match(html,/IP mở \/ gửi/);
+ assert.equal((html.match(/data-action="copy-ip"/g)||[]).length,1);
+ assert.match(html,/data-value="2401:d800:abcd:1234:1111:2222:3333:4444"/);
+ assert.match(html,/session-fixture/);assert.match(html,/device-start/);assert.match(html,/device-end/);
+ assert.match(html,/test_alias/);assert.match(html,/data-status="approved"/);assert.match(html,/data-status="rejected"/);
+ const different=render({...sample,submitted_ip:'203.0.113.5',submitted_device:'iPhone'});
+ assert.equal((different.match(/data-action="copy-ip"/g)||[]).length,2);
+ assert.match(different,/Thiết bị thay đổi/);assert.match(different,/Xem chi tiết kỹ thuật/);assert.match(html,/Ghi nhận phiên:/);
+ assert.match(render({...sample,status:'approved',has_evidence:true}),/data-action="erase-evidence"/);
+ assert.match(render({...sample,evidence:sample.evidence+' [LINK_RETURN_FAST_V1]'}),/quay về quá nhanh/);
+ console.log('PASS: compact link review retains evidence, full IP copy, audit details, actions and fast-return warning.');
 }
