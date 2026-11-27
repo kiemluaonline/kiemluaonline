@@ -2070,3 +2070,45 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  assert.equal((await call('/api/admin/tasks/'+made.data.id,'DELETE',{},admCookie)).status,200);
  console.log('PASS: generic source registry persists, built-in BBMKTS retained, incomplete source cannot publish.');
 }
+
+{
+ const source={id:'mock_source',name:'Nguồn mô phỏng',host:'example.com',short_host:'example.com',create_url:'https://example.com/create?token={token}&url={destination}',short_path:'shortenedUrl',view_url:'https://example.com/view/{alias}',view_path:'views'};
+ env.LINK_PROVIDER_TOKEN_MOCK_SOURCE='mock-only-secret';
+ assert.equal((await call('/api/admin/link-sources','POST',source,admCookie)).status,200);
+ const cfg={title:'Link riêng mô phỏng',category:'link',url:'',reward:11,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'mock_source',link_source_creation:'api',link_source_verification:'api_view'};
+ const made=await call('/api/admin/tasks','POST',cfg,admCookie);assert.equal(made.status,201,JSON.stringify(made));
+ const taskId=made.data.id;
+ const ip='203.0.113.211',device='c1234567-1234-4123-8123-123456789abc';
+ const member=await call('/api/auth/register','POST',{name:'Thử nguồn chung',email:'generic-source-member@example.com',password:'test-password-2026',accept_terms:'yes'},'',ip,device);
+ assert.equal(member.status,201,JSON.stringify(member));
+ const balance=(await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance;
+ let creates=0,checks=0;
+ const originalFetch=globalThis.fetch;
+ globalThis.fetch=async (raw,options)=>{
+  const u=new URL(raw);assert.equal(u.hostname,'example.com');assert.equal(options.redirect,'error');
+  if(u.pathname==='/create'){
+   creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');assert.equal(u.searchParams.get('url'),'https://nhiemvu.click/?link_return='+taskId);
+   return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
+  }
+  if(u.pathname==='/view/mock1'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
+  throw Error('Unexpected provider URL');
+ };
+ try{
+  const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
+  assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock1');
+  assert.ok(!JSON.stringify(start).includes('mock-only-secret'));
+  const resumed=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
+  assert.equal(resumed.data.attempt_id,start.data.attempt_id);assert.equal(creates,1);
+  const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id,answer:start.data.a+start.data.b,evidence:'mock proof direct bypass'},member.cookie,ip,device);
+  assert.equal(direct.status,409);
+  const path='/api/tasks/'+taskId+'/return';
+  const challenge=await call(path,'POST',{},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
+  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b},member.cookie,ip,device);
+  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
+  const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
+  assert.match(record.evidence,/Alias: mock1; View API: 1/);
+  assert.equal(record.status,'pending');
+  assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
+ }finally{globalThis.fetch=originalFetch;delete env.LINK_PROVIDER_TOKEN_MOCK_SOURCE;}
+ console.log('PASS: real member start path with mock provider, one alias reused, direct submit blocked, API view audit, wallet untouched.');
+}
