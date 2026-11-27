@@ -1715,7 +1715,7 @@ const cleanedReturnMethod=cleanedReturnClient.slice(
  cleanedReturnClient.indexOf('async function boot(){')
 );
 assert.match(cleanedReturnMethod,/params\.set\('return_attempt',result\.attempt_id\)/);
-assert.match(cleanedReturnMethod,/rememberReturn\(\)/);
+assert.match(cleanedReturnMethod,/rememberReturn\(result\.expires_at\)/);
 const finishReturnClient=cleanedReturnClient.slice(cleanedReturnClient.indexOf('async function finishLinkReturn('),cleanedReturnClient.indexOf('function showReturnGate('));
 assert.ok(finishReturnClient.indexOf('renderTaskResultModal')<finishReturnClient.indexOf('clearLinkReturnQuery()'));
 assert.match(cleanedReturnClient,/params\.delete\('link_return'\)/);

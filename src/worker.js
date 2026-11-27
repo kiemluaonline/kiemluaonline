@@ -1429,7 +1429,7 @@ async function handler(req, env) {
       ]);
       if(approved[0].meta?.changes){await giveReferral(env,me.id,settings);return json({ok:true,status:'approved',reward:task.reward,message:'Đã xác minh lượt hợp lệ và cộng Lúa.'});}
     }
-    return json({ok:true,status:'pending',
+    return json({ok:true,status:'pending',reward:task.reward,
       message:'Đã nhận yêu cầu xác minh. Đang chờ Admin đối soát; chưa cộng Lúa.'});
   }
   const startMatch = p.match(/^\/api\/tasks\/([^/]+)\/start$/);

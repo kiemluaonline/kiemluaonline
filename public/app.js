@@ -225,27 +225,35 @@ function clearLinkReturnQuery(){
 function returnStorageKey(){
  return state.me?.user?.id?'tram-lua.return.'+state.me.user.id:'';
 }
-function rememberReturn(){
- try{const key=returnStorageKey();if(key)localStorage.setItem(key,location.pathname+location.search);}catch{}
+function rememberReturn(expiresAt){
+ try{const key=returnStorageKey();if(key)localStorage.setItem(key,JSON.stringify({url:location.pathname+location.search,expiresAt:Number(expiresAt)}));}catch{}
 }
 function resumeStoredReturn(){
  try{
   const key=returnStorageKey(),value=key&&localStorage.getItem(key);
   if(!value)return false;
-  const target=new URL(value,location.origin);
+  const saved=JSON.parse(value);
+  if(!Number.isFinite(saved.expiresAt)||saved.expiresAt<=Date.now()){localStorage.removeItem(key);return false;}
+  const target=new URL(saved.url,location.origin);
   if(target.origin!==location.origin||!['/','/verify-link'].includes(target.pathname)||!target.searchParams.has('link_return'))return false;
   location.replace(target.pathname+target.search);return true;
  }catch{return false;}
 }
 async function finishLinkReturn(result){
  // Keep the recovery URL until the member page and real server receipt are displayed.
- state.returnChallenge=null;
- renderShell();
- await afterAction('history');
- if(result.status==='rejected')toast('Nhiệm vụ đã được xử lý: Từ chối.',true);
- else renderTaskResultModal(result,{linkReturn:true});
- try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
- clearLinkReturnQuery();
+ const key=returnStorageKey();
+ try{
+  renderShell();
+  await afterAction('history');
+  if(!state.me)throw new Error('Không tải được tài khoản. Hãy thử lại để xem kết quả đã lưu.');
+  if(result.status==='rejected')toast('Nhiệm vụ đã được xử lý: Từ chối.',true);
+  else renderTaskResultModal(result,{linkReturn:true});
+  state.returnChallenge=null;
+  try{if(key)localStorage.removeItem(key);}catch{}
+  clearLinkReturnQuery();
+ }catch(error){
+  showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
+ }
 }
 function showReturnGate(content){
  app.className='';
@@ -274,7 +282,7 @@ async function processLinkReturn(){
   if(!result.challenge||!result.attempt_id)throw new Error('Máy chủ chưa trả về phép tính xác minh.');
   params.set('return_attempt',result.attempt_id);
   window.history.replaceState(null,'',location.pathname+'?'+params.toString());
-  rememberReturn();
+  rememberReturn(result.expires_at);
   state.returnChallenge={taskId,linkSession,attemptId:result.attempt_id,a:result.a,b:result.b};
   renderLinkReturnModal();
  }catch(error){
