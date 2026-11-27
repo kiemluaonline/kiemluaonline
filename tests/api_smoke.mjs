@@ -2301,3 +2301,19 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  await assert.rejects(()=>createSourceLink({...source,id:'other'},dest,'',mock('http://trafficvn.com/get/Ab123xy')),/HTTP, yêu cầu HTTPS/);
  console.log('PASS: TrafficVN HTTPS normalization only for exact host and documented alias routes.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function sourceVerificationChoices('),client.indexOf('function taskForm('));
+ const {sourceVerificationChoices:choices,sourceVerificationHint:hint}=new Function(code+'\nreturn {sourceVerificationChoices,sourceVerificationHint};')();
+ const manual={id:'trafficvn',create_ready:true};
+ const views={...manual,view_url:true,view_path:true};
+ assert.deepEqual(choices(manual,'api').map(x=>x[0]),['manual']);
+ assert.deepEqual(choices(views,'api').map(x=>x[0]),['manual','api_view']);
+ assert.deepEqual(choices({...views,auto_reward_ready:true},'api').map(x=>x[0]),['manual','api_view','api_auto']);
+ assert.deepEqual(choices({...views,auto_reward_ready:true},'manual').map(x=>x[0]),['manual']);
+ assert.match(choices(manual,'api','api_auto').at(-1)[1],/Cấu hình cũ/);
+ assert.match(hint(manual,'api'),/Alias vẫn được lưu/);
+ assert.match(hint({...views,auto_reward_ready:true},'api'),/đúng 1 View/);
+ console.log('PASS: Admin source capability choices, old settings preserved, helpful guidance.');
+}
