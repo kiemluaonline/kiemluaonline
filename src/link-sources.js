@@ -91,7 +91,13 @@ export async function createSourceLink(source,destination,token,fetcher=fetch){
   if(typeof link!=='string')throw diagnostic('Không tìm thấy link trong trường JSON đã cấu hình. Kiểm tra tên trường chứa link, phân biệt chữ hoa và chữ thường.');
   if(link.length>700||(token&&link.includes(token)))throw diagnostic('Link trả về không hợp lệ.');
   let u;try{u=new URL(link);}catch{throw diagnostic('Trường JSON chứa link không phải URL hợp lệ.');}
-  if(u.protocol!=='https:'||u.hostname!==source.short_host||u.port||u.username||u.password||u.hash)throw diagnostic('Link trả về khác tên miền cấu hình.');
+  if(u.protocol!=='https:')throw diagnostic(u.protocol==='http:'?'API trả link HTTP, yêu cầu HTTPS.':'API trả link không dùng giao thức HTTPS.');
+  if(u.username||u.password||u.port||u.hash)throw diagnostic('API trả URL có thông tin đăng nhập, cổng riêng hoặc fragment; không được phép.');
+  if(u.hostname!==source.short_host){
+    if(u.hostname==='www.'+source.short_host)throw diagnostic('API trả tên miền có www. ở đầu; kiểm tra tên miền link rút gọn thực tế.');
+    if(source.short_host==='www.'+u.hostname)throw diagnostic('API trả tên miền không có www.; kiểm tra tên miền link rút gọn thực tế.');
+    throw diagnostic('API trả tên miền khác tên miền link rút gọn đã cấu hình.');
+  }
   const alias=source.alias_path?valueAt(data,source.alias_path):u.pathname.split('/').filter(Boolean).pop();
   if(typeof alias!=='string'||!aliasPattern.test(alias)||(token&&alias.includes(token)))throw diagnostic('Alias trả về không hợp lệ.');
   return {alias,shortUrl:u.href};
