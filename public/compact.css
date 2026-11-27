@@ -347,3 +347,12 @@
 .layout .review-compact-actions .btn-row{margin:0;display:flex;flex-wrap:wrap;gap:8px}
 .layout .review-compact-actions .btn{min-height:44px;flex:1 1 auto}
 @media(max-width:380px){.layout .review-check-copy{flex-wrap:wrap}.layout .review-compact-head{align-items:center}}
+
+.layout .review-compact-card{gap:5px;padding:10px 11px}
+.layout .review-compact-audit{gap:2px}
+.layout .review-compact-meta{padding:2px 0 5px}
+.layout .review-check-view{margin:4px 0 0;padding:6px 8px}
+.layout .review-check-copy{margin:0}
+.layout .review-compact-card .review-compact-details>summary{padding:10px 0;min-height:44px}
+.layout .review-full-evidence{white-space:pre-wrap;overflow-wrap:anywhere}
+.layout .review-compact-card .review-compact-actions .btn-row.section{margin:0}

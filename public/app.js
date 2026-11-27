@@ -1320,7 +1320,7 @@ function renderReviewCheckView(c){
  const [,source,alias,views]=match;
  return `<div class="callout review-check-view"><div class="review-check-title"><strong>Mã Check View</strong><span class="small">Nguồn: ${esc(source.toUpperCase())}</span></div><div class="review-check-copy"><code>${esc(alias)}</code><button type="button" class="btn alt sm" data-action="copy-check-view" data-value="${esc(alias)}">📋 Sao chép mã</button></div><div class="small">View API lúc xác minh: ${esc(views)}</div></div>`;
 }
-function renderReviewEvidence(c){return `${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div>${renderReviewCheckView(c)}<details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}`;}
+function renderReviewEvidence(c,compact=false){return `${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div>${renderReviewCheckView(c)}${compact?'':`<details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`}`:esc(c.evidence||'(không có)')}`;}
 function renderReviewActions(c){return `${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:c.has_evidence||c.status==='rejected'&&c.category==='app'?`<div class="btn-row section">${c.status==='rejected'&&c.category==='app'&&!String(c.period_key||'').startsWith('app_retry_rejected:')?`<button class="btn alt sm" data-action="allow-app-retry" data-id="${esc(c.id)}">↻ Cho làm lại</button>`:''}${c.has_evidence?`<button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button>`:''}</div>`:''}`;}
 function reviewIPPreview(ip){
  const value=String(ip||'');
@@ -1329,26 +1329,36 @@ function reviewIPPreview(ip){
 function renderCompactReviewIP(label,ip){
  return `<div class="review-ip-row"><span><strong>${esc(label)}</strong> <code title="${esc(ip||'')}" >${esc(reviewIPPreview(ip))}</code></span>${ip?`<button type="button" class="btn alt sm" data-action="copy-ip" data-value="${esc(ip)}" aria-label="Sao chép ${esc(label)}">📋</button>`:''}</div>`;
 }
+function reviewTimeSummary(start,end){
+ const a=dt(start),b=dt(end);
+ const parts=v=>String(v).match(/^(\d{1,2}:\d{2})(?::\d{2})?[,\s]+(\d{1,2}\/\d{1,2}\/\d{4})$/);
+ const x=parts(a),y=parts(b);
+ return x&&y&&x[2]===y[2]?x[1]+' → '+y[1]+' · '+x[2]:a+' → '+b;
+}
 function renderCompactReview(c){
  const sameDevice=c.started_device&&c.started_device===c.submitted_device;
  const sameIP=c.started_ip&&c.started_ip===c.submitted_ip;
  return `<article class="review-compact-card" data-review-card>
   <div class="review-compact-head"><div class="review-member"><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div></div>${chip(c.status)}</div>
   <div class="review-compact-meta"><strong>${esc(c.title)}</strong><strong class="review-reward">${fmt(c.reward)} Lúa</strong></div>
-  <div class="review-compact-proof">${renderReviewEvidence(c)}</div>
   <div class="review-compact-audit">
-    <div><strong>Bắt đầu:</strong> ${dt(c.started_at)}</div><div><strong>Gửi xác minh:</strong> ${dt(c.submitted_at)}</div>
-    ${sameDevice?`<div><strong>Thiết bị mở / gửi:</strong> ${esc(c.started_device)}</div>`:`<div><strong>Thiết bị mở:</strong> ${esc(c.started_device||'Chưa ghi nhận')}</div><div><strong>Thiết bị gửi:</strong> ${esc(c.submitted_device||'Chưa ghi nhận')}</div>`}
-    ${sameIP?renderCompactReviewIP('IP mở / gửi:',c.started_ip):renderCompactReviewIP('IP bắt đầu:',c.started_ip)+renderCompactReviewIP('IP gửi:',c.submitted_ip)}
+    <div><strong>Thời gian:</strong> ${esc(reviewTimeSummary(c.started_at,c.submitted_at))}${sameDevice?' · '+esc(c.started_device):''}</div>
+    ${sameDevice?'':`<div><strong>Thiết bị thay đổi:</strong> ${esc(c.started_device||'Chưa ghi nhận')} → ${esc(c.submitted_device||'Chưa ghi nhận')}</div>`}
+    ${sameIP?renderCompactReviewIP('IP mở / gửi:',c.started_ip):`<div class="small muted">IP mở / gửi khác nhau hoặc chưa đủ dữ liệu · xem chi tiết</div>`}
   </div>
-  <details class="review-compact-details"><summary>Chi tiết IP, phiên / mã trình duyệt</summary>
+  <div class="review-compact-proof">${renderReviewEvidence(c,true)}</div>
+  <details class="review-compact-details"><summary>Xem chi tiết kỹ thuật</summary>
     <div><strong>Thời gian ghi hồ sơ:</strong> ${dt(c.created_at)}</div>
+    <div><strong>Bắt đầu:</strong> ${dt(c.started_at)}</div><div><strong>Gửi xác minh:</strong> ${dt(c.submitted_at)}</div>
+    <div><strong>Thiết bị mở:</strong> ${esc(c.started_device||'Chưa ghi nhận')}</div><div><strong>Thiết bị gửi:</strong> ${esc(c.submitted_device||'Chưa ghi nhận')}</div>
+    ${sameIP?'':renderCompactReviewIP('IP bắt đầu:',c.started_ip)+renderCompactReviewIP('IP gửi:',c.submitted_ip)}
     <div><strong>IP bắt đầu:</strong> <code>${esc(c.started_ip||'Chưa ghi nhận')}</code></div>
     <div><strong>IP gửi:</strong> <code>${esc(c.submitted_ip||'Chưa ghi nhận')}</code></div>
     <div><strong>Mã phiên:</strong> <code>${esc(c.attempt_id||'Chưa ghi nhận')}</code></div>
     <div><strong>Mã lúc mở:</strong> <code>${esc(c.started_device_code||'Chưa ghi nhận')}</code></div>
     <div><strong>Mã lúc gửi:</strong> <code>${esc(c.device_code||'Chưa ghi nhận')}</code></div>
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
+    ${!c.evidence_removed&&String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<div><strong>Ghi nhận phiên:</strong> <div class="review-full-evidence">${esc(c.evidence)}</div></div>`:''}
   </details>
   <div class="review-compact-actions">${renderReviewActions(c)}</div>
  </article>`;
