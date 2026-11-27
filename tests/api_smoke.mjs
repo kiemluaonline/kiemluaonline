@@ -424,6 +424,8 @@ assert.equal((await call(`/api/admin/reviews/${pending.id}`,'POST',{status:'appr
 assert.equal((await call('/api/me','GET',undefined,refCookie)).data.balance,25);
 const history=await call('/api/history','GET',undefined,cookie,'203.0.113.10');
 assert.ok(history.data.wallet_entries.length>=4);
+assert.ok(history.data.wallet_entries.some(w=>w.reference_type==='task'&&w.amount>0));
+assert.ok(history.data.wallet_entries.filter(w=>w.reference_type==='task'&&w.amount>0).every(w=>w.reason==='Nhiệm vụ đã duyệt'));
 // Chỉ duyệt trước khi thanh toán; thử bỏ qua bước duyệt phải bị từ chối.
 adjustPayoutTestWallet(userMe.data.user.id,69980);
 const w2=await call('/api/withdrawals','POST',{
@@ -2252,6 +2254,15 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
   const completion=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(taskId);assert.equal(completion.status,'approved');
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
+  const memberHistory=await call('/api/history','GET',undefined,member.cookie,ip,device);
+  assert.equal(memberHistory.status,200);
+  assert.equal(memberHistory.data.wallet_entries.find(w=>w.reference_id===completion.id).reason,'Nhiệm vụ đã duyệt');
+  assert.equal(memberHistory.data.completions.find(c=>c.id===completion.id).evidence,'Đã gửi xác minh nhiệm vụ');
+  assert.equal(memberHistory.data.completions.find(c=>c.id===completion.id).status,'approved');
+  assert.equal(sqlite.prepare('SELECT reason FROM wallet_entries WHERE reference_id=? AND reference_type=?').get(completion.id,'task').reason,'Tự động xác minh nguồn link');
+  assert.match(completion.evidence,/API_AUTO_V1/);
+  const adminHistory=await call('/api/admin/reviews','GET',undefined,admCookie);
+  assert.match(adminHistory.data.reviews.find(c=>c.id===completion.id).evidence,/Alias: autoFixture/);
   const replay=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
   assert.equal(replay.status,200);assert.equal(replay.data.status,'approved');assert.equal(replay.data.recovered,true);
   const refreshed=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);
