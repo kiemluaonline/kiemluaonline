@@ -4,7 +4,7 @@ import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
 import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
 import { fetchBbmktsViewJson, bbmktsTaskConfig } from './bbmkts.js';
-import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,SourceDiagnosticError,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
+import { SOURCE_PREFIX,TASK_SOURCE_PREFIX,ATTEMPT_SOURCE_PREFIX,SourceDiagnosticError,autoRewardEnabled,autoRewardEligible,normalizeSource,getSource,presentSource,sourceReady,sourceToken,createSourceLink,checkSourceView,validateTaskSource,getTaskSource,getAttemptSource } from './link-sources.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -1367,12 +1367,11 @@ async function handler(req, env) {
     const fastReturn=await env.DB.prepare(
       "SELECT id FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=? LIMIT 1"
     ).bind(me.id,riskKey).first();
-    let sourceAudit='';
+    let sourceAudit='',views=null,verifiedSource=null;
     if(sourceLink){
-      let views=null;
-      if(sourceLink.verification==='api_view')try{
+      if(['api_view','api_auto'].includes(sourceLink.verification))try{
         const source=await getSource(env,sourceLink.id);
-        if(source&&JSON.stringify(source)===sourceLink.config)views=await checkSourceView(source,sourceLink.alias,sourceToken(env,source));
+        if(source&&JSON.stringify(source)===sourceLink.config){views=await checkSourceView(source,sourceLink.alias,sourceToken(env,source));verifiedSource=source;}
       }catch{}
       sourceAudit='; Nguồn: '+sourceLink.id+'; Alias: '+sourceLink.alias+'; View API: '+(views===null?'Chưa xác nhận':views)+' (chờ đối soát doanh thu)';
     }
@@ -1399,6 +1398,20 @@ async function handler(req, env) {
     if (!batch[0].meta?.changes || !batch[1].meta?.changes)
       fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
     await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
+    if(sourceLink?.verification==='api_auto'&&sourceConfig.verification==='api_auto'&&autoRewardEligible({views,baseline:sourceLink.baseline,fastReturn:Boolean(fastReturn),confirmed:autoRewardEnabled(env,verifiedSource),unchanged:sourceConfig.id===sourceLink.id})){
+      // Re-check current settings, task and user inside the atomic write; no client-supplied view.
+      const approved=await env.DB.batch([
+        env.DB.prepare(`UPDATE task_completions SET status='approved',reviewed_at=CURRENT_TIMESTAMP,evidence=evidence||' [API_AUTO_V1] Đã xét tự động theo nguồn được xác nhận.' WHERE id=? AND status='pending'
+          AND EXISTS(SELECT 1 FROM users WHERE id=? AND status='active')
+          AND EXISTS(SELECT 1 FROM tasks WHERE id=? AND is_active=1 AND category='link')
+          AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)
+          AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)`).bind(completionId,me.id,task.id,TASK_SOURCE_PREFIX+task.id,JSON.stringify(sourceConfig),SOURCE_PREFIX+sourceLink.id,sourceLink.config),
+        env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
+          SELECT ?,user_id,reward,'Tự động xác minh nguồn link','task',id FROM task_completions WHERE id=? AND status='approved' AND instr(evidence,'[API_AUTO_V1]')>0
+          ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`).bind(id(),completionId)
+      ]);
+      if(approved[0].meta?.changes){await giveReferral(env,me.id,settings);return json({ok:true,status:'approved',reward:task.reward,message:'Đã xác minh lượt hợp lệ và cộng Lúa.'});}
+    }
     return json({ok:true,status:'pending',
       message:'Đã nhận yêu cầu xác minh. Đang chờ Admin đối soát; chưa cộng Lúa.'});
   }
@@ -1463,12 +1476,14 @@ async function handler(req, env) {
       try{
         const destination='https://nhiemvu.click/?link_return='+encodeURIComponent(task.id);
         const link=await createSourceLink(source,destination,sourceToken(env,source));
+        let baseline=null;
+        if(sourceConfig.verification==='api_auto'&&autoRewardEnabled(env,source))try{baseline=await checkSourceView(source,link.alias,sourceToken(env,source));}catch{}
         // Alias cannot be assigned to two attempts. No fallback to a shared link.
         const current=await env.DB.prepare('SELECT id FROM task_attempts WHERE id=? AND consumed_by IS NULL AND expires_at>?').bind(attempt,now()).first();
         if(!current)throw Error('Phiên đã thay đổi');
         await env.DB.batch([
           env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_source_alias:'+source.id+':'+link.alias,attempt),
-          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind(ATTEMPT_SOURCE_PREFIX+attempt,JSON.stringify({id:source.id,...link,config:JSON.stringify(source),verification:sourceConfig.verification}))
+          env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind(ATTEMPT_SOURCE_PREFIX+attempt,JSON.stringify({id:source.id,...link,config:JSON.stringify(source),verification:sourceConfig.verification,baseline}))
         ]);
         assignedUrl=link.shortUrl;
       }catch{
