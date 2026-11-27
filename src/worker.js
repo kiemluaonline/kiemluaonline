@@ -1337,8 +1337,11 @@ async function handler(req, env) {
     const sourceLink=await getAttemptSource(env,attempt.id);
     if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
     if(sourceLink?.returnSession&&body.link_session!==sourceLink.returnSession)fail(409,'Link quay về không thuộc phiên này. Hãy mở lại đúng link nhiệm vụ đã cấp.');
-    if (attempt.ip !== clientIP(req) || attempt.device_code !== await deviceCode(req,env))
-      fail(409, 'IP hoặc mã trình duyệt đã thay đổi. Vui lòng mở lại nhiệm vụ trên cùng trình duyệt và mạng.');
+    const returnIP=clientIP(req);
+    if(attempt.device_code!==await deviceCode(req,env))
+      fail(409,'Hãy xác minh bằng trình duyệt đã mở nhiệm vụ.');
+    if(attempt.available_at<0&&attempt.ip!==returnIP)
+      fail(409,'Hãy dùng lại mạng tại thời điểm bắt đầu xác minh. Lượt cũ vẫn được giữ trong thời hạn.');
     if(attempt.available_at<0){
       const deadline=-attempt.available_at+LINK_CONFIRM_WINDOW_MS;
       if(now()>=deadline)fail(410,'Đã hết 60 phút xác minh. Lượt đã sử dụng vẫn được tính và không nhận Lúa.',{confirmation_expired:true});
@@ -1357,11 +1360,18 @@ async function handler(req, env) {
       const perTaskLimit=await linkTaskPerAccountLimit(env,task);
       if(await linkReturnUsage(env,me.id,task.id)>=perTaskLimit)
         fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
+      // Check current network/browser eligibility before the first return.
+      // Bind that observed IP atomically, then never rebind during verification.
+      const arrivalSettings=await getSettings(env);
+      await linkIPQuota(env,req,me.id,task,arrivalSettings);
+      await linkBrowserQuota(env,req,me.id,task,arrivalSettings);
       const arrivedAt=now();
       const mark=await env.DB.prepare(
-        'UPDATE task_attempts SET available_at=?,expires_at=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
-      ).bind(-arrivedAt,arrivedAt+LINK_CONFIRM_WINDOW_MS,attempt.id,me.id,arrivedAt).run();
+        'UPDATE task_attempts SET available_at=?,expires_at=?,ip=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
+      ).bind(-arrivedAt,arrivedAt+LINK_CONFIRM_WINDOW_MS,returnIP,attempt.id,me.id,arrivedAt).run();
       if(!mark.meta?.changes)fail(409,'Phiên đã thay đổi. Hãy tải lại trang Nhiệm vụ.');
+      if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
+      attempt.ip=returnIP;
       attempt.available_at=-arrivedAt;
       attempt.expires_at=arrivedAt+LINK_CONFIRM_WINDOW_MS;
     }
@@ -1486,14 +1496,13 @@ async function handler(req, env) {
       if(ongoing){
         const existing=await getAttemptSource(env,ongoing.id);
         if(!existing)fail(409,'Phiên đang được cấp link hoặc chưa nhận được phản hồi từ đối tác. Hệ thống không tự tạo thêm link. Nếu vẫn gặp lỗi, hãy liên hệ Admin.');
-        const sameContext=ongoing.ip===clientIP(req)&&ongoing.device_code===await deviceCode(req,env);
-        if(sameContext){
-          if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
-          return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:'manual',category:'link',task_url:existing.shortUrl,resumed:true});
-        }
-        // Preserve the previously issued alias on every context error.
-        // Never create a second provider link as a side effect of a rejected start.
-        fail(409,'Hãy tiếp tục trên cùng mạng và trình duyệt ban đầu. Link cũ vẫn được giữ; nếu không thể tiếp tục, hãy liên hệ Admin.');
+        // Before the first recorded return, a legitimate network change is
+        // allowed on the same authenticated browser. Reuse the exact same alias.
+        // The normal account, IP and browser quotas above still apply.
+        if(ongoing.device_code!==await deviceCode(req,env))
+          fail(409,'Hãy tiếp tục bằng trình duyệt đã mở nhiệm vụ. Link cũ vẫn được giữ.');
+        if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
+        return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:'manual',category:'link',task_url:existing.shortUrl,resumed:true});
       }
     }
     if(task.category==='app'){
@@ -1946,7 +1955,8 @@ async function handler(req, env) {
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,
         CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END AS category,
         u.name,u.email,
-        a.id AS attempt_id,a.created_at AS started_at,a.ip AS started_ip,
+        a.id AS attempt_id,a.created_at AS started_at,
+        COALESCE((SELECT e.ip FROM risk_events e WHERE e.user_id=a.user_id AND e.event_type='task_device_start' AND substr(e.detail,1,36)=a.id ORDER BY e.created_at ASC LIMIT 1),a.ip) AS started_ip,
         a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         LEFT JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id

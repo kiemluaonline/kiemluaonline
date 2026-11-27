@@ -1450,10 +1450,10 @@ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM task_attempts WHERE user_
  'Bắt đầu lại phải vô hiệu hóa các phiên Link cũ');
 assert.equal((await call(returnPath,'POST',{},returnMember.cookie,returnIP,
  '55555555-3333-4333-8444-555555555555')).status,409,'Sai mã trình duyệt không được ghi nhận');
-assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
- 'Sai IP không được ghi nhận');
 const challenge=await call(returnPath,'POST',{},returnMember.cookie,returnIP,returnDevice);
 assert.equal(challenge.status,200,JSON.stringify(challenge));
+assert.equal((await call(returnPath,'POST',{},returnMember.cookie,'198.51.100.253',returnDevice)).status,409,
+ 'Đổi IP sau khi đã ghi nhận quay về không được đổi phiên xác minh');
 assert.equal(challenge.data.challenge,true,'Khi quay về phải hiện phép tính, chưa ghi lượt');
 assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast'")
  .get(returnMemberId).n,1,'Quay về ngay sau khi bắt đầu phải ghi cảnh báo rủi ro');
@@ -2119,9 +2119,12 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  try{
   const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock1');
-  const wrongNetwork=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,'203.0.113.210',device);
-  assert.equal(wrongNetwork.status,409,'Network mismatch must not create a replacement link');
-  assert.equal(creates,1);
+  const newIP='203.0.113.210';
+  const changedNetwork=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
+  assert.equal(changedNetwork.status,200,JSON.stringify(changedNetwork));
+  assert.equal(changedNetwork.data.attempt_id,start.data.attempt_id);
+  assert.equal(changedNetwork.data.task_url,start.data.task_url);
+  assert.equal(creates,1,'Network change before return must reuse the original alias');
   assert.ok(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(start.data.attempt_id).expires_at>Date.now());
   assert.ok(!JSON.stringify(start).includes('mock-only-secret'));
   const resumed=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
@@ -2130,14 +2133,18 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
   assert.equal(direct.status,409);
   const path='/api/tasks/'+taskId+'/return';
   assert.equal((await call(path,'POST',{},member.cookie,ip,device)).status,409);
-  const challenge=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
-  const blockedRestart=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,'203.0.113.210',device);
+  const challenge=await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,newIP,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
+  const blockedRestart=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(blockedRestart.status,409,'Đổi IP sau khi đã quay về không cấp lượt mới');
-  const resumeConfirm=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
+  const blockedAnswer=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
+  assert.equal(blockedAnswer.status,409,'Old network cannot replace verification IP');
+  const resumeConfirm=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
   assert.equal(resumeConfirm.status,200);assert.equal(resumeConfirm.data.resume_confirmation,true);
   assert.equal(resumeConfirm.data.attempt_id,start.data.attempt_id);assert.equal(creates,1);
-  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,ip,device);
+  const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:start.data.attempt_id},member.cookie,newIP,device);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
+  const audit=(await call('/api/admin/reviews','GET',undefined,admCookie)).data.reviews.find(x=>x.task_id===taskId);
+  assert.equal(audit.started_ip,ip);assert.equal(audit.submitted_ip,newIP);
   const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
   assert.match(record.evidence,/Alias: mock1; View API: 1/);
   assert.equal(record.status,'pending');
