@@ -7,7 +7,6 @@ const readText=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 export const SOURCE_PREFIX='link_source_config:';
 export const TASK_SOURCE_PREFIX='link_source_task:';
 export const ATTEMPT_SOURCE_PREFIX='link_source_attempt:';
-export const DEFAULT_SOURCE={id:'bbmkts',name:'BBMKTS',host:'bbmkts.com',short_host:'bbmkts.com',create_url:'',short_path:'',alias_path:'',view_url:'https://bbmkts.com/api/link/chart/{alias}',view_path:'',paid_confirmed:false};
 export function secretName(id){if(!slugPattern.test(id))throw Error('Mã nguồn không hợp lệ');return 'LINK_PROVIDER_TOKEN_'+id.toUpperCase();}
 function domain(v){
   if(!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/i.test(v)||/\.(?:local|internal|localhost|test|invalid|example|onion|home|lan)$/i.test(v))
@@ -95,7 +94,7 @@ export async function settingValue(env,key){
 export async function getSource(env,id){
   if(!slugPattern.test(id))return null;
   const stored=await settingValue(env,SOURCE_PREFIX+id);
-  return stored?normalizeSource(stored):id==='bbmkts'?DEFAULT_SOURCE:null;
+  return stored?normalizeSource(stored):null;
 }
 export function sourceToken(env,source){return typeof env[secretName(source.id)]==='string'?env[secretName(source.id)]:'';}
 export function sourceReady(env,source){

@@ -2061,7 +2061,8 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
  assert.equal((await call('/api/admin/link-sources','POST',source,admCookie)).status,200);
  const list=await call('/api/admin/link-sources','GET',undefined,admCookie);
  assert.ok(list.data.sources.some(s=>s.id==='example_source'&&!s.create_ready));
- assert.ok(list.data.sources.some(s=>s.id==='bbmkts'));
+ assert.ok(!list.data.sources.some(s=>s.id==='bbmkts'),'BBMKTS is not registered unless Admin explicitly saves it');
+ assert.equal((await call('/api/admin/tasks','POST',{title:'Nguồn chưa đăng ký',category:'link',url:'https://example.com/manual',reward:1,review_mode:'manual',repeat_policy:'daily',is_active:false,link_source_id:'bbmkts',link_source_creation:'manual'},admCookie)).status,400);
  const cfg={title:'Nguồn chung thử nghiệm',category:'link',url:'',reward:1,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'example_source',link_source_creation:'api',link_source_verification:'api_view'};
  assert.equal((await call('/api/admin/tasks','POST',cfg,admCookie)).status,400);
  const made=await call('/api/admin/tasks','POST',{...cfg,is_active:false},admCookie);assert.equal(made.status,201);
@@ -2131,3 +2132,6 @@ assert.match(latestAdminClient,/app_confirmation_mode/);
  const listing=await call('/api/tasks','GET',undefined,member.cookie,ip,device);assert.equal(listing.status,200);assert.ok(listing.data.tasks.every(t=>['link','app'].includes(t.category)));
  console.log('PASS: simple App confirmation without photo or CAPTCHA, manual pending, no duplicate, legacy tasks hidden from members.');
 }
+
+assert.match(latestAdminClient,/data-action="add-link-source"/);
+assert.match(latestAdminClient,/Link thủ công \(không cần nguồn\)/);
