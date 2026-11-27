@@ -2286,3 +2286,18 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.equal((await createSourceLink(source,dest,'',mock('https://example.com/get/a123'))).alias,'a123');
  console.log('PASS: specific URL rejection messages; HTTPS and exact hostname protection unchanged.');
 }
+
+
+{
+ const {createSourceLink}=await import('../src/link-sources.js');
+ const source={id:'trafficvn',host:'trafficvn.com',short_host:'trafficvn.com',create_url:'https://trafficvn.com/apidevelop?url={destination}',short_path:'shortenedUrl'};
+ const dest='https://nhiemvu.click/';
+ const mock=link=>async()=>new Response(JSON.stringify({shortenedUrl:link}),{headers:{'Content-Type':'application/json'}});
+ for(const path of ['/get/Ab123xy','/links/Ab123xy']){
+  const result=await createSourceLink(source,dest,'',mock('http://trafficvn.com'+path));
+  assert.deepEqual(result,{alias:'Ab123xy',shortUrl:'https://trafficvn.com'+path});
+ }
+ for(const link of ['http://other.example/get/Ab123xy','http://trafficvn.com:8080/get/Ab123xy','http://user@trafficvn.com/get/Ab123xy','http://trafficvn.com/get/Ab123xy#x','http://trafficvn.com/get/Ab123xy?x=1','http://trafficvn.com/other/Ab123xy'])await assert.rejects(()=>createSourceLink(source,dest,'',mock(link)),/HTTP, yêu cầu HTTPS/);
+ await assert.rejects(()=>createSourceLink({...source,id:'other'},dest,'',mock('http://trafficvn.com/get/Ab123xy')),/HTTP, yêu cầu HTTPS/);
+ console.log('PASS: TrafficVN HTTPS normalization only for exact host and documented alias routes.');
+}

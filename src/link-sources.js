@@ -91,6 +91,11 @@ export async function createSourceLink(source,destination,token,fetcher=fetch){
   if(typeof link!=='string')throw diagnostic('Không tìm thấy link trong trường JSON đã cấu hình. Kiểm tra tên trường chứa link, phân biệt chữ hoa và chữ thường.');
   if(link.length>700||(token&&link.includes(token)))throw diagnostic('Link trả về không hợp lệ.');
   let u;try{u=new URL(link);}catch{throw diagnostic('Trường JSON chứa link không phải URL hợp lệ.');}
+  // TrafficVN documents HTTPS links but its API can serialize them as HTTP.
+  // Upgrade only the exact documented provider and alias routes, never fetch HTTP.
+  if(u.protocol==='http:'&&source.id==='trafficvn'&&source.host==='trafficvn.com'&&source.short_host==='trafficvn.com'&&u.hostname==='trafficvn.com'&&!u.port&&!u.username&&!u.password&&!u.hash&&!u.search&&/^\/(?:get|links)\/[A-Za-z0-9_-]{1,128}\/?$/.test(u.pathname)){
+    u.protocol='https:';
+  }
   if(u.protocol!=='https:')throw diagnostic(u.protocol==='http:'?'API trả link HTTP, yêu cầu HTTPS.':'API trả link không dùng giao thức HTTPS.');
   if(u.username||u.password||u.port||u.hash)throw diagnostic('API trả URL có thông tin đăng nhập, cổng riêng hoặc fragment; không được phép.');
   if(u.hostname!==source.short_host){
