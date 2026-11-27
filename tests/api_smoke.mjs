@@ -1694,17 +1694,17 @@ const taskTabsView=taskTabsCode.slice(taskTabsCode.indexOf('async function tasks
  taskTabsCode.indexOf('async function referrals(){'));
 assert.match(taskTabsView,/\['app','📱 Nhiệm vụ App'\]/);
 assert.match(taskTabsView,/\['link','🔗 Link'\]/);
-assert.match(taskTabsView,/\['other','Khác'\]/);
+assert.doesNotMatch(taskTabsView,/\['other','Khác'\]/);
 assert.doesNotMatch(taskTabsView,/\['all','Tất cả'\]|\['video','🎬 Video'\]/,
  'Neither All nor Video filter should be visible to members');
 assert.match(taskTabsCode,/taskFilter:'link'/,'Link should be the default task tab');
-assert.match(taskTabsView,/\['app','link','other'\]\.includes\(t\.category\)/,
+assert.match(taskTabsView,/\['app','link'\]\.includes\(t\.category\)/,
  'Do not display video tasks in remaining member tabs');
-assert.match(taskTabsCode,/\['app','link','other'\]\.includes\(el\.dataset\.filter\)/,
- 'Only App, Link and Khác filters can be selected');
+assert.match(taskTabsCode,/\['app','link'\]\.includes\(el\.dataset\.filter\)/,
+ 'Only App and Link filters can be selected');
 assert.match(taskTabsCode,/function renderMemberTaskCard\(t\)/,
  'Existing member task card design must remain unchanged');
-console.log('PASS: member task tabs show App, Link and Khác only, with Link default and no video tasks.');
+console.log('PASS: member task tabs show App and Link only, with Link default and no video tasks.');
 
 const cleanedReturnClient=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const cleanedReturnMethod=cleanedReturnClient.slice(
@@ -2111,4 +2111,23 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
  }finally{globalThis.fetch=originalFetch;delete env.LINK_PROVIDER_TOKEN_MOCK_SOURCE;}
  console.log('PASS: real member start path with mock provider, one alias reused, direct submit blocked, API view audit, wallet untouched.');
+}
+
+assert.match(latestAdminClient,/data-action="admin-task-filter"/);
+assert.match(latestAdminClient,/data-action="admin-review-filter"/);
+assert.match(latestAdminClient,/app_confirmation_mode/);
+
+{
+ const body={title:'App xác nhận đơn giản',category:'app',url:'https://example.com/app',app_referral_code:'SIMPLE123',app_confirmation_mode:'simple',reward:13,review_mode:'manual',repeat_policy:'once',is_active:true};
+ const created=await call('/api/admin/tasks','POST',body,admCookie);assert.equal(created.status,201,JSON.stringify(created));
+ const taskId=created.data.id,ip='203.0.113.225',device='f1234567-1234-4123-8123-123456789abc';
+ const member=await call('/api/auth/register','POST',{name:'Thử App đơn giản',email:'simple-app-test@example.com',password:'test-password-2026',accept_terms:'yes'},'',ip,device);assert.equal(member.status,201);
+ const before=(await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance;
+ const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.app_simple_confirmation,true);
+ const sent=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:start.data.attempt_id},member.cookie,ip,device);assert.equal(sent.status,200,JSON.stringify(sent));assert.equal(sent.data.status,'pending');
+ assert.match(sqlite.prepare('SELECT evidence FROM task_completions WHERE task_id=?').get(taskId).evidence,/APP_CONFIRM_V1/);
+ assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before);
+ assert.equal((await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device)).status,409);
+ const listing=await call('/api/tasks','GET',undefined,member.cookie,ip,device);assert.equal(listing.status,200);assert.ok(listing.data.tasks.every(t=>['link','app'].includes(t.category)));
+ console.log('PASS: simple App confirmation without photo or CAPTCHA, manual pending, no duplicate, legacy tasks hidden from members.');
 }

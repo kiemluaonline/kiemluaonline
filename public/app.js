@@ -9,7 +9,7 @@ const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.Tr
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
 let paidRotationTimer=null,paidRefreshTimer=null;
 function stopPaidRotation(){
  if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
@@ -1014,7 +1014,7 @@ function renderMemberTaskCard(t){
    <div class="task-card-modern-count" aria-label="Đã làm ${used} trong ${maxUses} lượt"><strong>${badge}</strong><small>lượt</small></div>
   </div>
   <p class="task-card-modern-description">${esc(t.description||'Làm theo hướng dẫn của quản trị viên.')}</p>
-  ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký tài khoản mới trong app, nhập đúng mã rồi chụp ảnh gửi Admin. Chỉ nhận Lúa sau khi được duyệt.</p>`:''}
+  ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký và nhập mã theo hướng dẫn, sau đó gửi xác nhận. Chỉ nhận Lúa khi Admin duyệt.</p>`:''}
   <div class="task-card-modern-bottom">
    <div class="task-card-modern-quota"><span class="task-card-modern-quota-icon" aria-hidden="true">◉</span><span>${esc(countText)}</span></div>
    <div class="task-card-modern-track" role="progressbar" aria-label="Lượt đã thực hiện" aria-valuemin="0" aria-valuemax="${maxUses}" aria-valuenow="${used}"><span style="width:${progress}%"></span></div>
@@ -1026,13 +1026,13 @@ function renderMemberTaskCard(t){
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
  state.memberTasks=data.tasks;
- const shownTasks=data.tasks.filter(t=>['app','link','other'].includes(t.category)&&t.category===state.taskFilter);
+ const shownTasks=data.tasks.filter(t=>['app','link'].includes(t.category)&&t.category===state.taskFilter);
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
- ${taskDashboardCard(stats,data)}
+ ${state.taskFilter==='link'?taskDashboardCard(stats,data):''}
  <div class="task-card-modern-section-head"><h3>Khám phá nhiệm vụ</h3><span>🌾 Tích Lúa mỗi ngày</span></div>
- <div class="task-filter-row">${[['app','📱 Nhiệm vụ App'],['link','🔗 Link'],['other','Khác']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
+ <div class="task-filter-row">${[['app','📱 Nhiệm vụ App'],['link','🔗 Link']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
  ${shownTasks.length?`<div class="grid task-card-modern-grid">${shownTasks.map(renderMemberTaskCard).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
 async function referrals(){
@@ -1146,35 +1146,35 @@ async function shrinkAppLogo(file){
  }finally{image.close();}
 }
 function taskForm(task={},sources=[]){
- const linkHint=task.category==='link'?'':'hidden';
- return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa nhiệm vụ':'Tạo nhiệm vụ thật'}</h3>
+ const category=state.adminTaskFilter==='app'?'app':'link';
+ const link=category==='link';
+ return `<form class="card" data-form="admin-task" id="task-form"><h3>${task.id?'Sửa':'Tạo'} nhiệm vụ ${link?'Link rút gọn':'App'}</h3>
  <input type="hidden" name="id" value="${esc(task.id||'')}">
- ${field('title','Tên nhiệm vụ',task.title||'', 'required minlength="3"')}
- <div class="field"><label for="description">Hướng dẫn / mô tả</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
- <div class="form-row">${select('category','Loại nhiệm vụ',[['video','Video'],['link','Link rút gọn'],['app','App (tải & nhập mã)'],['other','Khác']],task.category||'video')}
- ${select('review_mode','Cách xét thưởng',[['manual','Admin kiểm tra bằng chứng'],['auto','Tự động sau khi xác nhận CAPTCHA']],task.review_mode||'manual')}</div>
- <div class="callout admin-link-task-hint" id="admin-link-task-hint" ${linkHint}>
- <strong>🔗 Link tự quay về:</strong> Chọn <strong>Admin kiểm tra bằng chứng</strong>, tạo nhiệm vụ <strong>Tắt / nháp</strong> rồi lưu. Sao chép trang đích ở danh sách bên dưới làm URL gốc khi rút gọn. Sau đó dán link đã rút gọn vào URL nhiệm vụ và bật công khai.
- <p class="note">Thành viên xem lưu ý → Bắt đầu → quay về → giải phép tính → Chờ đối soát. Chỉ duyệt sau khi xác minh nguồn thu hợp lệ; phép tính không chứng minh đối tác đã tính tiền.</p>
+ <input type="hidden" name="category" value="${category}">
+ <input type="hidden" name="review_mode" value="manual"><input type="hidden" name="min_seconds" value="5">
+ ${field('title',link?'Tên nhiệm vụ':'Tên ứng dụng',task.title||'', 'required minlength="3"')}
+ <div class="field"><label for="description">Hướng dẫn</label><textarea id="description" name="description">${esc(task.description||'')}</textarea></div>
+ ${link?`<div class="admin-link-task-hint" id="admin-link-task-hint">
  <h4>Nguồn rút gọn</h4>
  ${select('link_source_id','Nhà cung cấp',[['','Không chọn / link thủ công'],...sources.map(s=>[s.id,s.name])],task.link_source_id||((task.bbmkts_creation&&task.bbmkts_creation!=='manual')?'bbmkts':''))}
  ${select('link_source_creation','Cách tạo link',[['manual','Nhập link thủ công'],['api','Tự động cấp link riêng qua API']],task.link_source_creation==='api'||(task.bbmkts_creation&&task.bbmkts_creation!=='manual')?'api':'manual')}
  ${select('link_source_verification','Cách xác minh',[['manual','Admin đối soát'],['api_view','Tự động tra cứu view — Admin duyệt thưởng']],task.link_source_verification==='api_view'||task.bbmkts_verification==='api_view'?'api_view':'manual')}
  <input type="hidden" name="bbmkts_creation" value="manual"><input type="hidden" name="bbmkts_verification" value="manual">
  <p class="note">Thêm nguồn trong mục Quản lý nguồn rút gọn bên dưới. Cấp link qua API không cần dán URL rút gọn. Chỉ mở nhiệm vụ sau khi thử API thật. View chưa được coi là doanh thu; vẫn duyệt thưởng thủ công.</p>
- </div>
- ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
+ ${field('url','URL link rút gọn (nếu nhập thủ công)',task.url||'', 'type="url" placeholder="https://..."')}
+ ${field('link_24h_limit','Số lượt / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
+ ${select('repeat_policy','Lặp lại',[['once','Mỗi người một lần'],['daily','Mỗi ngày một lần']],task.repeat_policy||'daily')}
+ <details><summary>Hướng dẫn link thủ công</summary><p>Tạo nhiệm vụ nháp, sao chép trang đích ở danh sách, rút gọn rồi dán URL và bật nhiệm vụ. Admin kiểm tra bằng chứng và đối soát nguồn thu trước khi duyệt.</p></details>
+ </div>`:`
+ ${field('url','Link tải ứng dụng',task.url||'', 'type="url" required placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
  <div class="field"><label for="app-logo-file">🖼️ Logo nhiệm vụ App (chọn từ iPhone)</label><input id="app-logo-file" type="file" accept="image/*"><p class="note">Logo được thu nhỏ trước khi lưu. Chọn ảnh mới để thay logo.</p><label><input type="checkbox" id="app-logo-remove"> Xóa logo hiện tại</label>${task.app_logo?`<img src="${esc(task.app_logo)}" alt="Logo hiện tại" style="display:block;width:64px;height:64px;object-fit:contain;border-radius:12px">`:''}</div>
- <p class="note">Nhiệm vụ App bắt buộc chọn Admin kiểm tra bằng chứng và Mỗi người một lần. Chỉ đăng nhiệm vụ mà chương trình giới thiệu của ứng dụng cho phép.</p>
- ${field('link_24h_limit','Lượt link rút gọn này / tài khoản / ngày',task.link_24h_limit||1,'type="number" min="1" max="20" required')}
- <p class="note">Chỉ áp dụng loại Link rút gọn. Nhập 1 giữ chính sách lặp đang chọn; từ 2 trở lên là số lượt mỗi ngày, đặt lại lúc 00:00 giờ Việt Nam. Không giới hạn tổng lượt trên toàn bộ danh sách link.</p>
- <div class="form-row">${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
- <div id="task-time-field" ${(task.category||'video')==='video'?'':'hidden'}>${field('min_seconds','Thời gian tối thiểu cho Video (giây)',task.min_seconds||15,`type="number" min="5" max="3600" ${(task.category||'video')==='video'?'required':'disabled'}`)}</div></div>
- <div class="form-row">${select('repeat_policy','Lặp lại',[['once','Mỗi người một lần'],['daily','Mỗi ngày một lần']],task.repeat_policy||'once')}
- ${select('is_active','Trạng thái',[['1','Bật công khai'],['0','Tắt / nháp']],Number(task.is_active||0).toString())}</div>
- <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?'<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button>':''}</div>
- <p class="note">🔗 Link tự quay về: tạo nhiệm vụ ở trạng thái Tắt / nháp, bấm “Sao chép trang đích” trong danh sách bên dưới, dùng địa chỉ đó làm link gốc để rút gọn, rồi dán link đã rút gọn vào ô URL và bật nhiệm vụ. Chọn “Admin kiểm tra bằng chứng” vì trang đích không xác minh doanh thu. Nhiệm vụ App, Link và Khác không yêu cầu thời gian chờ. Chỉ nhiệm vụ Video áp dụng thời gian tối thiểu. Không có khả năng xác minh người xem thực sự đã xem video tại nền tảng bên ngoài.</p></form>`;
+ ${select('app_confirmation_mode','Cách thành viên gửi',[['simple','Chỉ bấm xác nhận'],['photo','Gửi ảnh bằng chứng']],task.app_confirmation_mode||(task.id?'photo':'simple'))}
+ <input type="hidden" name="repeat_policy" value="once"><input type="hidden" name="link_24h_limit" value="1">
+ <p class="note">Mỗi thành viên làm một lần, Admin duyệt thưởng. Không cần CAPTCHA.</p>`}
+ ${field('reward','Thưởng (Lúa)',task.reward||100,'type="number" min="1" max="10000000" required')}
+ ${select('is_active','Trạng thái',[['1','Bật công khai'],['0','Tắt / nháp']],Number(task.is_active||0).toString())}
+ <div class="btn-row"><button class="btn" type="submit">${task.id?'Lưu chỉnh sửa':'Tạo nhiệm vụ'}</button>${task.id?'<button class="btn alt" type="button" data-action="reset-task">Tạo mới</button>':''}</div></form>`;
 }
 function sourceSettingsForm(source={}){
  return `<details class="section"><summary><strong>${esc(source.name||'+ Thêm nguồn mới')}</strong> ${source.id?(source.create_ready?' · Đã có cấu hình tạo link':' · Chưa đủ cấu hình') : ''}</summary>
@@ -1199,8 +1199,11 @@ function sourceSettingsForm(source={}){
 async function adminTasks(){
  const [d,s]=await Promise.all([api('/api/admin/tasks'),api('/api/admin/link-sources')]);state.adminTasks=d.tasks;
  const sources=s.sources||[];
- const edit=state.taskEdit?d.tasks.find(x=>x.id===state.taskEdit):null;
- const rows=d.tasks.map(t=>{
+ const category=state.adminTaskFilter;
+ const selected=d.tasks.filter(t=>t.category===category);
+ const retired=d.tasks.filter(t=>!['app','link'].includes(t.category));
+ const edit=state.taskEdit?selected.find(x=>x.id===state.taskEdit):null;
+ const rows=selected.map(t=>{
   const max=Math.max(1,Math.min(20,Number(t.link_24h_limit)||1));
   const quota=t.category==='link'?(max>1||t.repeat_policy==='daily'?max+' lượt/ngày':'1 lượt/tài khoản'):(t.repeat_policy==='daily'?'1 lượt/ngày':'1 lượt/tài khoản');
   return `<tr>
@@ -1218,8 +1221,10 @@ async function adminTasks(){
   </tr>`;
  });
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
- <section class="info-split">${taskForm(edit||{},sources)}<article class="card"><h3>Hướng dẫn quản trị</h3><p>1. Nhập nhiệm vụ thật, Lúa và hạn mức của từng nhiệm vụ. Thẻ thành viên tự lấy các số liệu này.</p><p>2. Với Link tự quay về, đặt chế độ <strong>Admin kiểm tra bằng chứng</strong>; lấy trang đích từ nút bên dưới để tạo link rút gọn.</p><p>3. Khi thành viên vượt link, quay về và giải phép tính, lượt sẽ được đưa vào <strong>Chờ đối soát</strong>.</p><p>4. Kiểm tra khoản thu hợp lệ rồi mới duyệt, chỉ bật công khai sau khi kiểm thử.</p><div class="callout">Quay về và giải CAPTCHA không chứng minh nhà cung cấp đã tính tiền. Chỉ dùng nguồn cho phép hình thức nhiệm vụ thưởng.</div></article></section>
- <section class="card section"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
+ <div class="task-filter-row">${[['link','🔗 Link rút gọn'],['app','📱 App']].map(([value,label])=>`<button type="button" class="btn ${category===value?'':'alt'}" data-action="admin-task-filter" data-filter="${value}">${label}</button>`).join('')}</div>
+ <div class="btn-row section"><button type="button" class="btn alt" data-action="admin-open-reviews">Duyệt nhiệm vụ ${category==='link'?'Link':'App'}</button></div>
+ ${taskForm(edit||{},sources)}
+ ${category==='link'?` <section class="card section"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
  ${sources.map(sourceSettingsForm).join('')}${sourceSettingsForm()}
  <details><summary>Công cụ đọc JSON thô BBMKTS (cũ)</summary>
  <p><strong>Chế độ hiện tại: Admin đối soát thủ công.</strong> API Check View đã được hỗ trợ để thử tra cứu trực tiếp. Chưa bật tự động cấp link hoặc cộng Lúa.</p>
@@ -1230,8 +1235,9 @@ async function adminTasks(){
  <pre data-bbmkts-result role="status" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto"></pre>
  </form>
  </details>
- </section>
- <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${d.tasks.length})</h3><p class="note">Số lượt hôm nay được tính theo giờ Việt Nam. Số lượt giới hạn mỗi tài khoản có thể cấu hình riêng cho từng nhiệm vụ.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>`;
+ </section>`:''}
+ <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${selected.length})</h3><p class="note">Admin kiểm tra bằng chứng theo từng loại nhiệm vụ. Số lượt hôm nay tính theo giờ Việt Nam.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>
+ ${retired.length?`<details class="card section"><summary>Lưu trữ nhiệm vụ cũ (${retired.length})</summary><p class="note">Không hiển thị cho thành viên. Giữ lịch sử và dữ liệu cũ.</p>${retired.map(t=>`<p>${esc(t.title)} · ${esc(t.category)}</p>`).join('')}</details>`:''}`;
 }
 async function adminUsers(){
  const d=await api('/api/admin/users');
@@ -1250,16 +1256,20 @@ async function adminUsers(){
 }
 async function adminReviews(){
  const d=await api('/api/admin/reviews');
+ const category=state.adminReviewFilter;
+ const filtered=d.reviews.filter(c=>category==='archive'?!['link','app'].includes(c.category):c.category===category);
  const pendingReturns=d.reviews.filter(c=>c.status==='pending'&&String(c.evidence||'').startsWith('[LINK_RETURN_V1]')).length;
  const fastReturns=d.reviews.filter(c=>c.status==='pending'&&String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')).length;
- return `${heading('Duyệt bằng chứng','Đối chiếu IP, loại thiết bị và thời gian với thống kê của đối tác trước khi duyệt.')}
+ return `${heading('Duyệt bằng chứng','Chọn loại nhiệm vụ cần xử lý.')}
+ <div class="task-filter-row">${[['link','🔗 Link'],['app','📱 App'],['archive','Lưu trữ']].map(([value,label])=>`<button class="btn ${category===value?'':'alt'}" data-action="admin-review-filter" data-filter="${value}">${label}</button>`).join('')}</div>
+ ${category==='link'?`
  <div class="callout section">🔗 <strong>${fmt(pendingReturns)} lượt quay về đang chờ đối soát</strong> trong danh sách đang tải. <strong>${fmt(fastReturns)} lượt bị đánh dấu quay về quá nhanh.</strong> Đây là tín hiệu cần kiểm tra, không phải bằng chứng gian lận. Khách chưa được cộng Lúa; chỉ duyệt khi có đối soát nguồn thu hợp lệ.</div>
  <div class="callout section"><strong>Đối chiếu với Lentopone / nhà cung cấp khác:</strong> so cùng nhiệm vụ, IP và mốc giờ Việt Nam; tham khảo loại máy và trình duyệt. Có thể sao chép từng IP. Loại thiết bị lấy từ User-Agent (có thể giả), còn IP chung mạng không chứng minh cùng một người. <strong>Không tự duyệt</strong> chỉ dựa trên các dấu hiệu này hoặc việc quay về trang đích.</div>
- <div class="callout section"><strong>Link tự quay về:</strong> “Đã truy cập trang đích” chỉ là tín hiệu kỹ thuật. Không đọc được mã đã nhập trên dịch vụ rút gọn và không có xác nhận doanh thu. Phải kiểm tra nguồn tiền hợp lệ trước khi duyệt Lúa.</div><div class="callout section"><strong>Quản lý dung lượng bằng chứng:</strong> Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.
+ <div class="callout section"><strong>Link tự quay về:</strong> “Đã truy cập trang đích” chỉ là tín hiệu kỹ thuật. Không đọc được mã đã nhập trên dịch vụ rút gọn và không có xác nhận doanh thu. Phải kiểm tra nguồn tiền hợp lệ trước khi duyệt Lúa.</div>`:''}<div class="callout section"><strong>Quản lý dung lượng bằng chứng:</strong> Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.
  <div class="section">${d.processed_evidence_count>0?`<p class="note"><strong>Có ${fmt(d.processed_evidence_count)} hồ sơ đã xử lý còn bằng chứng.</strong> Thao tác hàng loạt sẽ xóa bằng chứng của TẤT CẢ những hồ sơ đó, kể cả hồ sơ không hiển thị bên dưới.</p><button type="button" class="btn danger sm proof-delete-all" data-action="erase-all-processed-evidence" data-count="${Number(d.processed_evidence_count)}">🗑 Xóa tất cả bằng chứng đã xử lý</button>`:'<p class="note">Hiện không có bằng chứng đã xử lý cần dọn.</p>'}</div></div>
  <section class="card section admin-reviews-panel"><div class="admin-review-search-wrap"><label for="admin-review-search">🔎 Tìm nhanh trong danh sách đã tải</label><input id="admin-review-search" type="search" placeholder="Tên, email, nhiệm vụ, IP, loại thiết bị…" autocomplete="off"><p class="small muted">Tối đa 150 hồ sơ mới nhất; hồ sơ đang chờ duyệt được ưu tiên.</p></div>
- ${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Đối chiếu IP / thiết bị','Duyệt'],d.reviews.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
- <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div><details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td><strong>${fmt(c.reward)} Lúa</strong></td><td><div class="admin-task-audit">
+ ${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Đối chiếu IP / thiết bị','Duyệt'],filtered.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
+ <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div><details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td><strong>${fmt(c.reward)} Lúa</strong></td><td>${category==='link'?`<div class="admin-task-audit">
   <div><strong>📱 Mở:</strong> ${esc(c.started_device)}</div>
   <div><strong>📱 Gửi:</strong> ${esc(c.submitted_device)}</div>
   <div><strong>🕒 Bắt đầu:</strong> ${dt(c.started_at)}</div>
@@ -1272,7 +1282,7 @@ async function adminReviews(){
     <div class="small"><strong>Mã lúc gửi:</strong> <code>${esc(c.device_code||'Chưa ghi nhận')}</code></div>
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
   </details>
- </div></td>
+ </div>`:dt(c.created_at)}</td>
  <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:c.has_evidence||c.status==='rejected'&&c.category==='app'?`<div class="btn-row section">${c.status==='rejected'&&c.category==='app'&&!String(c.period_key||'').startsWith('app_retry_rejected:')?`<button class="btn alt sm" data-action="allow-app-retry" data-id="${esc(c.id)}">↻ Cho làm lại</button>`:''}${c.has_evidence?`<button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button>`:''}</div>`:''}</td></tr>`))}</section>`;
 }
 async function adminWithdrawals(){
@@ -1539,10 +1549,10 @@ function renderAttemptModal(){
  ${a.task_url?`<p><a class="btn alt" href="${safeUrl(a.task_url)}" target="_blank" rel="noopener noreferrer">Mở liên kết nhiệm vụ ↗</a></p>`:''}
  ${a.category==='link'?'<p class="note">Nếu link được cấu hình quay về Trạm Có Lúa, hệ thống tự ghi nhận Chờ đối soát khi đến trang đích. Không cần nhập lại mã trên website. Chỉ Admin xác minh nguồn thu hợp lệ mới duyệt thưởng.</p>':''}
  ${a.category==='app'?'<p class="note">Bạn có thể rời website để cài ứng dụng rồi quay lại. Bấm Bắt đầu / Tiếp tục xác nhận để mở lại nhiệm vụ. Báo hoàn thành chỉ gửi yêu cầu chờ Admin xác minh, chưa cộng Lúa.</p>':`<p class="note">Hãy thực hiện đúng yêu cầu trước khi xác nhận. Hệ thống kiểm tra ${a.category==='video'?'thời gian và ':''}CAPTCHA; ${a.review_mode==='manual'?'Admin sẽ duyệt bằng chứng bạn gửi.':'với chế độ tự động, hệ thống không thể xác minh hoạt động bên ngoài trang web.'}</p>`}
- ${a.app_no_photo?'<div class="callout">🎮 Nhập mã giới thiệu Color Sort thành công, sau đó xác nhận. Không cần gửi ảnh. Admin sẽ đối chiếu với ứng dụng và quyết định thưởng 30 hoặc 40 Lúa.</div>':a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
+ ${a.app_simple_confirmation&&!a.app_no_photo?'<div class="callout">Đã thực hiện theo hướng dẫn? Bấm xác nhận để gửi Admin duyệt.</div>':a.app_no_photo?'<div class="callout">🎮 Nhập mã giới thiệu Color Sort thành công, sau đó xác nhận. Không cần gửi ảnh. Admin sẽ đối chiếu với ứng dụng và quyết định thưởng 30 hoặc 40 Lúa.</div>':a.category==='app'?'<div class="callout">📱 Hãy cài app, đăng ký tài khoản mới, nhập mã giới thiệu được hiển thị ở danh sách nhiệm vụ và chụp màn hình xác nhận thành công.</div>':''}
  <form data-form="task-claim">${a.category==='app'?'':`<div class="captcha">${a.a} + ${a.b} = ?</div>
  ${field('answer','Kết quả phép cộng','', 'required type="number" min="0" max="30" inputmode="numeric"')}`}
- ${a.app_no_photo?'':a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
+ ${a.app_no_photo||a.app_simple_confirmation?'':a.category==='app'?`<div class="field"><label for="photo">Ảnh chụp màn hình bằng chứng (bắt buộc)</label><input id="photo" name="photo" type="file" accept="image/*" required><p class="note">Ảnh sẽ được tự nén trước khi gửi. Hãy che mật khẩu, OTP, số điện thoại và thông tin nhạy cảm.</p></div><div class="field"><label for="evidence">Ghi chú cho Admin (không bắt buộc)</label><textarea id="evidence" name="evidence" maxlength="200" placeholder="Ví dụ: Đã đăng ký và nhập mã thành công"></textarea></div>`:a.review_mode==='manual'?`<div class="field"><label for="evidence">Bằng chứng / URL xác nhận / mô tả (≥12 ký tự)</label><textarea id="evidence" name="evidence" minlength="12" required placeholder="Dán URL bằng chứng hoặc trình bày chi tiết kết quả..."></textarea></div>`:''}
  <button class="btn" type="submit">${a.category==='app'?'Đã hoàn thành – Báo Admin':remain>0?'Gửi khi đủ thời gian':'Xác nhận hoàn thành'} →</button>
  ${a.category==='video'?`<p class="note" id="wait-hint">${remain>0?`Bạn còn cần chờ ít nhất ${remain} giây để xác nhận.`:'Đã đủ thời gian tối thiểu.'}</p>`:''}</form></section></div>`;
 }
@@ -1729,18 +1739,7 @@ app.addEventListener('change',e=>{
  if(e.target.matches('form[data-form="withdraw"] [name="bank_name"],form[data-form="withdraw"] [name="saved_account_id"]')){
   updateWithdrawalFields(e.target.closest('form'));
  }
- if(e.target.matches('#task-form [name="category"]')){
-  const video=e.target.value==='video', input=document.querySelector('#task-form [name="min_seconds"]');
-  document.getElementById('task-time-field').hidden=!video;
-  input.disabled=!video;input.required=video;
-  const link=e.target.value==='link',hint=document.getElementById('admin-link-task-hint');
-  if(hint)hint.hidden=!link;
-  const mode=document.querySelector('#task-form [name="review_mode"]');
-  if(link&&mode?.value==='auto'){
-   mode.value='manual';
-   toast('Link tự quay về cần Admin đối soát; đã chọn duyệt thủ công.');
-  }
- }
+
 });
 
 window.addEventListener('resize',()=>{
@@ -1825,7 +1824,7 @@ app.addEventListener('click',async e=>{
 if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
-  if(act==='filter-tasks'){state.taskFilter=['app','link','other'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
+  if(act==='filter-tasks'){state.taskFilter=['app','link'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
   if(act==='start-task'){const t=state.memberTasks.find(x=>x.id===el.dataset.id);if(t?.category==='app'){await startTask(el.dataset.id);return;}showTaskRules(el.dataset.id);return;}
   if(act==='cancel-task-rules'){
    state.pendingTaskRules=null;document.getElementById('modal-root').innerHTML='';return;
@@ -1862,6 +1861,9 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='view-fraud-account'){await showFraudAccount(el.dataset.id);return;}
 
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
+  if(act==='admin-task-filter'){state.adminTaskFilter=el.dataset.filter==='app'?'app':'link';state.taskEdit=null;await navigate('admin-tasks');return;}
+  if(act==='admin-open-reviews'){state.adminReviewFilter=state.adminTaskFilter;await navigate('admin-reviews');return;}
+  if(act==='admin-review-filter'){state.adminReviewFilter=['app','link','archive'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('admin-reviews');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='delete-task'){
@@ -2079,7 +2081,7 @@ app.addEventListener('submit',async e=>{
   if(kind==='task-claim'){
     const a=state.attempt;
     if(!a)throw new Error('Phiên nhiệm vụ không còn.');
-    const photo=a.category==='app'&&!a.app_no_photo?await shrinkAppProof(b.photo):'';
+    const photo=a.category==='app'&&!a.app_no_photo&&!a.app_simple_confirmation?await shrinkAppProof(b.photo):'';
     const r=await api('/api/tasks/'+encodeURIComponent(a.taskId)+'/submit','POST',{
       attempt_id:a.attempt_id,answer:b.answer,evidence:b.evidence||'',...(a.category==='app'?{photo}:{}) });
     state.attempt=null;document.getElementById('modal-root').innerHTML='';
