@@ -2165,3 +2165,16 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.ok((await call('/api/admin/tasks','GET',undefined,admCookie)).data.tasks.some(t=>t.id===newTask.data.id&&!t.is_active));
  console.log('PASS: delete used task hides admin and member lists, pending completion and wallet preserved, off remains editable.');
 }
+
+// Exercise the actual browser API wrapper, including bodyless DELETE.
+{
+ const {runInNewContext}=await import('node:vm');
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const start=client.indexOf('async function api('),end=client.indexOf('const PUBLIC_TITLE',start);
+ const sent=[];
+ const browserApi=runInNewContext(client.slice(start,end)+'\napi',{browserDeviceId:()=> 'test-device',fetch:async(path,options)=>{sent.push({path,...options});return {ok:true,json:async()=>({ok:true})};}});
+ await browserApi('/api/admin/tasks/test','DELETE');
+ assert.equal(sent[0].headers['X-Tram-Lua'],'1');assert.equal(sent[0].headers['Content-Type'],'application/json');assert.equal(sent[0].body,'{}');assert.equal(sent[0].credentials,'same-origin');
+ await browserApi('/api/admin/tasks');assert.equal(sent[1].body,undefined);assert.equal(sent[1].headers['X-Tram-Lua'],undefined);
+ console.log('PASS: browser DELETE sends required request authentication headers; GET remains bodyless.');
+}
