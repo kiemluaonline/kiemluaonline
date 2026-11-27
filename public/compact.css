@@ -319,3 +319,31 @@
  .layout .admin-task-audit{min-width:0}
  .layout .admin-task-audit-detail summary{min-height:44px}
 }
+
+/* Compact review cards: preserve all audit data and action targets on mobile. */
+.layout .review-compact-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:10px}
+.layout .review-compact-card{border:1px solid var(--line,#c6d4c8);border-radius:14px;padding:12px;min-width:0;display:grid;gap:9px;background:var(--card,#fff);overflow-wrap:anywhere;align-content:start}
+.layout .review-compact-card[hidden]{display:none!important}
+.layout .review-compact-head,.layout .review-compact-meta,.layout .review-check-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.layout .review-member{min-width:0}
+.layout .review-member>strong{font-size:16px}
+.layout .review-compact-meta{padding:5px 0;border-bottom:1px solid var(--line,#c6d4c8)}
+.layout .review-reward{color:#147456;white-space:nowrap}
+.layout .review-compact-proof{font-size:13px;line-height:1.4}
+.layout .review-compact-proof>details summary,.layout .review-compact-details>summary{cursor:pointer;min-height:44px;display:list-item;padding:11px 0;box-sizing:border-box}
+.layout .review-compact-proof>details>div{white-space:pre-wrap;overflow-wrap:anywhere}
+.layout .review-check-view{margin:7px 0 0;padding:9px 10px;font-size:13px}
+.layout .review-check-title{flex-wrap:wrap;align-items:center}
+.layout .review-check-copy,.layout .review-ip-row{display:flex;justify-content:space-between;align-items:center;gap:6px;min-width:0}
+.layout .review-check-copy{margin:3px 0}
+.layout .review-check-copy code,.layout .review-ip-row span{min-width:0;overflow-wrap:anywhere}
+.layout .review-compact-card code{white-space:normal;overflow-wrap:anywhere}
+.layout .review-check-copy .btn,.layout .review-ip-row .btn{flex-shrink:0;min-height:44px;margin:0}
+.layout .review-ip-row .btn{min-width:44px;padding:5px}
+.layout .review-compact-audit{display:grid;gap:4px;font-size:12px;line-height:1.45}
+.layout .review-compact-details{font-size:12px;border-top:1px solid var(--line,#c6d4c8)}
+.layout .review-compact-details>div{margin:5px 0}
+.layout .review-compact-actions:empty{display:none}
+.layout .review-compact-actions .btn-row{margin:0;display:flex;flex-wrap:wrap;gap:8px}
+.layout .review-compact-actions .btn{min-height:44px;flex:1 1 auto}
+@media(max-width:380px){.layout .review-check-copy{flex-wrap:wrap}.layout .review-compact-head{align-items:center}}
