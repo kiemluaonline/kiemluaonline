@@ -2256,3 +2256,16 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  }finally{globalThis.fetch=oldFetch;delete env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE;}
  console.log('PASS: opt-in auto reward gated, zero baseline then one view, one wallet entry, replay blocked.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function renderReviewCheckView('),client.indexOf('async function adminReviews()'));
+ const render=new Function('esc',code+'\nreturn renderReviewCheckView;')(v=>String(v));
+ const audit={category:'link',evidence:'[LINK_RETURN_V1] test; Nguồn: bbmkts; Alias: test_abc-123; View API: 1 (chờ đối soát doanh thu)'};
+ const html=render(audit);
+ assert.match(html,/Mã Check View/);assert.match(html,/test_abc-123/);assert.match(html,/data-action="copy-check-view"/);assert.match(html,/View API lúc xác minh: 1/);
+ assert.match(render({...audit,evidence:'[LINK_RETURN_V1] test'}),/Chưa ghi nhận/);
+ assert.equal(render({...audit,category:'app'}),'');
+ assert.equal(render({...audit,evidence:'Member text; Nguồn: bbmkts; Alias: fake; View API: 1 (chờ đối soát doanh thu)'}),'');
+ console.log('PASS: Admin review displays and copies historical recorded provider alias without reward changes.');
+}

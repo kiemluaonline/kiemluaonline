@@ -1288,6 +1288,15 @@ async function adminUsers(){
   </div>`}
   ${u.status==='suspended'?`<div class="small muted">${u.suspension_type==='confirmed'?'<strong class="red">🚫 Khóa vĩnh viễn – Đã xác minh vi phạm</strong>':'⚠ Tạm khóa – Đang xác minh'}<div>Lý do: ${esc(u.suspension_reason||'Đang xác minh')}</div>${u.suspension_type==='confirmed'&&u.suspension_evidence?`<div>Bằng chứng Admin lưu: ${esc(u.suspension_evidence)}</div>`:''}</div>`:''}</td></tr>`))}</section>`;
 }
+function renderReviewCheckView(c){
+ // Read only the server-recorded provider audit, never infer alias from member input.
+ const evidence=String(c.evidence||'');
+ if(c.category!=='link'||!evidence.startsWith('[LINK_RETURN_V1]'))return '';
+ const match=evidence.match(/; Nguồn: ([a-z0-9_]{1,32}); Alias: ([A-Za-z0-9_-]{1,128}); View API: ([0-9]+|Chưa xác nhận) \(chờ đối soát doanh thu\)/);
+ if(!match)return '<p class="small muted">Mã Check View: Chưa ghi nhận</p>';
+ const [,source,alias,views]=match;
+ return `<div class="callout section" style="overflow-wrap:anywhere"><strong>Mã Check View</strong><div class="small">Nguồn: ${esc(source.toUpperCase())}</div><code>${esc(alias)}</code><div class="btn-row"><button type="button" class="btn alt sm" data-action="copy-check-view" data-value="${esc(alias)}">📋 Sao chép mã</button></div><div class="small">View API lúc xác minh: ${esc(views)}</div></div>`;
+}
 async function adminReviews(){
  const d=await api('/api/admin/reviews');
  const category=state.adminReviewFilter;
@@ -1303,7 +1312,7 @@ async function adminReviews(){
  <div class="section">${d.processed_evidence_count>0?`<p class="note"><strong>Có ${fmt(d.processed_evidence_count)} hồ sơ đã xử lý còn bằng chứng.</strong> Thao tác hàng loạt sẽ xóa bằng chứng của TẤT CẢ những hồ sơ đó, kể cả hồ sơ không hiển thị bên dưới.</p><button type="button" class="btn danger sm proof-delete-all" data-action="erase-all-processed-evidence" data-count="${Number(d.processed_evidence_count)}">🗑 Xóa tất cả bằng chứng đã xử lý</button>`:'<p class="note">Hiện không có bằng chứng đã xử lý cần dọn.</p>'}</div></div>
  <section class="card section admin-reviews-panel"><div class="admin-review-search-wrap"><label for="admin-review-search">🔎 Tìm nhanh trong danh sách đã tải</label><input id="admin-review-search" type="search" placeholder="Tên, email, nhiệm vụ, IP, loại thiết bị…" autocomplete="off"><p class="small muted">Tối đa 150 hồ sơ mới nhất; hồ sơ đang chờ duyệt được ưu tiên.</p></div>
  ${table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Đối chiếu IP / thiết bị','Duyệt'],filtered.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
- <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div><details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td><strong>${fmt(c.reward)} Lúa</strong></td><td>${category==='link'?`<div class="admin-task-audit">
+ <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div>${renderReviewCheckView(c)}<details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td><strong>${fmt(c.reward)} Lúa</strong></td><td>${category==='link'?`<div class="admin-task-audit">
   <div><strong>📱 Mở:</strong> ${esc(c.started_device)}</div>
   <div><strong>📱 Gửi:</strong> ${esc(c.submitted_device)}</div>
   <div><strong>🕒 Bắt đầu:</strong> ${dt(c.started_at)}</div>
@@ -1886,6 +1895,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='close-task-result'){closeTaskResultModal();setTimeout(()=>checkApprovedTaskPopups().catch(()=>{}),0);return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}
+  if(act==='copy-check-view'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép mã Check View.');return;}
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
   if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
   if(act==='use-manual-ipv4'){showPastedIPv4();return;}
