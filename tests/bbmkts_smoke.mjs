@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { bbmktsChartUrl, createBbmktsSessionLink, bbmktsReviewState, bbmktsViewApiUrl, fetchBbmktsViewJson } from '../src/bbmkts.js';
+import { bbmktsChartUrl, createBbmktsSessionLink, bbmktsReviewState, bbmktsViewApiUrl, fetchBbmktsViewJson, bbmktsTaskConfig } from '../src/bbmkts.js';
 const attemptId = '12345678-1234-4123-8123-123456789abc';
 assert.equal(bbmktsChartUrl('krjkB'), 'https://bbmkts.com/site/link/chart/krjkB');
 assert.throws(()=>bbmktsChartUrl('../test'));
@@ -29,3 +29,10 @@ await assert.rejects(fetchBbmktsViewJson('krjkB',async()=>new Response('<html>lo
 await assert.rejects(fetchBbmktsViewJson('krjkB',async()=>new Response('{}',{status:429,headers:{'Content-Type':'application/json'}})),/429/);
 await assert.rejects(fetchBbmktsViewJson('krjkB',async()=>new Response(JSON.stringify({big:'a'.repeat(66000)}),{headers:{'Content-Type':'application/json'}})),/vượt giới hạn/);
 console.log('PASS: BBMKTS read-only JSON endpoint, validation, size limits and failure handling.');
+
+assert.deepEqual(bbmktsTaskConfig({},'link'),{creation:'manual',verification:'manual'});
+assert.deepEqual(bbmktsTaskConfig({bbmkts_creation:'developer',bbmkts_verification:'api_view',review_mode:'manual',is_active:false},'link'),{creation:'developer',verification:'api_view'});
+assert.throws(()=>bbmktsTaskConfig({bbmkts_creation:'quicklink',review_mode:'manual',is_active:true},'link'),/Tắt \/ nháp/);
+assert.throws(()=>bbmktsTaskConfig({bbmkts_verification:'api_view',review_mode:'manual'},'link'),/link riêng/);
+assert.throws(()=>bbmktsTaskConfig({bbmkts_creation:'invalid'},'link'),/không hợp lệ/);
+console.log('PASS: BBMKTS draft-only task configuration and fail-closed activation.');

@@ -11,3 +11,6 @@ Bản chuẩn bị, chưa kích hoạt cho thành viên. Không có API giả đ
 
 ## API Check View mới (27/11/2026)
 Theo ảnh hướng dẫn BBMKTS: GET https://bbmkts.com/api/link/chart/{aliases}, public, trả JSON. Admin có mục thử kiểm tra alias từ Quản lý nhiệm vụ; Worker lấy dữ liệu chỉ đọc và hiển thị JSON nguyên dạng. Chưa xác nhận được schema thực tế hay ý nghĩa view tính tiền. Chưa cấp link thật, chưa tự động đối soát từng phiên, không tự cộng Lúa. Không dùng cookie đăng nhập hay token cho endpoint này.
+
+## Cấu hình theo từng nhiệm vụ
+Admin > Quản lý nhiệm vụ > loại Link: chọn nhập link thủ công, Quicklink hoặc Developer API; chọn Admin đối soát hoặc API Check View. Các lựa chọn tự động được lưu vào settings ở trạng thái nháp; server từ chối bật công khai và từ chối tự cộng Lúa khi chưa có adapter thật. Không nhập token vào giao diện nháp. Cấu hình thủ công cũ tiếp tục hoạt động như trước.

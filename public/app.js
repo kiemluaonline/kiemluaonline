@@ -1156,6 +1156,10 @@ function taskForm(task={}){
  <div class="callout admin-link-task-hint" id="admin-link-task-hint" ${linkHint}>
  <strong>🔗 Link tự quay về:</strong> Chọn <strong>Admin kiểm tra bằng chứng</strong>, tạo nhiệm vụ <strong>Tắt / nháp</strong> rồi lưu. Sao chép trang đích ở danh sách bên dưới làm URL gốc khi rút gọn. Sau đó dán link đã rút gọn vào URL nhiệm vụ và bật công khai.
  <p class="note">Thành viên xem lưu ý → Bắt đầu → quay về → giải phép tính → Chờ đối soát. Chỉ duyệt sau khi xác minh nguồn thu hợp lệ; phép tính không chứng minh đối tác đã tính tiền.</p>
+ <h4>Cấu hình link riêng BBMKTS</h4>
+ ${select('bbmkts_creation','Cách tạo link',[['manual','Nhập link rút gọn thủ công'],['quicklink','Tự động — Quicklink (nháp)'],['developer','Tự động — Developer API (nháp)']],task.bbmkts_creation||'manual')}
+ ${select('bbmkts_verification','Cách xác minh BBMKTS',[['manual','Admin đối soát'],['api_view','Tự động — API Check View (nháp)']],task.bbmkts_verification||'manual')}
+ <p class="note">Hai lựa chọn tự động hiện chỉ lưu cấu hình nháp, chưa cấp link thật. Chọn Tắt / nháp và Admin kiểm tra bằng chứng khi lưu. Token sẽ được cấu hình ở máy chủ sau khi có tài liệu chính thức.</p>
  </div>
  ${field('url','URL HTTPS (link đã rút gọn, link tải app hoặc nhiệm vụ)',task.url||'', 'type="url" placeholder="https://..."')}
  ${field('app_referral_code','Mã giới thiệu của bạn (chỉ dùng cho App)',task.app_referral_code||'', 'maxlength="80" placeholder="Nhập mã giới thiệu trong ứng dụng"')}
@@ -1183,6 +1187,7 @@ async function adminTasks(){
    <td class="num">${fmt(t.reward)} Lúa</td>
    <td><strong>${esc(quota)}</strong><div class="small muted">Hôm nay: ${fmt(t.submitted_today)} đã gửi • ${fmt(t.pending_today)} chờ duyệt</div></td>
    <td>${t.review_mode==='manual'?'Admin xét duyệt':'Tự động'}
+    ${t.category==='link'&&t.bbmkts_creation&&t.bbmkts_creation!=='manual'?`<p class="small">BBMKTS: ${esc(t.bbmkts_creation)} · ${t.bbmkts_verification==='api_view'?'API Check View':'Admin đối soát'} (nháp)</p>`:''}
     ${t.category==='link'&&t.review_mode!=='manual'?'<p class="small red">⚠ Link tự quay về cần duyệt tay để không cộng Lúa chỉ bằng CAPTCHA.</p>':''}</td>
    <td>${t.is_active?chip('active'):chip('suspended')}</td>
    <td><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">🗑 Xóa</button></div></td>
@@ -2022,6 +2027,8 @@ app.addEventListener('submit',async e=>{
     return;
   }
   if(kind==='admin-task'){
+    if(b.category==='link'&&(b.bbmkts_creation!=='manual'||b.bbmkts_verification!=='manual')&&b.is_active==='1')
+      throw new Error('BBMKTS chưa kết nối hoàn chỉnh. Chọn Tắt / nháp để lưu cấu hình tự động.');
     if(b.category==='link'&&b.review_mode!=='manual')
       throw new Error('Link tự quay về phải chọn Admin kiểm tra bằng chứng; không tự cộng Lúa chỉ bằng phép tính.');
     const data={...b,reward:Number(b.reward),min_seconds:Number(b.min_seconds),is_active:b.is_active==='1'};

@@ -2037,3 +2037,21 @@ assert.equal(swipeAdmin.reloadCount,0,'Admin work must not be interrupted by mem
 assert.doesNotMatch(swipeGuardSource,/api\s*\(|\/api\/tasks|startTask\s*\(|processLinkReturn\s*\(/,
  'Returning without completing a task must never create a claim, consume quota or submit a return');
 console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, but normal navigation and Admin stay intact.');
+
+// BBMKTS draft settings persist without publishing or touching existing wallets.
+{
+ const config={title:'BBMKTS thử nghiệm cấu hình',category:'link',url:'',reward:10,review_mode:'manual',repeat_policy:'daily',is_active:false,bbmkts_creation:'developer',bbmkts_verification:'api_view'};
+ const made=await call('/api/admin/tasks','POST',config,admCookie);
+ assert.equal(made.status,201);
+ const taskId=made.data.id;
+ const listed=await call('/api/admin/tasks','GET',undefined,admCookie);
+ const item=listed.data.tasks.find(x=>x.id===taskId);
+ assert.equal(item.bbmkts_creation,'developer');
+ assert.equal(item.bbmkts_verification,'api_view');
+ assert.equal(Number(item.is_active),0);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',{...config,is_active:true},admCookie)).status,400);
+ const oldClient={...config,is_active:true};delete oldClient.bbmkts_creation;delete oldClient.bbmkts_verification;
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',oldClient,admCookie)).status,400);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'DELETE',undefined,admCookie)).status,200);
+ console.log('PASS: admin BBMKTS draft saved, old-client activation blocked, clean deletion.');
+}

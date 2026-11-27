@@ -70,3 +70,20 @@ export async function fetchBbmktsViewJson(alias, fetcher = fetch) {
   if (data === null || typeof data !== 'object') throw new Error('JSON BBMKTS không hợp lệ');
   return { alias, endpoint, data };
 }
+
+// Per-task draft configuration. It deliberately cannot enable a live provider
+// until the creation and paid-view contracts are implemented and tested.
+export function bbmktsTaskConfig(body, category) {
+  if (category !== 'link') return { creation: 'manual', verification: 'manual' };
+  const creation = body.bbmkts_creation ?? 'manual';
+  const verification = body.bbmkts_verification ?? 'manual';
+  if (!['manual','quicklink','developer'].includes(creation) ||
+      !['manual','api_view'].includes(verification))
+    throw new Error('Cấu hình BBMKTS không hợp lệ.');
+  if (verification === 'api_view' && creation === 'manual')
+    throw new Error('Xác minh qua API yêu cầu link riêng cho từng phiên.');
+  if ((creation !== 'manual' || verification !== 'manual') &&
+      (body.is_active || body.review_mode !== 'manual'))
+    throw new Error('BBMKTS chưa kết nối hoàn chỉnh: chỉ được lưu Tắt / nháp và duyệt thủ công thực tế.');
+  return { creation, verification };
+}

@@ -3,7 +3,7 @@ import { shopOrdersAPI } from './shop-orders.js';
 import { cardRedemptionsAPI } from './card-redemptions.js';
 import { payoutAccountsAPI } from './payout-accounts.js';
 import { taskDeviceEventDetail, attachTaskDeviceAudit } from './task-device.js';
-import { fetchBbmktsViewJson } from './bbmkts.js';
+import { fetchBbmktsViewJson, bbmktsTaskConfig } from './bbmkts.js';
 // Trạm Có Lúa - Cloudflare Worker API. Chỉ server mới được cộng/trừ Lúa.
 const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
@@ -895,7 +895,10 @@ function validateTaskBody(b) {
     fail(400, 'Nhiệm vụ App cần URL tải ứng dụng và mã giới thiệu (ít nhất 2 ký tự).');
   const linkLimit=int(b.link_24h_limit,1);
   if(!Number.isInteger(linkLimit)||linkLimit<1||linkLimit>20)fail(400,'Số lượt link/tài khoản/ngày phải từ 1 đến 20.');
-  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit,appCode:category==='app'?appCode:''};
+  let bbmkts;
+  try { bbmkts = bbmktsTaskConfig(b,category); }
+  catch (error) { fail(400,error.message); }
+  return {title,description,category,url,reward,minSeconds,review,repeat,active:b.is_active?1:0,linkLimit,appCode:category==='app'?appCode:'',bbmkts};
 }
 const isPath = (p, prefix) => p.startsWith(prefix);
 async function handler(req, env) {
@@ -1226,7 +1229,7 @@ async function handler(req, env) {
       if(!seen)await event(env,req,conflict,me.id,(denied==='link_owner'?'link_owner':'link_browser_owner')+':list');
     }
     const [overrides,counts,linkReturnCounts]=await Promise.all([
-      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%'").all(),
+      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'bbmkts_task_creation:%' OR key LIKE 'bbmkts_task_verification:%'").all(),
       env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id").bind(me.id).all(),
       // Một lượt đến link đích được tính ngay khi quay về, kể cả chưa giải phép tính;
       // lượt đã gửi (kể cả bị từ chối) tính một lần, không đếm lại phiên đã tiêu thụ.
@@ -1624,7 +1627,9 @@ async function handler(req, env) {
       return json({tasks:rows.results.map(t=>{
         const appCode=str(settings.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
         const usage=dailyActivity.get(t.id);
-        return {...t,category:t.category==='other'&&appCode?'app':t.category,
+        return {...t,
+          bbmkts_creation:settings.results.find(r=>r.key==='bbmkts_task_creation:'+t.id)?.value||'manual',
+          bbmkts_verification:settings.results.find(r=>r.key==='bbmkts_task_verification:'+t.id)?.value||'manual',category:t.category==='other'&&appCode?'app':t.category,
           link_24h_limit:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
           submitted_today:Number(usage?.submitted_today||0),pending_today:Number(usage?.pending_today||0)};
       })});
@@ -1635,7 +1640,9 @@ async function handler(req, env) {
         env.DB.prepare(`INSERT INTO tasks(id,title,description,category,url,reward,min_seconds,review_mode,repeat_policy,is_active)
           VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(taskId,t.title,t.description,storedTaskCategory(t.category),t.url,t.reward,t.minSeconds,t.review,t.repeat,t.active),
         env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('link_task_limit:'+taskId,String(t.linkLimit)),
-        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode)
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('app_referral_code:'+taskId,t.appCode),
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_creation:'+taskId,t.bbmkts.creation),
+        env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?)').bind('bbmkts_task_verification:'+taskId,t.bbmkts.verification)
       ]);
       return json({ ok: true, id: taskId }, 201);
     }
@@ -1663,13 +1670,21 @@ async function handler(req, env) {
       const result = await env.DB.prepare('DELETE FROM tasks WHERE id=? AND NOT EXISTS (SELECT 1 FROM task_attempts WHERE task_id=?) AND NOT EXISTS (SELECT 1 FROM task_completions WHERE task_id=?)')
         .bind(taskId,taskId,taskId).run();
       if (!result.meta?.changes) fail(409,'Nhiệm vụ vừa phát sinh lượt thực hiện. Không thể xóa.');
-      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?)")
-        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId).run();
+      await env.DB.prepare("DELETE FROM settings WHERE key IN (?,?,?,?,?)")
+        .bind('link_task_limit:'+taskId,'app_referral_code:'+taskId,APP_LOGO_PREFIX+taskId,'bbmkts_task_creation:'+taskId,'bbmkts_task_verification:'+taskId).run();
       return json({ok:true});
     }
     const taskEdit = p.match(/^\/api\/admin\/tasks\/([^/]+)$/);
     if (m === 'PATCH' && taskEdit) {
-      const t = validateTaskBody(await readBody(req));
+      const body = await readBody(req);
+      for (const field of ['creation','verification']) {
+        const key='bbmkts_'+field;
+        if (!Object.prototype.hasOwnProperty.call(body,key)) {
+          const previous=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind('bbmkts_task_'+field+':'+taskEdit[1]).first();
+          body[key]=previous?.value||'manual';
+        }
+      }
+      const t = validateTaskBody(body);
       const exists=await env.DB.prepare('SELECT id FROM tasks WHERE id=?').bind(taskEdit[1]).first();
       if(!exists)fail(404,'Không tìm thấy nhiệm vụ.');
       await env.DB.batch([
@@ -1679,7 +1694,11 @@ async function handler(req, env) {
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
           .bind('link_task_limit:'+taskEdit[1],String(t.linkLimit)),
         env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-          .bind('app_referral_code:'+taskEdit[1],t.appCode)
+          .bind('app_referral_code:'+taskEdit[1],t.appCode),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+          .bind('bbmkts_task_creation:'+taskEdit[1],t.bbmkts.creation),
+        env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+          .bind('bbmkts_task_verification:'+taskEdit[1],t.bbmkts.verification)
       ]);
       return json({ ok: true });
     }
