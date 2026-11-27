@@ -196,6 +196,8 @@ function renderTaskResultModal(result,{linkReturn=false}={}){
 }
 async function api(path, method='GET', body=null){
   const device=browserDeviceId();
+  // All state-changing requests require same-origin JSON, including bodyless DELETE.
+  if(body===null&&['POST','PUT','PATCH','DELETE'].includes(method.toUpperCase()))body={};
   const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
   const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin'});
   const data=await r.json().catch(()=>({error:'Không nhận được phản hồi máy chủ.'}));
@@ -1871,7 +1873,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='delete-task'){
    if(!localizedConfirm('Xóa nhiệm vụ "'+el.dataset.title+'"? Nhiệm vụ sẽ biến mất khỏi danh sách Admin và thành viên. Lịch sử và số Lúa đã phát sinh vẫn được giữ; yêu cầu đã gửi vẫn có thể duyệt. Không thể bật lại nhiệm vụ đã xóa.'))return;
-   await api('/api/admin/tasks/'+encodeURIComponent(el.dataset.id),'DELETE');
+   await api('/api/admin/tasks/'+encodeURIComponent(el.dataset.id),'DELETE',{});
    if(state.taskEdit===el.dataset.id)state.taskEdit=null;
    toast('Đã xóa nhiệm vụ khỏi danh sách.');await navigate('admin-tasks');return;
   }
