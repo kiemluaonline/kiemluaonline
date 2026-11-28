@@ -1421,6 +1421,7 @@ async function handler(req, env) {
     if(attempt.available_at<0&&attempt.expires_at!==LINK_CONFIRM_OPEN){
       // Legacy 60-minute claims remain owned by the original account and browser.
       // Reopen confirmation only; the claim still checks all quotas and provider evidence.
+      if(attempt.expires_at<=now())await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING').bind('link_return_recovery:'+attempt.id,'1').run();
       await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL AND available_at=?').bind(LINK_CONFIRM_OPEN,attempt.id,attempt.available_at).run();
       attempt.expires_at=LINK_CONFIRM_OPEN;
     }
@@ -2490,7 +2491,7 @@ export default {
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now()),
       env.DB.prepare("DELETE FROM login_attempts WHERE created_at<datetime('now','-30 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_view_retry:%' AND NOT EXISTS(SELECT 1 FROM task_completions c WHERE c.id=substr(settings.key,17) AND c.status='pending' AND c.created_at>=datetime('now','-72 hours'))"),
-      env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days') AND (consumed_by IS NOT NULL OR NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=task_attempts.task_id AND t.category='link'))"),
+      env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days') AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=task_attempts.task_id AND t.category='link')"),
       env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now()),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_signup_pending:%' AND json_extract(value,'$.expires')<?").bind(now())
