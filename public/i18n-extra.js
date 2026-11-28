@@ -1,5 +1,11 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Đang kiểm tra thiết bị…": "Tab tom xyuas lub cuab yeej…",
+  "Đang kết nối hệ thống…": "Tab tom txuas rau lub system…",
+  "Chưa thể kết nối hệ thống": "Tseem txuas tsis tau rau lub system",
+  "Vui lòng kiểm tra kết nối mạng và thử lại.": "Thov xyuas internet thiab rov sim dua.",
+  "Vui lòng chờ trong giây lát.": "Thov tos ib pliag.",
+  "Chưa thể xác minh đầy đủ thiết bị. Một số nhiệm vụ có thể không khả dụng.": "Tseem xyuas tsis tau lub cuab yeej tiav. Tej haujlwm yuav siv tsis tau.",
   "Chào mừng đến với Trạm Có Lúa": "Zoo siab txais tos rau Trạm Có Lúa",
   "Vài lưu ý quan trọng trước khi bắt đầu": "Tej yam tseem ceeb ua ntej pib",
   "Chỉ sử dụng một tài khoản cho tất cả nhiệm vụ.": "Siv ib tug as khauj xwb rau txhua txoj haujlwm.",
