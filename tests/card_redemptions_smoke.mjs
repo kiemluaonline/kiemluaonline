@@ -187,3 +187,26 @@ assert.equal((await call('/api/admin/card-redemptions/'+charged2.data.id,'POST',
  {action:'delivered',serial:'NEWCARD12345678',pin:'PIN987654321000'},'admin')).status,200);
 assert.equal(balance(),beforeFee-12000,'Fulfillment does not deduct additional fee or refund it');
 console.log('PASS: card redemption defaults off, secure code encryption, member privacy, one-time debit, approval, refusal/refund and disabled gates.');
+
+
+ // Multi-card orders: reject whole order if balance cannot cover every card and fee.
+const beforeMulti=balance();
+const countMulti=()=>sqlite.prepare("SELECT COUNT(*) n FROM card_redemptions WHERE user_id='user1'").get().n;
+const rowsBeforeMulti=countMulti();
+for(const quantity of [0,6,1.5]){
+ assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000,expected_fee_lua:2000,quantity})).status,400);
+}
+assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000,expected_fee_lua:2000,quantity:5})).status,400);
+assert.equal(balance(),beforeMulti);assert.equal(countMulti(),rowsBeforeMulti);
+const multi=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000,expected_fee_lua:2000,quantity:2});
+assert.equal(multi.status,201,JSON.stringify(multi));assert.equal(multi.data.ids.length,2);
+assert.equal(multi.data.total_lua,24000);assert.equal(multi.data.fee_lua,4000);
+assert.equal(balance(),beforeMulti-24000);assert.equal(countMulti(),rowsBeforeMulti+2);
+for(const rid of multi.data.ids){
+ assert.equal((await call('/api/admin/card-redemptions/'+rid,'POST',{action:'rejected',note:'Fixture: hoàn thẻ thử.'},'admin')).status,200);
+}
+assert.equal(balance(),beforeMulti);
+assert.match(memberHTML,/type="radio" name="carrier"/);
+assert.match(memberHTML,/type="radio" name="denomination_vnd"/);
+assert.match(memberHTML,/name="quantity"/);
+console.log('PASS: multi-card atomic balance gate, per-card fees/refunds and compact picker.');
