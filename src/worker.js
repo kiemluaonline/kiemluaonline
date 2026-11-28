@@ -36,7 +36,7 @@ const DEFAULTS = {
   site_name: 'Trạm Có Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
   withdrawals_enabled: '0', withdrawal_fee_lua: '0', withdrawal_fee_vnd: '2000', payout_free_from_vnd: '25000', card_fee_lua: '0', announcement: '',
-  quota_user_tasks_daily: '25', quota_device_accounts_daily: '1', quota_ip_accounts_daily: '6',
+  quota_user_tasks_daily: '0', quota_device_accounts_daily: '1', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
   quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1'
 };
@@ -510,6 +510,8 @@ async function getSettings(env) {
   if(settings.site_name==='Trạm Lúa')settings.site_name='Trạm Có Lúa';
   // Preserve explicit disabled setting; legacy values >1 now mean one account per browser.
   settings.quota_device_accounts_daily=settings.quota_device_accounts_daily==='0'?'0':'1';
+  // Per-task repetition remains enforced; no aggregate daily account cap.
+  settings.quota_user_tasks_daily='0';
   return settings;
 }
 async function wallet(env, userId) {
@@ -709,7 +711,7 @@ const quotaNumber=(s,k)=>Math.max(0,Math.min(100,int(s[k],int(DEFAULTS[k]))));
 async function taskQuota(env,req,userId,settings,category=''){
  if(category==='link')return {day:vnDay(),ip:clientIP(req),device:await deviceCode(req,env),maxUser:0,maxDevice:0,maxIP:0};
  const day=vnDay(),ip=clientIP(req),device=browserDeviceId(req)?await deviceCode(req,env):'';
- const maxUser=quotaNumber(settings,'quota_user_tasks_daily');
+ const maxUser=0;
  const maxDevice=device?quotaNumber(settings,'quota_device_accounts_daily'):0;
  const maxIP=(ip!=='unknown'&&ip!=='local')?quotaNumber(settings,'quota_ip_accounts_daily'):0;
  const [mine,devices,ips]=await Promise.all([
@@ -2281,6 +2283,7 @@ async function handler(req, env) {
         if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h','quota_link_tasks_device_24h'].includes(key)
             && (!/^\d+$/.test(value) || Number(value)>100)) fail(400, `${key}: chỉ số nguyên từ 0 đến 100; 0 để tắt.`);
         if(key==='quota_device_accounts_daily'&&Number(value)>1)value='1';
+        if(key==='quota_user_tasks_daily')value='0';
         if (key === 'site_name' && value.length < 2) fail(400, 'Tên website quá ngắn.');
         entries.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, value));
       }
