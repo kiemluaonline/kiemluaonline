@@ -1685,6 +1685,7 @@ async function adminSecurity(){
  <div class="btn-row"><button class="btn alt" type="button" data-action="fraud-proxy-test">🔎 Kiểm tra kết nối API</button></div>
  <p class="small muted">Kiểm tra IP kết nối Admin bằng API thật, không sử dụng kết quả lưu tạm. Mỗi lần có thể tốn một lượt API; không tạo nhiệm vụ hay thay đổi Lúa.</p>
  <div id="proxy-test-result" role="status" aria-live="polite"></div>
+ <div class="callout"><strong>Anti-Fraud 3.0 · Kiểm tra IP VPS / Hosting</strong><p class="note">Mới bổ sung chế độ kiểm tra thông tin qua nút trên. Chưa tự động chặn hoặc chấm điểm theo VPS; IP hosting không chứng minh thiết bị giả lập.</p><button class="btn alt" type="button" data-action="fraud-hosting-demo">Thử bằng dữ liệu mô phỏng</button><div id="hosting-demo-result" role="status" aria-live="polite"></div></div>
  <div class="fraud-member-stats"><div><strong>${fmt(proxyN('vpn'))}</strong><span>VPN bị chặn</span></div><div><strong>${fmt(proxyN('proxy'))}</strong><span>Proxy bị chặn</span></div><div><strong>${fmt(proxyN('tor'))}</strong><span>Tor bị chặn</span></div><div><strong>${fmt(unavailableN)}</strong><span>Không kiểm tra được</span></div></div>
  <p class="note">Số yêu cầu hôm nay, không phải số người gian lận. Khi bật, không đạt kiểm tra hoặc API lỗi đều không cấp Link mới. Không tự khóa tài khoản.</p>
  ${proxyEvents.length?`<details class="fraud-alert-technical"><summary>Xem nhật ký kiểm tra hôm nay (tối đa 100)</summary><div class="fraud-alert-list">${proxyEvents.map(r=>`<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div><div class="small muted">${esc(r.email||'')}</div><div class="fraud-alert-stage action">${r.event_type==='link_proxy_blocked'?'Bị chặn trước khi cấp Link':'Tạm dừng vì không kiểm tra được'}</div><p class="fraud-alert-reason">${esc(proxyReason[String(r.detail||'').split(':')[0]]||'Chưa rõ')} · ${esc(r.task_title||'Link')}</p><details class="fraud-alert-technical"><summary>IP kết nối</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div></details><button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản</button></article>`).join('')}</div></details>`:''}
@@ -2241,6 +2242,11 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
   if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
   if(act==='use-manual-ipv4'){showPastedIPv4();return;}
+  if(act==='fraud-hosting-demo'){
+   const target=document.getElementById('hosting-demo-result');
+   if(target)target.innerHTML='<div class="fraud-alert-card"><strong>Dữ liệu minh họa — không gọi API, không ghi nhật ký thành viên</strong><p>203.0.113.10 · Mẫu IP thường: chưa phát hiện hosting.</p><p>203.0.113.20 · Mẫu IP hosting: cần kiểm tra, không tự chặn.</p><p>203.0.113.30 · Thiếu dữ liệu: chưa xác minh.</p></div>';
+   return;
+  }
   if(act==='fraud-proxy-test'){
    if(el.disabled)return;
    const result=document.getElementById('proxy-test-result');
@@ -2253,7 +2259,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
     const good=d.status==='clear'||d.status==='blocked';
     const reason={vpn:'VPN',proxy:'Proxy',tor:'Tor',missing_key:'Chưa có Secret IPAPI_API_KEY',missing_ip:'Chưa xác định được IP kết nối',service_error:'Máy chủ ipapi.is trả lỗi',network_error:'Không kết nối được từ Cloudflare tới ipapi.is',timeout:'API phản hồi quá thời hạn',auth_error:'API từ chối xác thực hoặc quyền truy cập',rate_limit:'API báo vượt giới hạn yêu cầu',unexpected_redirect:'API trả chuyển hướng ngoài dự kiến',invalid_response:'API không trả đủ dữ liệu bảo vệ',busy:'Dịch vụ đang bận'}[d.reason]||'Không xác định';
     const advice=d.status==='clear'?'Không phát hiện VPN/Proxy/Tor trên IP này.':d.status==='blocked'?'Phát hiện '+reason+' — kết nối này sẽ bị chặn khi bắt đầu Link nếu bảo vệ đang bật.':reason+'. Chưa xác minh được API hoạt động.';
-    result.innerHTML=`<div class="fraud-alert-card"><strong class="${good?'':'red'}">${good?'✓ API phản hồi hợp lệ':'⚠ Kiểm tra API chưa thành công'}</strong><p>${esc(advice)}</p><div class="small">Bảo vệ nhiệm vụ: <strong>${d.enabled?'Đang bật':'Chưa bật'}</strong></div><div class="small">IP kết nối: ${adminIP(d.ip)}</div><div class="small">Thời gian: ${dt(d.checked_at)} · ${fmt(d.duration_ms)} ms${d.http_status?' · HTTP '+esc(d.http_status):''}</div><p class="small muted">Chỉ là phép thử của Admin, không tính là lượt nhiệm vụ hoặc cảnh báo gian lận.</p></div>`;
+    result.innerHTML=`<div class="fraud-alert-card"><strong class="${good?'':'red'}">${good?'✓ API phản hồi hợp lệ':'⚠ Kiểm tra API chưa thành công'}</strong><p>${esc(advice)}</p><div class="small">Bảo vệ nhiệm vụ: <strong>${d.enabled?'Đang bật':'Chưa bật'}</strong></div><div class="small">IP kết nối: ${adminIP(d.ip)}</div><div class="small">VPS / Hosting: <strong>${d.hosting==='hosting'?'Phát hiện IP hosting — cần đối chiếu':d.hosting==='not_detected'?'Chưa phát hiện IP hosting':'Chưa có dữ liệu xác minh'}</strong></div><div class="small">Thời gian: ${dt(d.checked_at)} · ${fmt(d.duration_ms)} ms${d.http_status?' · HTTP '+esc(d.http_status):''}</div><p class="small muted">Chỉ là phép thử của Admin, không tính là lượt nhiệm vụ hoặc cảnh báo gian lận.</p></div>`;
    }catch(err){result.textContent=err.message||'Không kiểm tra được API.';}
    finally{el.disabled=false;el.textContent=original;}
    return;
