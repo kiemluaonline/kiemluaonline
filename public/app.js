@@ -1245,7 +1245,8 @@ function renderMemberTaskCard(t){
 async function tasks(){
  const [data,stats]=await Promise.all([api('/api/tasks'),api('/api/task-dashboard')]);
  state.memberTasks=data.tasks;
- const shownTasks=data.tasks.filter(t=>['app','link'].includes(t.category)&&t.category===state.taskFilter);
+ const shownTasks=data.tasks.filter(t=>['app','link'].includes(t.category)&&t.category===state.taskFilter)
+  .sort((a,b)=>(Number(b.reward)||0)-(Number(a.reward)||0));
  setTimeout(startTaskResetTimer,0);
  if(String(stats.ip||'').includes(':'))setTimeout(()=>{const button=document.querySelector('.task-ip-btn[data-action="check-ipv4"]');if(button&&state.view==='tasks')detectPublicIPv4(button,true);},0);
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
