@@ -196,11 +196,12 @@ function renderTaskResultModal(result,{linkReturn=false}={}){
  document.body.classList.add('task-result-open');
  root.querySelector('.task-result-primary')?.focus({preventScroll:true});
 }
-async function api(path, method='GET', body=null){
+async function api(path, method='GET', body=null, linkSignals=''){
   const device=browserDeviceId();
   // All state-changing requests require same-origin JSON, including bodyless DELETE.
   if(body===null&&['POST','PUT','PATCH','DELETE'].includes(method.toUpperCase()))body={};
   const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
+  if(method==='POST'&&/^\/api\/tasks\/[^/]+\/start$/.test(path)&&/^[01?]{3}$/.test(linkSignals))headers['X-TL-Link-Signals']=linkSignals;
   const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin',...(method.toUpperCase()==='GET'?{cache:'no-store'}:{})});
   const data=await r.json().catch(()=>({error:'Không nhận được phản hồi máy chủ.'}));
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;
@@ -1664,7 +1665,7 @@ async function showFraudAccount(userId){
  </section></div>`;
 }
 
-// Anti-Fraud 3.0: voluntary, local Admin diagnostic only. No fingerprint is stored or transmitted.
+// Anti-Fraud 3.0: coarse signals. Only Link preflight sends three flags, never raw renderer or a fingerprint.
 function classifyBrowserSignals(signals={}){
  const automation=signals.automation===true?true:signals.automation===false?false:null;
  const emulator=signals.emulator===true?true:signals.emulator===false?false:null;
@@ -1676,7 +1677,7 @@ function classifyBrowserSignals(signals={}){
  const status=automation===true||emulator===true?'review':virtualGraphics===true?'weak':([automation,emulator,virtualGraphics].some(v=>v===null)?'unknown':'no_signal');
  return {status,reasons,automation,emulator,virtualGraphics};
 }
-function inspectAdminBrowserSignals(){
+function inspectBrowserSignals(){
  const signals={automation:null,emulator:null,virtualGraphics:null};
  try{if(typeof navigator.webdriver==='boolean')signals.automation=navigator.webdriver;}catch{}
  try{
@@ -1713,6 +1714,9 @@ function browserDiagnosticFixtures(){
 async function adminSecurity(){
  const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
  const proxy=d.proxy_guard||{},proxyCounts=proxy.counts||[],proxyEvents=proxy.events||[];
+ const live=d.link_observations||null,liveEvents=live?.events||[];
+ const observationLabels={automation_reported:'Trình duyệt tự báo điều khiển tự động',emulator_reported:'Trình duyệt tự báo dấu hiệu giả lập',graphics_reported:'Đồ họa ảo/phần mềm (tín hiệu yếu)',emulator_ua:'User-Agent có dấu hiệu giả lập (có thể bị sửa)',hosting:'IP thuộc Hosting/VPS (không chứng minh giả lập)'};
+ const describeObservation=detail=>String(detail||'').split(':')[0].split(',').map(k=>observationLabels[k]||'Tín hiệu chưa xác định').join(' · ');
  const proxyN=(reason)=>proxyCounts.filter(x=>x.event_type==='link_proxy_blocked'&&x.reason===reason).reduce((sum,x)=>sum+Number(x.n||0),0);
  const unavailableN=proxyCounts.filter(x=>x.event_type==='link_proxy_unavailable').reduce((sum,x)=>sum+Number(x.n||0),0);
  const proxyReason={vpn:'VPN',proxy:'Proxy',tor:'Tor',missing_key:'Thiếu API key',missing_ip:'Không xác định IP',service_error:'Dịch vụ trả lỗi',network_error:'Lỗi kết nối máy chủ',timeout:'API quá thời hạn',auth_error:'API từ chối xác thực',rate_limit:'Vượt hạn mức API',unexpected_redirect:'API chuyển hướng bất thường',invalid_response:'Phản hồi API không hợp lệ',busy:'Dịch vụ đang bận'};
@@ -1722,7 +1726,7 @@ async function adminSecurity(){
   (p.name+' '+p.email).toLowerCase().includes(state.fraudSearch.trim().toLowerCase())
  );
  const groups=(title,summary,content)=>`<details class="card section fraud-group"><summary><span><strong>${title}</strong><small>${summary}</small></span><span aria-hidden="true" class="fraud-chevron">⌄</span></summary><div class="fraud-group-body">${content}</div></details>`;
- const eventLabels={captcha_wrong:'Sai phép tính',login_failed:'Đăng nhập thất bại',device_seen:'Ghi nhận trình duyệt',browser_ipv4_report:'Báo cáo IPv4',task_quota_denied:'Chặn giới hạn nhiệm vụ App',link_ip_quota_denied:'Chặn Link theo IP',link_browser_quota_denied:'Chặn Link theo trình duyệt',link_browser_missing:'Chưa nhận diện trình duyệt',link_return_too_fast:'Quay về Link quá nhanh',link_return_network_changed:'Thay đổi mạng khi quay về Link',link_source_create_failed:'Lỗi cấp link từ nguồn',link_proxy_blocked:'Chặn VPN / Proxy / Tor trước cấp Link',link_proxy_unavailable:'Tạm dừng cấp Link do chưa kiểm tra được IP',signup_completed:'Đăng ký thành công',signup_device_limit:'Chặn đăng ký theo trình duyệt',signup_rate_limited:'Giới hạn tốc độ đăng ký',too_many_task_starts:'Bắt đầu nhiệm vụ quá nhiều',fraud_payout_override:'Admin xác minh rủi ro thanh toán',link_fast_return_approved:'Admin đối chiếu lượt quay về nhanh',task_device_start:'Bắt đầu nhiệm vụ',task_device_submit:'Gửi nhiệm vụ',admin_settings:'Admin lưu cài đặt',admin_user_status:'Admin đổi trạng thái tài khoản',admin_withdrawal_action:'Admin xử lý rút tiền'};
+ const eventLabels={captcha_wrong:'Sai phép tính',login_failed:'Đăng nhập thất bại',device_seen:'Ghi nhận trình duyệt',browser_ipv4_report:'Báo cáo IPv4',task_quota_denied:'Chặn giới hạn nhiệm vụ App',link_ip_quota_denied:'Chặn Link theo IP',link_browser_quota_denied:'Chặn Link theo trình duyệt',link_browser_missing:'Chưa nhận diện trình duyệt',link_return_too_fast:'Quay về Link quá nhanh',link_return_network_changed:'Thay đổi mạng khi quay về Link',link_source_create_failed:'Lỗi cấp link từ nguồn',link_preflight_observation:'Dấu hiệu tham khảo trước cấp Link',link_proxy_blocked:'Chặn VPN / Proxy / Tor trước cấp Link',link_proxy_unavailable:'Tạm dừng cấp Link do chưa kiểm tra được IP',signup_completed:'Đăng ký thành công',signup_device_limit:'Chặn đăng ký theo trình duyệt',signup_rate_limited:'Giới hạn tốc độ đăng ký',too_many_task_starts:'Bắt đầu nhiệm vụ quá nhiều',fraud_payout_override:'Admin xác minh rủi ro thanh toán',link_fast_return_approved:'Admin đối chiếu lượt quay về nhanh',task_device_start:'Bắt đầu nhiệm vụ',task_device_submit:'Gửi nhiệm vụ',admin_settings:'Admin lưu cài đặt',admin_user_status:'Admin đổi trạng thái tài khoản',admin_withdrawal_action:'Admin xử lý rút tiền'};
  return `${heading('Chống gian lận','Theo dõi rủi ro, kiểm tra bằng chứng và bảo vệ thành viên.')}
  <div class="fraud-kpis">${[['all','Tài khoản',anti.summary?.checked_accounts],['serious','Nghiêm trọng',anti.summary?.serious],['review','Cần kiểm tra',anti.summary?.review],['low','Mức thấp',anti.summary?.low]].map(([v,label,n])=>`<button type="button" class="fraud-kpi fraud-kpi-${v}" aria-pressed="${state.fraudFilter===v}" data-action="fraud-filter" data-level="${v}"><strong>${fmt(n||0)}</strong><span>${label}</span></button>`).join('')}</div>
  <div class="fraud-today"><strong>⚠ Link hôm nay: ${fmt(d.link_alert_count||0)} cảnh báo</strong><span>${fmt(d.link_alert_accounts||0)} tài khoản • Đặt lại 00:00</span><button type="button" class="btn alt sm" data-action="fraud-open-link-alerts">Xem cảnh báo Link</button></div>
@@ -1731,15 +1735,19 @@ async function adminSecurity(){
  <div class="btn-row"><button class="btn alt" type="button" data-action="fraud-proxy-test">🔎 Kiểm tra kết nối API</button></div>
  <p class="small muted">Kiểm tra IP kết nối Admin bằng API thật, không sử dụng kết quả lưu tạm. Mỗi lần có thể tốn một lượt API; không tạo nhiệm vụ hay thay đổi Lúa.</p>
  <div id="proxy-test-result" role="status" aria-live="polite"></div>
- <div class="callout"><strong>Anti-Fraud 3.0 · Kiểm tra IP VPS / Hosting</strong><p class="note">Mới bổ sung chế độ kiểm tra thông tin qua nút trên. Chưa tự động chặn hoặc chấm điểm theo VPS; IP hosting không chứng minh thiết bị giả lập.</p><button class="btn alt" type="button" data-action="fraud-hosting-demo">Thử bằng dữ liệu mô phỏng</button><div id="hosting-demo-result" role="status" aria-live="polite"></div></div>
+ <div class="callout"><strong>Anti-Fraud 3.0 · Kiểm tra IP VPS / Hosting</strong><p class="note">Khi kiểm tra VPN/Proxy/Tor đang bật, hệ thống đồng thời ghi nhận dấu hiệu Hosting trước cấp Link. Chưa tự động chặn hoặc chấm điểm theo VPS; IP hosting không chứng minh thiết bị giả lập.</p><button class="btn alt" type="button" data-action="fraud-hosting-demo">Thử bằng dữ liệu mô phỏng</button><div id="hosting-demo-result" role="status" aria-live="polite"></div></div>
  <div class="fraud-member-stats"><div><strong>${fmt(proxyN('vpn'))}</strong><span>VPN bị chặn</span></div><div><strong>${fmt(proxyN('proxy'))}</strong><span>Proxy bị chặn</span></div><div><strong>${fmt(proxyN('tor'))}</strong><span>Tor bị chặn</span></div><div><strong>${fmt(unavailableN)}</strong><span>Không kiểm tra được</span></div></div>
  <p class="note">Số yêu cầu hôm nay, không phải số người gian lận. Khi bật, không đạt kiểm tra hoặc API lỗi đều không cấp Link mới. Không tự khóa tài khoản.</p>
  ${proxyEvents.length?`<details class="fraud-alert-technical"><summary>Xem nhật ký kiểm tra hôm nay (tối đa 100)</summary><div class="fraud-alert-list">${proxyEvents.map(r=>`<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div><div class="small muted">${esc(r.email||'')}</div><div class="fraud-alert-stage action">${r.event_type==='link_proxy_blocked'?'Bị chặn trước khi cấp Link':'Tạm dừng vì không kiểm tra được'}</div><p class="fraud-alert-reason">${esc(proxyReason[String(r.detail||'').split(':')[0]]||'Chưa rõ')} · ${esc(r.task_title||'Link')}</p><details class="fraud-alert-technical"><summary>IP kết nối</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div></details><button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản</button></article>`).join('')}</div></details>`:''}
  </section>
  <section class="card section"><h3>🛡️ Anti-Fraud 3.0 · Nghi vấn giả lập / tự động hóa</h3>
- <p class="note">Chế độ kiểm thử: chỉ kiểm tra trên trình duyệt Admin khi bấm nút. Không thu thập dữ liệu thành viên, không gửi dữ liệu đồ họa lên máy chủ và không thay đổi quyết định cấp Link.</p>
+ <p class="note">Giám sát thực tế trước cấp Link: trình duyệt thành viên gửi tối đa ba cờ tín hiệu; máy chủ đối chiếu User-Agent và kết quả Hosting nếu có. Không gửi chuỗi đồ họa thô, không tự khóa tài khoản hoặc thay đổi quyết định cấp Link. Hai nút kiểm thử dưới đây chỉ chạy trên máy Admin.</p>
  <div class="btn-row"><button class="btn alt" type="button" data-action="fraud-browser-test">Kiểm tra trình duyệt hiện tại</button><button class="btn alt" type="button" data-action="fraud-browser-demo">Chạy kiểm thử mô phỏng</button></div>
  <div id="browser-diagnostic-result" role="status" aria-live="polite"></div>
+ <div class="separator"></div><h4>Nhật ký giám sát thực tế hôm nay</h4>
+ ${live? `<div class="fraud-member-stats"><div><strong>${fmt(live.count||0)}</strong><span>Ghi nhận cần đối chiếu</span></div><div><strong>${fmt(live.accounts||0)}</strong><span>Tài khoản có ghi nhận</span></div></div>
+ <p class="note">Chỉ đếm dấu hiệu đã lưu, gộp các bản ghi trùng trong ngày Việt Nam. Không có ghi nhận không chứng minh an toàn; dữ liệu trình duyệt có thể bị sửa hoặc thiếu.</p>
+ ${liveEvents.length?'<div class="fraud-alert-list">'+liveEvents.map(r=>`<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div><div class="small muted">${esc(r.email||'')}</div><p><strong>${esc(r.task_title||'Nhiệm vụ Link')}</strong></p><p>${esc(describeObservation(r.detail))}</p><details class="fraud-alert-technical"><summary>IP và mã trình duyệt</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div><div class="small">${esc(r.device_code||'—')}</div></details><button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản</button></article>`).join('')+'</div>':'<p class="small muted">Chưa ghi nhận dấu hiệu cần đối chiếu hôm nay.</p>'}`:'<p class="note">Máy chủ chưa trả dữ liệu giám sát; không thể xác nhận trạng thái.</p>'}
  </section>
  <section class="card section fraud-account-list"><h3>🛡️ Rủi ro từng tài khoản</h3>
  <p class="note">Ưu tiên điểm cao. Mức nghiêm trọng cần Admin đối chiếu trước khi duyệt tiền; không tự kết luận gian lận.</p>
@@ -1923,7 +1931,15 @@ async function startTask(taskId){
  // Không báo đã khởi tạo trước khi server xác nhận phiên nhiệm vụ thành công.
  renderTaskStartProgress(taskId);
  try{
-  const data=await api(`/api/tasks/${encodeURIComponent(taskId)}/start`,'POST',{});
+  // A diagnostic failure must never stop a real member from continuing a task.
+  let linkSignals='';
+  if(state.memberTasks.find(t=>t.id===taskId)?.category==='link'){
+   try{
+    const signals=inspectBrowserSignals();
+    linkSignals=[signals.automation,signals.emulator,signals.virtualGraphics].map(v=>v===true?'1':v===false?'0':'?').join('');
+   }catch{}
+  }
+  const data=await api(`/api/tasks/${encodeURIComponent(taskId)}/start`,'POST',{},linkSignals);
   if(!data?.attempt_id)throw new Error('Máy chủ chưa xác nhận tạo phiên nhiệm vụ. Hãy thử lại.');
   const autoOpenLink=data.category==='link'&&data.review_mode==='manual';
   const url=autoOpenLink?String(data.task_url||''):'';
@@ -2298,7 +2314,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    const target=document.getElementById('browser-diagnostic-result');
    if(!target)return;
    if(act==='fraud-browser-test'){
-    target.innerHTML='<p class="small muted">Kết quả trên trình duyệt Admin hiện tại (chỉ tại máy này).</p>'+browserDiagnosticMarkup(inspectAdminBrowserSignals());
+    target.innerHTML='<p class="small muted">Kết quả trên trình duyệt Admin hiện tại (chỉ tại máy này).</p>'+browserDiagnosticMarkup(inspectBrowserSignals());
    }else{
     const results=browserDiagnosticFixtures().map(([name,signals,expected])=>({name,expected,actual:classifyBrowserSignals(signals).status}));
     target.innerHTML='<div class="fraud-alert-card"><strong>Kiểm thử mô phỏng: '+results.filter(r=>r.actual===r.expected).length+'/'+results.length+' đạt</strong>'+results.map(r=>'<p>'+esc(r.name)+' — '+(r.actual===r.expected?'Đạt':'Không đạt')+'</p>').join('')+'<p class="note">Không gọi API, không ghi dữ liệu hoặc nhật ký thành viên.</p></div>';
