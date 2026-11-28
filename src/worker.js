@@ -407,6 +407,57 @@ async function loadFraudProfiles(env,targetId=null){
  return computeFraudProfiles(members,events.results,withdrawals.results,completions.results);
 }
 
+// Priority review is not a confirmed fraud verdict. Only exact intersections of
+// browser and payout groups qualify; IP, CAPTCHA errors and quota denials alone never qualify.
+function buildPriorityFraudGroups(users,events,withdrawals){
+ const members=new Map(users.filter(u=>u.role==='member').map(u=>[u.id,u]));
+ const payoutByUser=new Map(), browserGroups=new Map();
+ for(const w of withdrawals){
+  if(!members.has(w.user_id)||!w.bank_name||!w.bank_account)continue;
+  const bank=String(w.bank_name).trim().toLowerCase(),account=String(w.bank_account).replace(/\s/g,'').toLowerCase();
+  if(!bank||!account)continue;
+  if(!payoutByUser.has(w.user_id))payoutByUser.set(w.user_id,new Set());
+  payoutByUser.get(w.user_id).add(JSON.stringify([bank,account]));
+ }
+ for(const e of events){
+  if(!members.has(e.user_id)||e.event_type!=='device_seen'||e.detail!=='browser_id'||!/^[0-9a-f]{16}$/i.test(String(e.device_code||'')))continue;
+  const code=e.device_code.toLowerCase();
+  if(!browserGroups.has(code))browserGroups.set(code,new Set());
+  browserGroups.get(code).add(e.user_id);
+ }
+ const groups=new Map();
+ for(const [code,ids] of browserGroups){
+  if(ids.size<2)continue;
+  const intersections=new Map();
+  for(const uid of ids)for(const dest of payoutByUser.get(uid)||[]){
+   if(!intersections.has(dest))intersections.set(dest,[]);
+   intersections.get(dest).push(uid);
+  }
+  for(const [dest,ids] of intersections){
+   if(ids.length<2)continue;
+   ids.sort();
+   const key=JSON.stringify(ids);
+   if(!groups.has(key))groups.set(key,{ids,shared_browsers:new Set(),shared_payouts:new Set()});
+   groups.get(key).shared_browsers.add(code);groups.get(key).shared_payouts.add(dest);
+  }
+ }
+ return [...groups.values()].filter(g=>g.ids.some(uid=>members.get(uid).status==='active')).map(g=>({
+  accounts:g.ids.map(uid=>{const u=members.get(uid);return {user_id:uid,name:u.name,email:u.email,status:u.status};}),
+  browser_count:g.shared_browsers.size,payout_count:g.shared_payouts.size
+ })).sort((a,b)=>b.accounts.length-a.accounts.length||a.accounts[0].user_id.localeCompare(b.accounts[0].user_id));
+}
+async function loadPriorityFraudGroups(env){
+ const [users,events,withdrawals]=await Promise.all([
+  env.DB.prepare("SELECT id,name,email,role,status FROM users WHERE role='member' ORDER BY created_at DESC LIMIT 1001").all(),
+  env.DB.prepare("SELECT user_id,event_type,detail,device_code FROM risk_events WHERE event_type='device_seen' AND detail='browser_id' AND user_id IS NOT NULL AND created_at>=datetime('now','-14 days') ORDER BY created_at DESC LIMIT 5001").all(),
+  env.DB.prepare("SELECT user_id,bank_name,bank_account FROM withdrawals WHERE status IN ('pending','paid') AND created_at>=datetime('now','-90 days') ORDER BY created_at DESC LIMIT 3001").all()
+ ]);
+ const groups=buildPriorityFraudGroups(users.results.slice(0,1000),events.results.slice(0,5000),withdrawals.results.slice(0,3000));
+ const ids=[...new Set(groups.flatMap(g=>g.accounts.filter(a=>a.status==='active').map(a=>a.user_id)))].sort();
+ const signature=await hash(JSON.stringify(groups.map(g=>g.accounts.map(a=>[a.user_id,a.status])).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))));
+ return {groups:groups.slice(0,50),count:groups.length,active_accounts:ids.length,signature:signature.slice(0,24),limited:users.results.length>1000||events.results.length>5000||withdrawals.results.length>3000||groups.length>50,audit_only:true};
+}
+
 const browserDeviceId = req => {
  const value=str(req.headers.get('X-TL-Device'),80);
  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():'';
@@ -2458,6 +2509,7 @@ async function handler(req, env) {
       await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:${status}`);
       return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu thanh toán. Giao dịch đã được đối chiếu.' : status === 'invalid_account' ? 'Đã báo thông tin nhận tiền không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
     }
+    if (m === 'GET' && p === '/api/admin/fraud-priority') return json(await loadPriorityFraudGroups(env));
     if (m === 'GET' && p === '/api/admin/fraud-scores') {
       const [profiles,links]=await Promise.all([loadFraudProfiles(env),loadFraudConnections(env)]);
       const accountProfiles=profiles.map(p=>({

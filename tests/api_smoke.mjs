@@ -1807,6 +1807,26 @@ console.log('PASS: exact return session retained until server receipt is display
 
 const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 {
+ const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function buildPriorityFraudGroups('),linkFraudWorkerSource.indexOf('async function loadPriorityFraudGroups('));
+ const build=new Function(source+'\nreturn buildPriorityFraudGroups;')();
+ const users=['a','b','c'].map(id=>({id,role:'member',status:'active'}));
+ const event=(user_id,device_code)=>({user_id,device_code,event_type:'device_seen',detail:'browser_id'});
+ const payout=(user_id,bank_account)=>({user_id,bank_name:'Fixture',bank_account});
+ const events=[event('a','aaaaaaaaaaaaaaaa'),event('b','aaaaaaaaaaaaaaaa'),event('c','cccccccccccccccc')];
+ const withdrawals=[payout('a','100'),payout('b','200'),payout('c','100')];
+ assert.equal(build(users,events,withdrawals).length,0,'Different counterparties do not create a priority fraud group');
+ withdrawals.push(payout('b','100'));
+ assert.deepEqual(build(users,events,withdrawals)[0].accounts.map(a=>a.user_id),['a','b']);
+ assert.equal(build(users,events,[]).length,0);
+ assert.equal(build(users,[],withdrawals).length,0);
+ assert.equal(build(users.map(u=>({...u,status:'suspended'})),events,withdrawals).length,0);
+ assert.equal((await call('/api/admin/fraud-priority','GET',undefined,cookie)).status,403);
+ const priority=await call('/api/admin/fraud-priority','GET',undefined,admCookie);
+ assert.equal(priority.status,200);
+ assert.equal(priority.data.audit_only,true);
+}
+
+{
  const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function computeFraudProfiles('),linkFraudWorkerSource.indexOf('// Tập hợp quan hệ'));
  const score=new Function('isPublicIPv4','ipv6Network',source+'\nreturn computeFraudProfiles;')(()=>true,()=>null);
  const user={id:'quota-fixture',role:'member',email:'quota@example.com',status:'active'};

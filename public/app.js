@@ -592,9 +592,11 @@ function noticeDate(s){
 async function collectHeaderNotices(){
  const items=[],isAdmin=state.me?.user?.role==='admin';
  if(isAdmin){
-  const [withdrawals,reviews]=await Promise.all([
-   api('/api/admin/withdrawals'),api('/api/admin/reviews').catch(()=>({reviews:[]}))
+  const [withdrawals,reviews,priority]=await Promise.all([
+   api('/api/admin/withdrawals'),api('/api/admin/reviews').catch(()=>({reviews:[]})),api('/api/admin/fraud-priority').catch(()=>null)
   ]);
+  if(priority?.count>0)items.push({id:'admin-fraud-priority:'+priority.signature,title:'⚠️ Ưu tiên đối soát trước khi khóa',
+   body:fmt(priority.active_accounts)+' tài khoản có cùng mã trình duyệt và cùng nơi nhận tiền • Chưa kết luận vi phạm',go:'admin-security',at:null,priority:true});
   for(const w of (withdrawals.withdrawals||[]).filter(w=>['pending','approved'].includes(w.status)).slice(0,15)){
    items.push({id:'admin-withdraw-'+w.id+':'+w.status,
     title:w.status==='approved'?'Có khoản rút đang chờ chuyển tiền':'Có yêu cầu rút đang chờ duyệt',
@@ -630,7 +632,7 @@ async function collectHeaderNotices(){
    body:state.meta.announcement,go:'overview',at:null});
  }
  // Các mục chưa xem của chính tài khoản; không thông báo dữ liệu của người khác.
- items.sort((a,b)=>noticeDate(b.at)-noticeDate(a.at));
+ items.sort((a,b)=>Number(Boolean(b.priority))-Number(Boolean(a.priority))||noticeDate(b.at)-noticeDate(a.at));
  return items.slice(0,30);
 }
 // Chỉ hiển thị kết quả Admin đã duyệt từ lịch sử máy chủ, không tự ghi thưởng.
@@ -751,7 +753,9 @@ function syncSidebarSelection(view){
  const parent=document.getElementById('task-nav-toggle');
  if(parent){parent.classList.toggle('active',view==='tasks');setTaskNavOpen(view==='tasks');}
 }
+let adminNoticeTimer=null;
 function renderShell(){
+ if(adminNoticeTimer!==null){clearInterval(adminNoticeTimer);adminNoticeTimer=null;}
  document.body.classList.remove('task-result-open');
  stopPaidRotation(); // tránh giữ timer của người đăng nhập trước
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
@@ -776,6 +780,10 @@ function renderShell(){
  setMenuOpen(false);
  if(user.role==='member')initGlobalPaidCard(user.id).catch(()=>{});
  refreshHeaderNotifications(false).catch(()=>{});
+ if(user.role==='admin')adminNoticeTimer=setInterval(()=>{
+  if(state.me?.user?.id!==user.id||state.me?.user?.role!=='admin'||!document.getElementById('header-notice-button')){clearInterval(adminNoticeTimer);adminNoticeTimer=null;return;}
+  if(!document.hidden&&document.getElementById('header-notification-panel')?.hidden)refreshHeaderNotifications(false).catch(()=>{});
+ },180000);
  if(user.role==='member')checkApprovedTaskPopups().catch(()=>{});
 }
 async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderHome();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
@@ -1668,6 +1676,7 @@ async function showFraudAccount(userId){
    </div>`).join(''):
    '<p class="small muted">Chưa có tài khoản liên quan trong dữ liệu ghi nhận.</p>'}
   <p class="note">Một IP có thể được nhiều người dùng chung. Một mã trình duyệt có thể bị sao chép, đổi hoặc xóa. Không tự động khóa hoặc từ chối thanh toán dựa trên những liên kết này.</p>
+  ${p.status==='active'?`<div class="btn-row"><button type="button" class="btn alt" data-action="change-user" data-id="${esc(p.user_id)}" data-status="suspended" data-lock-type="review">Tạm khóa xác minh</button><button type="button" class="btn danger" data-action="change-user" data-id="${esc(p.user_id)}" data-status="suspended" data-lock-type="confirmed">Khóa khi đã xác minh vi phạm</button></div>`:''}
   <button type="button" class="btn alt" data-action="close-modal">Đóng báo cáo</button>
  </section></div>`;
 }
@@ -1760,7 +1769,7 @@ function renderGroupedLinkAlerts(d){
  }).join(''):empty('Chưa có cảnh báo Link hôm nay','Các sự kiện sẽ xuất hiện khi hệ thống phát hiện hạn mức.')}</div>`;
 }
 async function adminSecurity(){
- const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
+ const [d,anti,priority]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores'),api('/api/admin/fraud-priority').catch(()=>null)]);
  const proxy=d.proxy_guard||{},proxyCounts=proxy.counts||[],proxyEvents=proxy.events||[];
  const live=d.link_observations||null,liveEvents=live?.events||[];
  const observationLabels={automation_reported:'Trình duyệt tự báo điều khiển tự động',emulator_reported:'Trình duyệt tự báo dấu hiệu giả lập',graphics_reported:'Đồ họa ảo/phần mềm (tín hiệu yếu)',emulator_ua:'User-Agent có dấu hiệu giả lập (có thể bị sửa)',hosting:'IP thuộc Hosting/VPS (không chứng minh giả lập)'};
@@ -1776,6 +1785,11 @@ async function adminSecurity(){
  const groups=(title,summary,content)=>`<details class="card section fraud-group"><summary><span><strong>${title}</strong><small>${summary}</small></span><span aria-hidden="true" class="fraud-chevron">⌄</span></summary><div class="fraud-group-body">${content}</div></details>`;
  const eventLabels={captcha_wrong:'Sai phép tính',login_failed:'Đăng nhập thất bại',device_seen:'Ghi nhận trình duyệt',browser_ipv4_report:'Báo cáo IPv4',task_quota_denied:'Chặn giới hạn nhiệm vụ App',link_ip_quota_denied:'Chặn Link theo IP',link_browser_quota_denied:'Chặn Link theo trình duyệt',link_browser_missing:'Chưa nhận diện trình duyệt',link_return_too_fast:'Quay về Link quá nhanh',link_return_network_changed:'Thay đổi mạng khi quay về Link',link_confirmation_network_changed:'Đổi mạng khi xác minh Link (đã giữ lượt cũ)',link_restart_network_changed:'Bắt đầu lại Link trên mạng mới (chưa xác minh)',link_source_create_failed:'Lỗi cấp link từ nguồn',link_preflight_observation:'Dấu hiệu tham khảo trước cấp Link',link_source_quota_denied:'Chặn theo hạn mức riêng nguồn Link',link_proxy_blocked:'Chặn VPN / Proxy / Tor trước cấp Link',link_proxy_unavailable:'Tạm dừng cấp Link do chưa kiểm tra được IP',signup_completed:'Đăng ký thành công',signup_device_limit:'Chặn đăng ký theo trình duyệt',signup_rate_limited:'Giới hạn tốc độ đăng ký',too_many_task_starts:'Bắt đầu nhiệm vụ quá nhiều',fraud_payout_override:'Admin xác minh rủi ro thanh toán',link_fast_return_approved:'Admin đối chiếu lượt quay về nhanh',task_device_start:'Bắt đầu nhiệm vụ',task_device_submit:'Gửi nhiệm vụ',admin_settings:'Admin lưu cài đặt',admin_user_status:'Admin đổi trạng thái tài khoản',admin_withdrawal_action:'Admin xử lý rút tiền'};
  return `${heading('Chống gian lận','Theo dõi rủi ro, kiểm tra bằng chứng và bảo vệ thành viên.')}
+ <section class="card section" id="fraud-priority-review"><h3>⚠️ Ưu tiên đối soát trước khi khóa</h3>
+ <p class="note">Chỉ báo nhóm có cùng mã trình duyệt và cùng tài khoản nhận tiền trong dữ liệu đối chiếu. Chung IP hoặc bị chặn Link đơn lẻ không tạo thông báo ưu tiên. Đây chưa phải kết luận gian lận.</p>
+ ${priority?`<p><strong>${fmt(priority.count)} nhóm · ${fmt(priority.active_accounts)} tài khoản đang hoạt động</strong></p>
+ ${priority.limited?'<p class="small muted">Dữ liệu có giới hạn; không phải toàn bộ lịch sử.</p>':''}
+ ${(priority.groups||[]).map(g=>`<article class="fraud-alert-card"><strong>Trùng cả mã trình duyệt và nơi nhận tiền</strong><p class="small">${fmt(g.accounts.length)} tài khoản · ${fmt(g.browser_count)} mã chung · ${fmt(g.payout_count)} nơi nhận tiền chung</p>${g.accounts.map(a=>`<div class="fraud-connection"><strong>${esc(a.name||a.email)}</strong><div class="small muted">${esc(a.email)}</div><div class="btn-row">${chip(a.status)}<button type="button" class="btn alt sm" data-action="view-fraud-account" data-id="${esc(a.user_id)}">Đối soát hồ sơ</button></div></div>`).join('')}</article>`).join('')||'<p class="small muted">Chưa phát hiện nhóm đủ hai dấu hiệu trong dữ liệu hiện có.</p>'}`:'<p class="note">Chưa tải được dữ liệu đối soát. Hãy thử tải lại.</p>'}</section>
  <div class="fraud-kpis">${[['all','Tài khoản',anti.summary?.checked_accounts],['serious','Nghiêm trọng',anti.summary?.serious],['review','Cần kiểm tra',anti.summary?.review],['low','Mức thấp',anti.summary?.low]].map(([v,label,n])=>`<button type="button" class="fraud-kpi fraud-kpi-${v}" aria-pressed="${state.fraudFilter===v}" data-action="fraud-filter" data-level="${v}"><strong>${fmt(n||0)}</strong><span>${label}</span></button>`).join('')}</div>
  <div class="fraud-today"><strong>⚠ Link hôm nay: ${fmt(d.link_alert_count||0)} cảnh báo</strong><span>${fmt(d.link_alert_accounts||0)} tài khoản • Đặt lại 00:00</span><button type="button" class="btn alt sm" data-action="fraud-open-link-alerts">Xem cảnh báo Link</button></div>
  <section class="card section"><h3>🛡️ Chống VPN / Proxy / Tor</h3>
@@ -2435,7 +2449,8 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    await api('/api/admin/users/'+encodeURIComponent(el.dataset.id),'PATCH',{
     status:el.dataset.status,suspension_type:type,suspension_reason:reason,suspension_evidence:evidence
    });
-   toast('Đã cập nhật loại khóa tài khoản.');await navigate('admin-users');return;
+   const lockModal=document.getElementById('modal-root');if(lockModal)lockModal.innerHTML='';
+   toast('Đã cập nhật loại khóa tài khoản.');await navigate(state.view==='admin-security'?'admin-security':'admin-users');refreshHeaderNotifications(false).catch(()=>{});return;
   }
   if(act==='review'){
    const isReturnApproval=el.dataset.status==='approved'&&el.dataset.returnSignal==='1';
