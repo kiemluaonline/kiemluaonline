@@ -1794,3 +1794,20 @@ body.task-result-open{overflow:hidden}
  }
  .task-start-spinner{border-top-color:#188b68}
 }
+
+/* Member overview only: a compact, branded welcome card. */
+.overview-notice-cover{background:rgba(12,35,28,.65);padding:18px;overflow:auto;backdrop-filter:blur(3px)}
+.overview-notice-cover .overview-notice{box-sizing:border-box;position:relative;width:min(100%,420px);max-height:calc(100dvh - 36px);overflow:auto;border:1px solid #c5aa58;border-radius:23px;padding:24px 18px 18px;background:linear-gradient(155deg,#fffef8,#f0f8ef);color:#173e2e;box-shadow:0 20px 60px #071e1755}
+.overview-notice:before{content:'';position:absolute;inset:0 0 auto;height:5px;background:linear-gradient(90deg,#176c50,#65a767,#e6c35e)}
+.overview-notice-head{display:flex;align-items:center;gap:12px;padding-bottom:15px;border-bottom:1px solid #dce8d9}
+.overview-notice-mark{display:grid;place-items:center;flex:0 0 49px;height:49px;border-radius:15px;background:linear-gradient(145deg,#16764f,#3fa374);color:#ffe49a;box-shadow:0 5px 16px #176c5033}
+.overview-notice-mark svg{width:34px;height:34px}
+.overview-notice-head h3{font-size:18px;line-height:1.25;margin:0 0 4px;color:#164b35}
+.overview-notice-head p,.overview-notice-rules p{margin:0;line-height:1.5;font-size:14px;color:#3c5749}
+.overview-notice-rules{display:grid;gap:13px;margin:17px 0}
+.overview-notice-rules>div{display:flex;gap:11px;align-items:flex-start}
+.overview-notice-rules>div>span{display:grid;place-items:center;flex:0 0 31px;height:31px;border-radius:10px;background:#e3f0e2;color:#176c50;font-weight:800}
+.overview-notice-rules>div:last-child>span{background:#fce8e5;color:#a93434}
+.overview-notice-option{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid #d9e5d8;border-radius:12px;background:#f7fbf5;font-size:14px;color:#345744;min-height:45px;box-sizing:border-box}
+.overview-notice-option input{width:21px;height:21px;flex:0 0 21px;accent-color:#176c50;margin:0}
+.overview-notice .overview-notice-action{width:100%;min-height:48px;margin-top:13px;border:0;border-radius:13px;background:linear-gradient(105deg,#176c50,#24865c);color:#fff;font-weight:800;white-space:normal;box-shadow:0 5px 13px #176c502e}

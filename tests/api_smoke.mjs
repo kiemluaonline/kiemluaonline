@@ -2432,3 +2432,21 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(css,/linear-gradient\(90deg,#16865c 0%,#42bd65 25%,#e6c43a 50%,#f09b39 75%,#ed475c 100%\)/);
  console.log('PASS: continuous adaptive task gradient, empty zero progress, red disabled state and truthful counts.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const helpers=client.slice(client.indexOf('function menuKey('),client.indexOf('function overviewNoticeKey('));
+ const saved=new Map(),state={me:{user:{id:'a',role:'member'}},taskFilter:'app'};
+ const sessionStorage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)};
+ const menus=new Function('state','sessionStorage','NAV','ADMIN_NAV',helpers+'\nreturn {rememberMenu,restoreMenu};')(state,sessionStorage,[['overview'],['tasks'],['withdrawals']],[['admin-overview'],['admin-reviews']]);
+ menus.rememberMenu('withdrawals');assert.equal(menus.restoreMenu(),'withdrawals');
+ menus.rememberMenu('tasks');state.taskFilter='link';assert.equal(menus.restoreMenu(),'tasks');assert.equal(state.taskFilter,'app');
+ state.me.user.id='b';assert.equal(menus.restoreMenu(),'overview');
+ state.me.user={id:'a',role:'admin'};assert.equal(menus.restoreMenu(),'admin-overview');
+ menus.rememberMenu('tasks');assert.equal(menus.restoreMenu(),'admin-overview');
+ assert.match(client,/state\.view=restoreMenu\(\)/);
+ assert.match(client,/view==='overview'&&user\.role==='member'/);
+ assert.match(client,/cache:'no-store'/);
+ assert.match(client,/Date\.now\(\)\+12\*60\*60\*1000/);
+ console.log('PASS: per-account menu restoration, role validation, fresh GET and overview-only notice.');
+}
