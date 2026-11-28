@@ -1960,3 +1960,82 @@ body.task-result-open{overflow:hidden}
 .fraud-alert-actions{display:flex;gap:7px;flex-wrap:wrap}.fraud-alert-actions .btn{min-height:40px;flex:1 1 auto}
 .fraud-link-summary{font-size:13px;color:#526c60}
 @media(max-width:600px){.fraud-group .table-wrap{overflow-x:auto}.fraud-group .table-wrap table{min-width:480px}.fraud-group .table-wrap button{white-space:nowrap;word-break:normal}}
+
+
+/* Public introduction only — green and golden rice, aligned with member sample A.
+   No authenticated layout, login form, return gate or server behavior changes. */
+.welcome-site{--intro-green:#1d6d50;--intro-deep:#174b38;--intro-gold:#e8cc80;--intro-ink:#244a38;--intro-muted:#576f60;--intro-line:#dce5d8;background:#f3f5ef;color:var(--intro-ink)}
+.welcome-site .welcome-header{background:#fff;border-bottom:2px solid #e1d4a4}
+.welcome-site .welcome-nav{min-height:78px}
+.welcome-site .welcome-logo-icon{background:linear-gradient(135deg,#e9f2e3,#f9ebbd);border:1px solid #dce5d8;box-shadow:none}
+.welcome-site .welcome-logo-name{color:var(--intro-deep)}
+.welcome-site .welcome-logo-name small{color:#58745f}
+.welcome-site .welcome-link-login{color:var(--intro-deep);min-height:44px}
+.welcome-site .welcome-btn-primary{background:var(--intro-green);border-color:var(--intro-green);box-shadow:0 5px 14px #174b3820}
+.welcome-site .welcome-btn-primary:hover{background:#17563f}
+.welcome-site .welcome-hero{background:radial-gradient(ellipse at 84% 16%,#e4eecf 0,transparent 47%),linear-gradient(120deg,#f7f6ea,#f3f5ef 52%,#f1e8c9)}
+.welcome-site .welcome-hero-grid{min-height:510px;padding-top:48px;padding-bottom:60px}
+.welcome-site .welcome-pill{background:#faf3d9;border:1px solid #e4d29d;color:#70551b;box-shadow:none}
+.welcome-site .welcome-pill-dot{background:#a57925;box-shadow:0 0 0 4px #f1e2b6}
+.welcome-site .welcome-hero h1{color:var(--intro-deep);letter-spacing:-.05em}
+.welcome-site .welcome-hero h1 span{color:#8a611b;text-shadow:none}
+.welcome-site .welcome-lead,.welcome-site .welcome-hero-assurance{color:var(--intro-muted)}
+.welcome-site .welcome-hero-actions .welcome-btn-primary,.welcome-site .welcome-btn-gold{background:linear-gradient(135deg,#f3dda1,#e4bf64);border-color:#d8b761;color:#25452e!important;box-shadow:0 5px 16px #6b54201a}
+.welcome-site .welcome-hero-actions .welcome-btn-primary:hover,.welcome-site .welcome-btn-gold:hover{background:#f1d58d}
+.welcome-site .welcome-btn-outline{color:var(--intro-deep)!important;border-color:#ccdccc;background:#fff}
+.welcome-site .welcome-orb-one{background:radial-gradient(circle at 35% 20%,#9cc9a0,#317a55 68%,#235b45);filter:none;opacity:.94}
+.welcome-site .welcome-orb-two{background:#e8cc80;opacity:1}
+.welcome-site .welcome-art-main{background:#fffdf6;transform:none;border:1px solid #e0d6ac;box-shadow:0 16px 38px #194a3525;border-radius:22px}
+.welcome-site .welcome-art-label{color:#6d5522}
+.welcome-site .welcome-art-title{color:var(--intro-deep)}
+.welcome-site .welcome-art-task{background:#fff;border:1px solid #e0e8db;border-radius:13px;padding:10px;margin-bottom:7px}
+.welcome-site .welcome-art-icon{background:#edf4e9}
+.welcome-site .welcome-art-task:nth-of-type(even) .welcome-art-icon{background:#f8efd2}
+.welcome-site .welcome-art-task small,.welcome-site .welcome-art-footer{color:#576f60}
+.welcome-site .welcome-art-check{background:#e5f0e5;color:#236747}
+.welcome-site .welcome-float-card{background:#f8efd2;border-color:#e5d29c;color:#655020;animation:none;transform:none;box-shadow:0 6px 15px #5c4b1b18}
+.welcome-site .welcome-art-sprig{color:#bd9447}
+.welcome-site .welcome-wave{background:linear-gradient(178deg,transparent 50%,#f3f5ef 50%)}
+.welcome-site .welcome-section{padding:62px 0}
+.welcome-site .welcome-eyebrow{color:#387653}
+.welcome-site .welcome-section-head h2,.welcome-site .welcome-faq h2,.welcome-site .welcome-trust h2{color:var(--intro-deep)}
+.welcome-site .welcome-section-head em{color:#8a611b}
+.welcome-site .welcome-section-head p,.welcome-site .welcome-type-card p,.welcome-site .welcome-step p,.welcome-site .welcome-trust p,.welcome-site .welcome-faq-grid>div>p,.welcome-site .welcome-faq-list details p{color:var(--intro-muted)}
+.welcome-site .welcome-types,.welcome-site .welcome-faq,.welcome-site .welcome-final{background:#f3f5ef}
+.welcome-site .welcome-how{background:#faf5e5;border-block:1px solid #e9dfbd}
+.welcome-site .welcome-type-card,.welcome-site .welcome-step,.welcome-site .welcome-faq-list details{background:#fff;border-color:var(--intro-line);border-radius:17px;box-shadow:0 3px 12px #264c3510}
+.welcome-site .welcome-type-icon.mint,.welcome-site .welcome-type-icon.lilac{background:#e6f1e5}
+.welcome-site .welcome-type-icon.cream,.welcome-site .welcome-type-icon.peach,.welcome-site .welcome-step-symbol{background:#f8efd2}
+.welcome-site .welcome-step-number{color:#b99549}
+.welcome-site .welcome-trust-badge,.welcome-site .welcome-final-inner{background:radial-gradient(ellipse at 95% 0%,#397d51,transparent 55%),linear-gradient(125deg,#174b38,#123c2e);border:1px solid #2c7651;box-shadow:0 9px 23px #1a493021}
+.welcome-site .welcome-trust-badge{color:#f7e4aa}
+.welcome-site .welcome-trust-tags span{background:#f8efd2;color:#6d5522}
+.welcome-site .welcome-faq-list summary span{background:#f8efd2;color:#795b21}
+.welcome-site .welcome-footer{border-top:1px solid #dce5d8;background:#fff}
+.welcome-site .welcome-footer-bottom,.welcome-site .welcome-disclaimer{color:#576f60}
+.welcome-site .welcome-footer-bottom a{color:#275b42}
+@media(max-width:730px){
+ .welcome-site .welcome-nav{min-height:0;padding-top:10px;padding-bottom:10px;flex-wrap:wrap;gap:8px}
+ .welcome-site .welcome-nav-actions{flex:1 1 100%;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+ .welcome-site .welcome-nav-actions .language-toggle{flex:0 1 auto}
+ .welcome-site .welcome-nav-actions .welcome-link-login,.welcome-site .welcome-nav-actions .welcome-nav-signup{min-height:44px;white-space:normal}
+ .welcome-site .welcome-hero-grid{min-height:0;padding-top:29px;padding-bottom:32px;gap:12px}
+ .welcome-site .welcome-hero h1{font-size:clamp(35px,9vw,51px);margin:17px 0 12px}
+ .welcome-site .welcome-lead{margin-bottom:17px}
+ .welcome-site .welcome-hero-actions .welcome-btn{flex:1 1 100%;min-height:48px;font-size:14px;white-space:normal;text-align:center}
+ .welcome-site .welcome-hero-assurance{margin-top:15px;gap:8px}
+ .welcome-site .welcome-hero-art{height:auto;min-height:320px;padding:16px 0 32px}
+ .welcome-site .welcome-art-main{width:94%;padding:17px 15px;max-width:340px}
+ .welcome-site .welcome-art-title{margin-bottom:12px}
+ .welcome-site .welcome-art-task{padding:8px}
+ .welcome-site .welcome-art-footer{margin-top:10px}
+ .welcome-site .welcome-float-grain{bottom:0}
+ .welcome-site .welcome-section{padding:42px 0}
+ .welcome-site .welcome-section-head{margin-bottom:20px}
+ .welcome-site .welcome-type-card{padding:16px 13px}
+ .welcome-site .welcome-final{padding-bottom:38px}
+}
+@media(max-width:365px){
+ .welcome-site .welcome-nav-actions .language-toggle{flex-basis:100%;width:max-content;justify-content:center}
+ .welcome-site .welcome-nav-actions .welcome-link-login,.welcome-site .welcome-nav-actions .welcome-nav-signup{flex:1}
+}
