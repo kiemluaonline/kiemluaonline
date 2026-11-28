@@ -1669,11 +1669,11 @@ async function adminSettings(){
  ${field('payout_free_from_vnd','Miễn phí từ (VNĐ) – áp dụng cả hai',s.payout_free_from_vnd,'type="number" min="5000" max="10000000" step="1" required')}
  ${field('withdrawal_fee_vnd','Phí rút tiền dưới ngưỡng (VNĐ)',s.withdrawal_fee_vnd,'type="number" min="0" max="10000000" step="1" required')}
  ${field('card_fee_lua','Phí mỗi thẻ dưới ngưỡng (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
- <h3>🛡️ Quota chống lạm dụng</h3>
- <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
- <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
- ${field('quota_device_accounts_daily','Tài khoản/mã trình duyệt/ngày',s.quota_device_accounts_daily,'type="number" min="0" max="100" required')}</div>
- <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
+ <h3>🛡️ Giới hạn nhiệm vụ App</h3>
+ <p class="note">Chỉ áp dụng khi gửi nhiệm vụ App, không áp dụng cho link rút gọn. Tính lượt đang chờ và đã duyệt; đặt lại lúc 00:00 giờ Việt Nam. Nhập 0 để tắt từng giới hạn. Một mã trình duyệt chỉ dành cho một tài khoản khi bật giới hạn.</p>
+ <div class="form-row">${field('quota_user_tasks_daily','Tổng lượt gửi nhiệm vụ App/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
+ ${select('quota_device_accounts_daily','Một tài khoản/mã trình duyệt/ngày',[['1','Bật – chỉ 1 tài khoản'],['0','Tắt']],s.quota_device_accounts_daily)}</div>
+ <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản làm App/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
  <h3>🔗 Bảo vệ link rút gọn theo ngày</h3>
  <p class="note">IP được dành cho tài khoản gửi từng nhiệm vụ đầu tiên trong ngày. Tài khoản khác cùng IP chỉ bị chặn nhiệm vụ đó; vẫn có thể làm nhiệm vụ khác đủ điều kiện. Nhiệm vụ chờ duyệt cũng giữ chỗ; bị từ chối sẽ không giữ chỗ. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).</p>
  ${select('quota_link_ip_exclusive','Chặn trùng IP theo từng nhiệm vụ',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}
