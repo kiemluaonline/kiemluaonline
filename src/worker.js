@@ -1830,7 +1830,7 @@ async function handler(req, env) {
           .bind('proxy_diagnostic_last:'+admin.id,String(testedAt),testedAt-10000).run();
         if(!throttle.meta?.changes)fail(429,'Vui lòng đợi 10 giây giữa hai lần kiểm tra API.');
       }
-      const result=await checkLinkProxy(key,ip,fetch,Date.now,{fresh:true});
+      const result=await checkLinkProxy(key,ip,undefined,Date.now,{fresh:true});
       return json({provider:'ipapi.is',enabled:settings.link_proxy_enabled==='1',key_configured:!!key,
         status:result.status,reason:result.reason,http_status:result.http_status||null,
         ip,checked_at:new Date(now()).toISOString(),duration_ms:now()-testedAt});
