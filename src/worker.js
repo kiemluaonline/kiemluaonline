@@ -2295,13 +2295,14 @@ async function retryPendingLinkViews(env){
  for(const row of rows.results){
   try{
    const snap=JSON.parse(row.snapshot),source=await getSource(env,snap.id);
-   if(!autoRewardEnabled(env,source)||JSON.stringify(source)!==snap.config)continue;
    // Reserve this check; concurrent cron executions cannot claim the same old state.
    const key='link_view_retry:'+row.id, stamp=JSON.stringify({last:now(),views:null,stopped:false});
    const lease=row.retry_state===null||row.retry_state===undefined
     ?await env.DB.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)').bind(key,stamp).run()
     :await env.DB.prepare('UPDATE settings SET value=? WHERE key=? AND value=?').bind(stamp,key,row.retry_state).run();
    if(!lease.meta?.changes)continue;
+   // Rotate unavailable sources too, so one disabled provider cannot starve the queue.
+   if(!autoRewardEnabled(env,source)||JSON.stringify(source)!==snap.config)continue;
    let views=null;
    try{views=await checkSourceView(source,snap.alias,sourceToken(env,source));}catch{}
    await env.DB.prepare('UPDATE settings SET value=? WHERE key=? AND value=?').bind(JSON.stringify({last:now(),views,stopped:views!==null&&views>1}),key,stamp).run();
