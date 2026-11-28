@@ -11,7 +11,8 @@ const DAY = 86400000;
 const SESSION_MS = 14 * DAY;
 // Tín hiệu rà soát, KHÔNG phải bằng chứng người dùng chưa vượt link.
 const LINK_RETURN_FAST_SECONDS = 20;
-const LINK_CONFIRM_WINDOW_MS = 3600000;
+// Returned Link claims stay recoverable until processed; not a client timer.
+const LINK_CONFIRM_OPEN = 253402300799000;
 // Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
 const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
@@ -796,12 +797,12 @@ const LINK_START_CONFLICT=`SELECT CASE
  WHEN ?=1 AND EXISTS(
   SELECT 1 FROM task_attempts a JOIN tasks t ON t.id=a.task_id
   WHERE t.category='link' AND a.user_id<>? AND a.task_id=? AND lower(a.ip) LIKE ?
-    AND a.consumed_by IS NULL AND a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+    AND a.consumed_by IS NULL AND ((a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')) OR (a.available_at<0 AND date(datetime(-a.available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')))
  ) THEN 'link_reserved_ip'
  WHEN ?=1 AND EXISTS(
   SELECT 1 FROM task_attempts a JOIN tasks t ON t.id=a.task_id
   WHERE t.category='link' AND a.user_id<>? AND a.device_code=?
-    AND a.consumed_by IS NULL AND a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+    AND a.consumed_by IS NULL AND ((a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')) OR (a.available_at<0 AND date(datetime(-a.available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')))
  ) THEN 'link_reserved_browser'
  WHEN ?=1 AND EXISTS(
   SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
@@ -1303,7 +1304,7 @@ async function handler(req, env) {
             AND date(datetime(-available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')
           GROUP BY task_id
        ) GROUP BY task_id`).bind(me.id,me.id).all(),
-      env.DB.prepare('SELECT DISTINCT task_id FROM task_attempts WHERE user_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>?').bind(me.id,LINK_CONFIRM_WINDOW_MS,now()).all()
+      env.DB.prepare('SELECT DISTINCT task_id FROM task_attempts WHERE user_id=? AND consumed_by IS NULL AND available_at<0').bind(me.id).all()
     ]);
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
     const done=new Map(counts.results.map(r=>[r.task_id,{n:Number(r.n),pending:Number(r.pending||0)}]));
@@ -1333,16 +1334,16 @@ async function handler(req, env) {
   if (m === 'GET' && p === '/api/member-overview') {
     const me=await auth(req,env);
     const at=now(),today=vnDay(at),first=vnDay(at-6*DAY);
-    const active="consumed_by IS NULL AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))";
+    const active="consumed_by IS NULL AND (available_at<0 OR expires_at>?)";
     const [counts,ongoing,earnings,recent]=await Promise.all([
       env.DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) AS approved,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending FROM task_completions WHERE user_id=?").bind(me.id).first(),
-      env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND "+active).bind(me.id,at,LINK_CONFIRM_WINDOW_MS,at).first(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND "+active).bind(me.id,at).first(),
       env.DB.prepare("SELECT date(created_at,'+7 hours') AS day,SUM(amount) AS lua FROM wallet_entries WHERE user_id=? AND amount>0 AND reference_type IN ('task','referral','checkin','shop_order') AND date(created_at,'+7 hours') BETWEEN ? AND ? GROUP BY day").bind(me.id,first,today).all(),
       env.DB.prepare(`SELECT title,status,created_at,category FROM (
         SELECT t.title,c.status,c.created_at,t.category FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=?
         UNION ALL
         SELECT t.title,'in_progress',a.created_at,t.category FROM task_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.user_id=? AND ${active}
-      ) ORDER BY created_at DESC LIMIT 5`).bind(me.id,me.id,at,LINK_CONFIRM_WINDOW_MS,at).all()
+      ) ORDER BY created_at DESC LIMIT 5`).bind(me.id,me.id,at).all()
     ]);
     const byDay=new Map(earnings.results.map(r=>[r.day,Number(r.lua)||0]));
     const days=Array.from({length:7},(_,i)=>{const day=vnDay(at-(6-i)*DAY);return {day,lua:byDay.get(day)||0};});
@@ -1399,10 +1400,16 @@ async function handler(req, env) {
     if(!task.url&&sourceConfig.creation!=='api')fail(404,'Link nhiệm vụ không còn hoạt động.');
     if (task.review_mode !== 'manual')
       fail(409, 'Admin cần chọn chế độ duyệt thủ công cho nhiệm vụ Link trước khi sử dụng xác minh quay về.');
-    const attempt = exactAttempt
-      ? await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?)').bind(exactAttempt,me.id,task.id,now()).first()
+    let attempt = exactAttempt
+      ? await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL').bind(exactAttempt,me.id,task.id).first()
       : await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
-    if (!attempt) fail(409, 'Không tìm thấy phiên nhiệm vụ còn hiệu lực. Vui lòng mở lại nhiệm vụ từ Trạm Có Lúa.');
+    // A static destination has no session token. Recover only an unambiguous
+    // expired attempt, never guess between multiple old starts.
+    if(!attempt&&!exactAttempt&&sourceConfig.creation!=='api'){
+      const candidates=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL ORDER BY created_at DESC,id DESC LIMIT 2').bind(me.id,task.id).all();
+      if(candidates.results.length===1)attempt=candidates.results[0];
+    }
+    if (!attempt) fail(409, 'Chưa tìm được đúng phiên nhiệm vụ. Hãy giữ đường dẫn này và liên hệ Admin để đối soát; không cần làm lại ngay.');
     const sourceLink=await getAttemptSource(env,attempt.id);
     if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
     if(sourceLink?.returnSession&&body.link_session!==sourceLink.returnSession)fail(409,'Link quay về không thuộc phiên này. Hãy mở lại đúng link nhiệm vụ đã cấp.');
@@ -1411,13 +1418,12 @@ async function handler(req, env) {
       fail(409,'Hãy xác minh bằng trình duyệt đã mở nhiệm vụ.');
     if(attempt.available_at<0&&attempt.ip!==returnIP)
       fail(409,'Hãy dùng lại mạng tại thời điểm bắt đầu xác minh. Lượt cũ vẫn được giữ trong thời hạn.');
-    if(attempt.available_at<0){
-      const deadline=-attempt.available_at+LINK_CONFIRM_WINDOW_MS;
-      if(now()>=deadline)fail(410,'Đã hết 60 phút xác minh. Lượt đã sử dụng vẫn được tính và không nhận Lúa.',{confirmation_expired:true});
-      if(attempt.expires_at!==deadline){
-        await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL AND available_at=?').bind(deadline,attempt.id,attempt.available_at).run();
-        attempt.expires_at=deadline;
-      }
+    if(attempt.available_at<0&&attempt.expires_at!==LINK_CONFIRM_OPEN){
+      // Legacy 60-minute claims remain owned by the original account and browser.
+      // Reopen confirmation only; the claim still checks all quotas and provider evidence.
+      if(attempt.expires_at<=now())await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING').bind('link_return_recovery:'+attempt.id,'1').run();
+      await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL AND available_at=?').bind(LINK_CONFIRM_OPEN,attempt.id,attempt.available_at).run();
+      attempt.expires_at=LINK_CONFIRM_OPEN;
     }
     const hasAnswer=Object.prototype.hasOwnProperty.call(body,'answer');
     // Ghi một lượt quay về CHỈ MỘT LẦN mỗi phiên, ngay lúc khách đến trang đích.
@@ -1435,14 +1441,33 @@ async function handler(req, env) {
       await linkIPQuota(env,req,me.id,task,arrivalSettings,'return');
       await linkBrowserQuota(env,req,me.id,task,arrivalSettings,'return');
       const arrivedAt=now();
-      const mark=await env.DB.prepare(
-        'UPDATE task_attempts SET available_at=?,expires_at=?,ip=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
-      ).bind(-arrivedAt,arrivedAt+LINK_CONFIRM_WINDOW_MS,returnIP,attempt.id,me.id,arrivedAt).run();
-      if(!mark.meta?.changes)fail(409,'Phiên đã thay đổi. Hãy tải lại trang Nhiệm vụ.');
-      if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
-      attempt.ip=returnIP;
-      attempt.available_at=-arrivedAt;
-      attempt.expires_at=arrivedAt+LINK_CONFIRM_WINDOW_MS;
+      const late=attempt.expires_at<=arrivedAt;
+      if(late){
+        // A recovered old link is evidence for manual reconciliation only.
+        // Do not guess an API session or accept a link that was never issued.
+        if(sourceConfig.creation==='api'&&(!exactAttempt||!sourceLink?.returnSession||!sourceLink.alias))
+          fail(409,'Không đủ dữ liệu phiên Link đã cấp. Hãy liên hệ Admin để đối soát.');
+        await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING')
+          .bind('link_return_recovery:'+attempt.id,'1').run();
+      }
+      const mark=await env.DB.prepare(`UPDATE task_attempts SET available_at=?,expires_at=?,ip=?
+        WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0
+          AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0)`)
+        .bind(-arrivedAt,LINK_CONFIRM_OPEN,returnIP,attempt.id,me.id,me.id,task.id,attempt.id).run();
+      if(!mark.meta?.changes){
+        const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND ip=? AND device_code=?').bind(attempt.id,me.id,returnIP,attempt.device_code).first();
+        if(!same){
+          const receipt=await savedReturn();
+          if(receipt)return json(receipt);
+          fail(409,'Bạn còn phiên xác minh khác hoặc phiên đã thay đổi. Hãy giữ Link và liên hệ Admin nếu chưa thấy kết quả.');
+        }
+        attempt=same;
+      }else{
+        if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
+        attempt.ip=returnIP;
+        attempt.available_at=-arrivedAt;
+        attempt.expires_at=LINK_CONFIRM_OPEN;
+      }
     }
     // Lượt quay về sớm bất thường cần được Admin xem xét. Người dùng có thể
     // mở trực tiếp link đích sau khi Bắt đầu; thời gian không chứng minh đã vượt link.
@@ -1477,6 +1502,7 @@ async function handler(req, env) {
     const fastReturn=await env.DB.prepare(
       "SELECT id FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=? LIMIT 1"
     ).bind(me.id,riskKey).first();
+    const recoveredLate=Boolean(await env.DB.prepare('SELECT key FROM settings WHERE key=?').bind('link_return_recovery:'+attempt.id).first())||vnDay(-attempt.available_at)!==vnDay();
     let sourceAudit='',views=null,verifiedSource=null;
     if(sourceLink){
       if(['api_view','api_auto'].includes(sourceLink.verification))try{
@@ -1487,7 +1513,7 @@ async function handler(req, env) {
     }
     const evidence='[LINK_RETURN_V1] Thành viên đã quay về và giải phép tính trên Trạm Có Lúa (không phải xác nhận lượt xem hoặc doanh thu của bên rút gọn). Phiên: ' +
       attempt.id + '; UTC: ' + new Date().toISOString() +
-      (fastReturn?' [LINK_RETURN_FAST_V1] Cảnh báo: phiên quay về trong dưới 20 giây, cần đối soát riêng.':'')+sourceAudit;
+      (fastReturn?' [LINK_RETURN_FAST_V1] Cảnh báo: phiên quay về trong dưới 20 giây, cần đối soát riêng.':'')+(recoveredLate?' [LINK_RETURN_RECOVERED_V1] Phiên được khôi phục hoặc xác minh qua ngày; cần Admin đối soát.':'')+sourceAudit;
     const batch=await env.DB.batch([
       env.DB.prepare(TASK_CLAIM_UPDATE)
         .bind(completionId,attempt.id,me.id,now(),now(),task.category,
@@ -1511,7 +1537,7 @@ async function handler(req, env) {
       fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
     }
     await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
-    if(sourceLink?.verification==='api_auto'&&sourceConfig.verification==='api_auto'&&autoRewardEligible({views,baseline:sourceLink.baseline,fastReturn:Boolean(fastReturn),confirmed:autoRewardEnabled(env,verifiedSource),unchanged:sourceConfig.id===sourceLink.id})){
+    if(!recoveredLate&&sourceLink?.verification==='api_auto'&&sourceConfig.verification==='api_auto'&&autoRewardEligible({views,baseline:sourceLink.baseline,fastReturn:Boolean(fastReturn),confirmed:autoRewardEnabled(env,verifiedSource),unchanged:sourceConfig.id===sourceLink.id})){
       // Re-check current settings, task and user inside the atomic write; no client-supplied view.
       const approved=await env.DB.batch([
         env.DB.prepare(`UPDATE task_completions SET status='approved',reviewed_at=CURRENT_TIMESTAMP,evidence=evidence||' [API_AUTO_V1] Đã xét tự động theo nguồn được xác nhận.' WHERE id=? AND status='pending'
@@ -1536,7 +1562,7 @@ async function handler(req, env) {
     // A returned attempt has already reserved a daily slot. Resume it before checking
     // new-start quotas; the existing CAPTCHA submission still enforces all claim quotas.
     if(task.category==='link'){
-      const unfinished=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>? ORDER BY available_at ASC,id DESC LIMIT 1').bind(me.id,task.id,LINK_CONFIRM_WINDOW_MS,now()).first();
+      const unfinished=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 ORDER BY available_at ASC,id DESC LIMIT 1').bind(me.id,task.id).first();
       if(unfinished){
         if(unfinished.ip!==clientIP(req)||unfinished.device_code!==await deviceCode(req,env))
           fail(409,'Bạn còn lượt chưa xác minh. Hãy dùng lại mạng và trình duyệt ban đầu hoặc liên hệ Admin. Lượt cũ vẫn được giữ.');
@@ -1559,19 +1585,7 @@ async function handler(req, env) {
       fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
     const sourceConfig=task.category==='link'?await getTaskSource(env,task.id):{creation:'manual'};
     const source=sourceConfig.creation==='api'?await getSource(env,sourceConfig.id):null;
-    let replaceAttempt=null;
-    if(sourceConfig.creation==='api'){
-      if(!sourceReady(env,source)||task.review_mode!=='manual')fail(409,'Nguồn API chưa sẵn sàng.');
-      const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC LIMIT 1').bind(me.id,task.id,now()).first();
-      if(ongoing){
-        const existing=await getAttemptSource(env,ongoing.id);
-        if(!existing)fail(409,'Phiên đang được cấp link hoặc chưa nhận được phản hồi từ đối tác. Hệ thống không tự tạo thêm link. Nếu vẫn gặp lỗi, hãy liên hệ Admin.');
-        // A deliberate new start replaces an unreturned, already-issued attempt.
-        // Never reuse an issued URL for a new Start. Quotas have already passed.
-        if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi; liên hệ Admin.');
-        replaceAttempt=ongoing.id;
-      }
-    }
+    if(sourceConfig.creation==='api'&&(!sourceReady(env,source)||task.review_mode!=='manual'))fail(409,'Nguồn API chưa sẵn sàng.');
     if(task.category==='app'){
       const ongoing=await env.DB.prepare('SELECT id,captcha_a,captcha_b,available_at,expires_at FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1')
         .bind(me.id,task.id,now()).first();
@@ -1593,6 +1607,22 @@ async function handler(req, env) {
         fail(503,'Chưa kiểm tra được kết nối mạng. Tạm dừng cấp Link để bảo vệ lượt truy cập. Vui lòng thử lại sau.',{network_check:'unavailable'});
       }
     }
+    if(task.category==='link'){
+      const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
+      if(ongoing){
+        if(ongoing.device_code!==await deviceCode(req,env)||ongoing.ip!==clientIP(req))
+          fail(409,'Bạn còn phiên Link đã mở. Hãy tiếp tục trên mạng và trình duyệt ban đầu; không tạo Link mới làm mất phiên cũ.');
+        let url=task.url;
+        if(source){
+          const existing=await getAttemptSource(env,ongoing.id);
+          if(!existing?.shortUrl)fail(409,'Phiên đang được cấp Link hoặc chưa có phản hồi từ đối tác. Không tạo thêm Link; hãy liên hệ Admin nếu cần.');
+          if(existing.id!==source.id||existing.config!==JSON.stringify(source))fail(409,'Cấu hình nguồn đã thay đổi. Hãy giữ Link cũ và liên hệ Admin.');
+          url=existing.shortUrl;
+        }
+        await denyLinkStartConflict(env,req,me.id,task.id,linkStartConflictArgs(settings,me.id,task.id,clientIP(req),ongoing.device_code,now()));
+        return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:task.review_mode,category:'link',task_url:url,resumed:true});
+      }
+    }
     const startedNow=now();
     const a = rand(), b = rand(), attempt = id(), available = startedNow + (task.category === 'video' ? task.min_seconds * 1000 : 0);
     // Khách có thể tìm mã trên Google lâu: Link được phép quay về trong 24 giờ.
@@ -1604,23 +1634,12 @@ async function handler(req, env) {
       const conflictArgs=linkStartConflictArgs(settings,me.id,task.id,startIP,startCode,startedNow);
       // Early rejection is for clarity; the INSERT below is the actual atomic gate.
       await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
-      const ownGuard=source?`NOT EXISTS (
-          SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
-          AND id<>? AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))
-        )`:`NOT EXISTS (
-          SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
-          AND available_at<0 AND -available_at+?>?
-        )`;
-      const ownArgs=source?[me.id,task.id,replaceAttempt||'',startedNow,LINK_CONFIRM_WINDOW_MS,startedNow]:[me.id,task.id,LINK_CONFIRM_WINDOW_MS,startedNow];
       const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE ${ownGuard} AND (${LINK_START_CONFLICT}) IS NULL`)
-        .bind(...baseArgs,...ownArgs,...conflictArgs);
-      // Only expire a previous unreturned attempt after the replacement actually won the gate.
-      const expire=env.DB.prepare(`UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=?
-         AND id<>? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?
-         AND (?=0 OR id=?) AND EXISTS (SELECT 1 FROM task_attempts WHERE id=?)`)
-        .bind(startedNow,me.id,task.id,attempt,startedNow,source?1:0,replaceAttempt||'',attempt);
-      const writes=await env.DB.batch([reserve,expire]);
+        SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
+         SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?)
+        ) AND (${LINK_START_CONFLICT}) IS NULL`)
+        .bind(...baseArgs,me.id,task.id,startedNow,...conflictArgs);
+      const writes=[await reserve.run()];
       if(!writes[0].meta?.changes){
         await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
         fail(409,'Đang có yêu cầu cấp link hoặc lượt chờ xác minh. Không tạo thêm link.');
@@ -2424,7 +2443,7 @@ async function retryPendingLinkViews(env){
   JOIN settings alias ON alias.key='link_source_alias:'||json_extract(snap.value,'$.id')||':'||json_extract(snap.value,'$.alias') AND alias.value=a.id
   LEFT JOIN settings retry ON retry.key='link_view_retry:'||c.id
   WHERE c.status='pending' AND c.created_at>=datetime('now','-72 hours')
-    AND c.evidence LIKE '[LINK_RETURN_V1]%' AND instr(c.evidence,'[LINK_RETURN_FAST_V1]')=0
+    AND c.evidence LIKE '[LINK_RETURN_V1]%' AND instr(c.evidence,'[LINK_RETURN_FAST_V1]')=0 AND instr(c.evidence,'[LINK_RETURN_RECOVERED_V1]')=0
     AND (instr(c.evidence,'; View API: 0 (chờ đối soát doanh thu)')>0 OR instr(c.evidence,'; View API: Chưa xác nhận (chờ đối soát doanh thu)')>0)
     AND json_extract(snap.value,'$.verification')='api_auto' AND json_extract(snap.value,'$.baseline')=0
     AND json_extract(ts.value,'$.verification')='api_auto' AND json_extract(ts.value,'$.id')=json_extract(snap.value,'$.id')
@@ -2477,7 +2496,7 @@ export default {
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now()),
       env.DB.prepare("DELETE FROM login_attempts WHERE created_at<datetime('now','-30 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_view_retry:%' AND NOT EXISTS(SELECT 1 FROM task_completions c WHERE c.id=substr(settings.key,17) AND c.status='pending' AND c.created_at>=datetime('now','-72 hours'))"),
-      env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days')"),
+      env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days') AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=task_attempts.task_id AND t.category='link')"),
       env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now()),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_signup_pending:%' AND json_extract(value,'$.expires')<?").bind(now())

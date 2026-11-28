@@ -240,7 +240,7 @@ function resumeStoredReturn(){
   const key=returnStorageKey(),value=key&&localStorage.getItem(key);
   if(!value)return false;
   const saved=JSON.parse(value);
-  if(!Number.isFinite(saved.expiresAt)||saved.expiresAt<=Date.now()){localStorage.removeItem(key);return false;}
+  // Do not discard a saved confirmation merely because an old client-side deadline elapsed.
   const target=new URL(saved.url,location.origin);
   if(target.origin!==location.origin||!['/','/verify-link'].includes(target.pathname)||!target.searchParams.has('link_return'))return false;
   location.replace(target.pathname+target.search);return true;
@@ -310,9 +310,7 @@ async function processLinkReturn(){
   renderLinkReturnModal();
  }catch(error){
   if(error.confirmation_expired){
-   try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
-   clearLinkReturnQuery();
-   showReturnGate(`<p role="alert">${esc(error.message)}</p><a class="btn" href="/">Về trang chủ</a>`);
+   showReturnGate(`<p role="alert">${esc(error.message)}</p><p class="note">Giữ đường dẫn xác minh để Admin đối soát nếu cần.</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
   }else showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
  }
  return true;
