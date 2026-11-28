@@ -1670,8 +1670,8 @@ async function adminSettings(){
  ${field('withdrawal_fee_vnd','Phí rút tiền dưới ngưỡng (VNĐ)',s.withdrawal_fee_vnd,'type="number" min="0" max="10000000" step="1" required')}
  ${field('card_fee_lua','Phí mỗi thẻ dưới ngưỡng (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
  <h3>🛡️ Giới hạn nhiệm vụ App</h3>
- <p class="note">Chỉ áp dụng khi gửi nhiệm vụ App, không áp dụng cho link rút gọn. Tính lượt đang chờ và đã duyệt; đặt lại lúc 00:00 giờ Việt Nam. Nhập 0 để tắt từng giới hạn. Một mã trình duyệt chỉ dành cho một tài khoản khi bật giới hạn.</p>
- <div class="form-row">${field('quota_user_tasks_daily','Tổng lượt gửi nhiệm vụ App/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
+ <p class="note">Không giới hạn tổng lượt App. Mỗi nhiệm vụ áp dụng quy định lặp lại riêng (mỗi tài khoản một lần hoặc mỗi ngày một lần). Giới hạn tài khoản theo mã trình duyệt và IP vẫn hoạt động, đặt lại lúc 00:00 giờ Việt Nam. Nhập 0 để tắt giới hạn IP.</p>
+ <div class="form-row">
  ${select('quota_device_accounts_daily','Một tài khoản/mã trình duyệt/ngày',[['1','Bật – chỉ 1 tài khoản'],['0','Tắt']],s.quota_device_accounts_daily)}</div>
  <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản làm App/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
  <h3>🔗 Bảo vệ link rút gọn theo ngày</h3>
