@@ -2401,6 +2401,8 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(app.innerHTML,/Trạm Có Lúa/);
  assert.match(app.innerHTML,/4 \+ 2 = \?/);
  assert.doesNotMatch(app.innerHTML,/Hạn xác minh:|60 phút|return-gate-deadline/);
+ assert.match(app.innerHTML,/Vui lòng hoàn thành phép tính trước khi rời trang/);
+ assert.match(app.innerHTML,/lượt nhiệm vụ vẫn được ghi nhận nhưng bạn sẽ không nhận được Lúa/);
  assert.match(app.innerHTML,/data-action="leave-link-return"/);
  assert.match(app.innerHTML,/Quay lại nhiệm vụ/);
  assert.match(app.innerHTML,/data-form="link-return-captcha"/);
@@ -2413,7 +2415,7 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  const liveState={me:{user:{role:'member'}},returnChallenge:{expiresAt:12345}};
  let confirmChoice=false,busy=false;
  const leave=new Function('state','app','localizedConfirm','rememberReturn','clearLinkReturnQuery','renderShell','navigate',code+'\nreturn leaveLinkReturn;')(
-  liveState,{querySelector:()=>({disabled:busy})},msg=>{assert.match(msg,/quá hạn/);return confirmChoice;},
+  liveState,{querySelector:()=>({disabled:busy})},msg=>{assert.match(msg,/Lượt đã được ghi nhận/);assert.doesNotMatch(msg,/quá hạn|thời hạn/);return confirmChoice;},
   expiry=>actions.push(['save',expiry]),()=>actions.push('clear'),()=>actions.push('shell'),async v=>actions.push(v));
  await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
  confirmChoice=true;busy=true;await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
