@@ -2344,13 +2344,23 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(app.innerHTML,/return-gate-icon/);
  assert.match(app.innerHTML,/Trạm Có Lúa/);
  assert.match(app.innerHTML,/4 \+ 2 = \?/);
- assert.match(app.innerHTML,/Hạn xác minh:/);
- assert.match(app.innerHTML,/60 phút/);
+ assert.doesNotMatch(app.innerHTML,/Hạn xác minh:|60 phút|return-gate-deadline/);
+ assert.match(app.innerHTML,/data-action="leave-link-return"/);
+ assert.match(app.innerHTML,/Quay lại nhiệm vụ/);
  assert.match(app.innerHTML,/data-form="link-return-captcha"/);
  assert.match(app.innerHTML,/name="answer"/);
  assert.doesNotMatch(app.innerHTML,/data-action="close-modal"|href="\/"/);
  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
  assert.match(html,/width:min\(100%,460px\)/);
  assert.match(html,/min-height:54px/);
- console.log('PASS: branded verification gate, large input and button, preserved form, deadline and no active-session dismiss.');
+ const actions=[];
+ const liveState={me:{user:{role:'member'}},returnChallenge:{expiresAt:12345}};
+ let confirmChoice=false,busy=false;
+ const leave=new Function('state','app','localizedConfirm','rememberReturn','clearLinkReturnQuery','renderShell','navigate',code+'\nreturn leaveLinkReturn;')(
+  liveState,{querySelector:()=>({disabled:busy})},msg=>{assert.match(msg,/quá hạn/);return confirmChoice;},
+  expiry=>actions.push(['save',expiry]),()=>actions.push('clear'),()=>actions.push('shell'),async v=>actions.push(v));
+ await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
+ confirmChoice=true;busy=true;await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
+ busy=false;await leave();assert.deepEqual(actions,[['save',12345],'clear','shell','tasks']);assert.equal(liveState.returnChallenge,null);
+ console.log('PASS: branded verification gate hides deadline, explicit warning before leaving, saved recovery, no departure during submission.');
 }
