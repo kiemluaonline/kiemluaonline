@@ -2522,3 +2522,17 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.equal(getDevice(),'');
  console.log('PASS: real boot session/device check, fail-safe retry, suspended and expired session distinction, storage readback and no fake timer.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const navCode=client.slice(client.indexOf('const ADMIN_NAV ='),client.indexOf('const esc ='));
+ const sidebar=client.slice(client.indexOf('function renderSidebarNav('),client.indexOf('function setTaskNavOpen('));
+ const nav=new Function('state','esc',navCode+sidebar+'\nreturn {nav:ADMIN_NAV,render:renderSidebarNav};')({view:'admin-overview'},String);
+ const html=nav.render(nav.nav,{role:'admin'});
+ for(const [key] of nav.nav)assert.ok(html.includes('data-go="'+key+'"'));
+ const code=client.slice(client.indexOf('async function adminOverview(){'),client.indexOf('async function shrinkAppLogo'));
+ const render=new Function('api','fmt',code+'\nreturn adminOverview;')(async()=>({total_issued_lua:123,members:2,tasks:4,pending_evidence:1,pending_withdrawals:2,withdrawals_to_process:3,shop_orders_to_process:null,cards_to_process:5,risk_events_today:7}),String);
+ const overview=await render();
+ for(const key of ['admin-reviews','admin-withdrawals','admin-shop-orders','admin-cards','admin-security','admin-settings','admin-open-sources','Chưa tải được số lượng'])assert.ok(overview.includes(key));
+ console.log('PASS: Admin premium overview routes, complete grouped navigation, unknown count not zero.');
+}
