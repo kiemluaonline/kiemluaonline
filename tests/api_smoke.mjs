@@ -2271,6 +2271,27 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
   assert.equal(refreshed.data.status,'approved');
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+19);
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(completion.id).n,1);
+  const second=await call('/api/admin/tasks','POST',{...cfg,title:'Delayed view fixture'},admCookie);assert.equal(second.status,201);
+  views=0;let viewCalls=0;
+  globalThis.fetch=async raw=>{const p=new URL(raw).pathname;if(p!=='/create')viewCalls++;return new Response(JSON.stringify(p==='/create'?{shortenedUrl:'https://example.com/go/delayedFixture'}:{views}),{headers:{'Content-Type':'application/json'}});};
+  const late=await call('/api/tasks/'+second.data.id+'/start','POST',{},member.cookie,ip,device);assert.equal(late.status,200,JSON.stringify(late));
+  sqlite.prepare("UPDATE task_attempts SET created_at=datetime('now','-1 minute') WHERE id=?").run(late.data.attempt_id);
+  const lp='/api/tasks/'+second.data.id+'/return';
+  const lc=await call(lp,'POST',{link_session:late.data.attempt_id},member.cookie,ip,device);assert.equal(lc.status,200);
+  const lr=await call(lp,'POST',{answer:lc.data.a+lc.data.b,link_session:late.data.attempt_id},member.cookie,ip,device);assert.equal(lr.data.status,'pending');
+  const delayed=sqlite.prepare('SELECT * FROM task_completions WHERE task_id=?').get(second.data.id);
+  const cron={cron:'*/15 * * * *'};
+  await worker.scheduled(cron,env);assert.equal(sqlite.prepare('SELECT status FROM task_completions WHERE id=?').get(delayed.id).status,'pending');
+  const checked=viewCalls;await worker.scheduled(cron,env);assert.equal(viewCalls,checked);
+  const retryKey='link_view_retry:'+delayed.id;
+  sqlite.prepare("UPDATE settings SET value=json_set(value,'$.last',0) WHERE key=?").run(retryKey);
+  views=1;await worker.scheduled(cron,env);await worker.scheduled(cron,env);
+  assert.equal(sqlite.prepare('SELECT status FROM task_completions WHERE id=?').get(delayed.id).status,'approved');
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM wallet_entries WHERE reference_type='task' AND reference_id=?").get(delayed.id).n,1);
+  assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,before+38);
+  const lateHistory=(await call('/api/history','GET',undefined,member.cookie,ip,device)).data;
+  assert.equal(lateHistory.wallet_entries.find(w=>w.reference_id===delayed.id).reason,'Nhiệm vụ đã duyệt');
+  assert.doesNotMatch(JSON.stringify(lateHistory),/delayedFixture|API_AUTO_V1|link_view_retry/);
  }finally{globalThis.fetch=oldFetch;delete env.LINK_PROVIDER_PAID_VIEW_CONFIRMED_AUTO_FIXTURE;}
  console.log('PASS: opt-in auto reward gated, zero baseline then one view, one wallet entry, replay blocked.');
 }
