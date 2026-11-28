@@ -1,6 +1,7 @@
 // Đổi Lúa lấy thẻ cào: chỉ Admin phát thẻ thực tế. Mã thẻ được mã hóa AES-GCM trong D1.
 export const CARD_CARRIERS=Object.freeze(['Viettel','VinaPhone','MobiFone','Vietnamobile','Garena']);
 export const CARD_DENOMINATIONS=Object.freeze([10000,20000,50000,100000,200000,500000]);
+export const CARD_FREE_FROM_VND=25000;
 const validSecret=value=>/^[0-9a-f]{64}$/i.test(String(value||''));
 const intValue=v=>String(v??'').trim()!==''&&/^\d+$/.test(String(v))?Number(v):NaN;
 const bytesToHex=v=>[...v].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -42,8 +43,8 @@ export async function cardRedemptionsAPI(req,env,H){
  const [switchValue,rateValue,feeValue]=await Promise.all([
    setting(db,'card_redemption_enabled'),setting(db,'lua_per_vnd'),setting(db,'card_fee_lua')
  ]);
- const rate=intValue(rateValue),fee=intValue(feeValue),secretReady=validSecret(env.CARD_VOUCHER_SECRET);
- const safeFee=Number.isSafeInteger(fee)&&fee>=0&&fee<=10000000;
+ const rate=intValue(rateValue),configuredFee=intValue(feeValue),secretReady=validSecret(env.CARD_VOUCHER_SECRET);
+ const safeFee=Number.isSafeInteger(configuredFee)&&configuredFee>=0&&configuredFee<=10000000;
  const enabled=switchValue==='1'&&secretReady&&Number.isSafeInteger(rate)&&rate>0;
  // A code deploy may precede migration. Keep the old catalog usable until the D1 constraints are ready.
  const schema=await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='card_redemptions'").first();
@@ -72,7 +73,7 @@ export async function cardRedemptionsAPI(req,env,H){
      }
      items.push(safe);
    }
-   return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?fee:0,
+   return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?configuredFee:0,free_from_vnd:CARD_FREE_FROM_VND,
      denominations,carriers,catalog_expanded:expanded,
      balance:Number(balance?.balance||0),redemptions:items});
  }
@@ -82,6 +83,7 @@ export async function cardRedemptionsAPI(req,env,H){
    const carrier=str(b.carrier,30),denomination=intValue(b.denomination_vnd);
    if(!carriers.includes(carrier)||!denominations.includes(denomination))
      fail(400,'Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.');
+   const fee=denomination>=CARD_FREE_FROM_VND?0:configuredFee;
    // Khách phải nhìn thấy đúng số phí trước khi máy chủ giữ Lúa.
    if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
      fail(409,'Phí đổi thẻ đã thay đổi. Vui lòng tải lại để xem phí mới trước khi xác nhận.');
@@ -126,7 +128,7 @@ export async function cardRedemptionsAPI(req,env,H){
       ORDER BY CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
       r.created_at DESC LIMIT 200`).all();
    return json({enabled:switchValue==='1',secret_ready:secretReady,
-     rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?fee:0,redemptions:rows.results,
+     rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?configuredFee:0,free_from_vnd:CARD_FREE_FROM_VND,redemptions:rows.results,
      denominations,carriers,catalog_expanded:expanded});
  }
  if(p==='/api/admin/card-redemptions/settings'&&m==='POST'){
