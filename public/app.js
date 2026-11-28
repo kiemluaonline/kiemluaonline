@@ -1718,6 +1718,47 @@ function browserDiagnosticFixtures(){
   ['Mẫu dữ liệu không hợp lệ', {automation:'true',emulator:1,virtualGraphics:'false'},'unknown']
  ];
 }
+// Group by exact related submission/reservation ID, never by name or IP alone.
+function groupLinkAlerts(rows){
+ const groups=new Map();
+ for(const r of rows){
+  const key=r.related_completion_id?'completion:'+r.related_completion_id:r.related_attempt_id?'attempt:'+r.related_attempt_id:'unmatched:'+JSON.stringify([r.user_id||r.id,r.alert_task_id||'',r.reason||'']);
+  if(!groups.has(key))groups.set(key,{key,reference:r,members:new Map(),count:0});
+  const group=groups.get(key);group.count++;
+  const memberKey=r.user_id||r.id||key;
+  if(!group.members.has(memberKey))group.members.set(memberKey,{reference:r,events:[]});
+  group.members.get(memberKey).events.push(r);
+ }
+ return [...groups.values()].map(g=>({...g,members:[...g.members.values()]}));
+}
+function linkAlertStage(r){
+ const stage=r.stage||(r.detail==='link_browser_owner:list'?'list':'unknown');
+ return {list:'Chỉ phát hiện khi xem danh sách',start:'Đã chặn yêu cầu cấp Link',return:'Đã chặn khi quay về',submit:'Đã chặn yêu cầu xác minh',unknown:'Bản ghi cũ – chưa rõ bước'}[stage]||'Chưa rõ bước';
+}
+function linkAlertReason(r){
+ const reason=r.reason||String(r.detail||'').split(':')[0];
+ return {link_owner:'Trùng IP / dải IPv6',link_browser_owner:'Trùng mã trình duyệt',link_reserved_ip:'Trùng mạng với phiên đang giữ chỗ',link_reserved_browser:'Trùng mã trình duyệt với phiên đang giữ chỗ',link_task_limit:'Hết lượt nhiệm vụ riêng',link_limit:'Hết hạn mức IP',link_browser_limit:'Hết hạn mức trình duyệt'}[reason]||'Cảnh báo hạn mức';
+}
+function renderGroupedLinkAlerts(d){
+ const rows=d.link_alerts||[],groups=groupLinkAlerts(rows);
+ const pending=groups.filter(g=>g.reference.related_completion_id&&g.reference.owner_completion_status==='pending').length;
+ const accountButton=(uid,label)=>uid?'<button type="button" class="btn alt sm" data-action="view-fraud-account" data-id="'+esc(uid)+'">'+esc(label)+'</button>':'';
+ const total=Number(d.link_alert_count||0);
+ return `<p class="note">Đây là nhật ký cảnh báo, không phải danh sách chờ duyệt. Chỉ hồ sơ ở mục Duyệt nhiệm vụ mới cần xử lý thưởng.</p>
+ <div class="fraud-link-summary"><strong>${fmt(total)} bản ghi</strong> · ${fmt(d.link_alert_accounts||0)} tài khoản · ${fmt(pending)} hồ sơ chờ duyệt liên quan (trong dữ liệu hiển thị)</div>
+ ${total>rows.length?'<p class="small muted">Hiển thị '+fmt(rows.length)+' bản ghi gần nhất; số hồ sơ liên quan chỉ tính trong phần này.</p>':''}
+ <div class="fraud-alert-list">${groups.length?groups.map(g=>{
+  const r=g.reference;
+  const header=r.related_completion_id?`<div class="fraud-alert-proof"><strong>Hồ sơ đã gửi nhiệm vụ (chỉ hiển thị một lần)</strong><div>${esc(r.owner_name||r.owner_email||'Thành viên')}</div><div class="small muted">${esc(r.owner_email||'')}</div><div class="small">${esc(r.owner_task_title||'Link')} · ${dt(r.owner_submitted_at)} · ${chip(r.owner_completion_status)}</div><p class="small muted">Trạng thái hồ sơ liên quan, không phải xác nhận doanh thu.</p>${accountButton(r.owner_user_id,'Xem tài khoản đã gửi')}</div>`:r.related_attempt_id?`<div class="fraud-alert-proof"><strong>Phiên đang giữ chỗ hoặc đã từng giữ chỗ</strong><div>${esc(r.reserved_name||r.reserved_email||'Thành viên')} · ${esc(r.reserved_task_title||'Link')}</div><div class="small">${dt(r.reserved_at)}</div><p class="small muted">Chưa chứng minh đã gửi nhiệm vụ.</p>${accountButton(r.reserved_user_id,'Xem tài khoản giữ chỗ')}</div>`:'<div class="fraud-alert-proof"><strong>Chưa tìm thấy hồ sơ hoặc phiên liên quan</strong><p class="small muted">Không suy đoán tài khoản đã hoàn thành nhiệm vụ.</p></div>';
+  return `<article class="fraud-alert-card">${header}<h4>${fmt(g.members.length)} tài khoản có cảnh báo · ${fmt(g.count)} bản ghi</h4>${g.members.map(m=>{
+   const a=m.reference,stages=[...new Set(m.events.map(linkAlertStage))],reasons=[...new Set(m.events.map(linkAlertReason))];
+   const blocked=m.events.some(e=>['start','return','submit'].includes(e.stage));
+   const unknown=m.events.some(e=>!e.stage||!['list','start','return','submit'].includes(e.stage));
+   const status=blocked?'Đã chặn yêu cầu (theo nhật ký)':unknown?'Chưa rõ có bị chặn hay không':'Chỉ cảnh báo khi xem danh sách';
+   return `<div class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(a.name||a.email||'Thành viên')}</strong><small>${dt(a.created_at)}</small></div><div class="small muted">${esc(a.email||'')}</div><div class="fraud-alert-stage ${blocked?'action':'passive'}">${esc(status)}</div><p class="small">${esc(reasons.join(' · '))} · ${fmt(m.events.length)} bản ghi</p><details class="fraud-alert-technical"><summary>Chi tiết từng cảnh báo</summary>${m.events.map(e=>`<div><strong>${esc(linkAlertStage(e))}</strong><div class="small">${dt(e.created_at)} · ${esc(e.task_title||'Chưa xác định nhiệm vụ')}</div><div class="small">${esc(linkAlertReason(e))}</div><div class="fraud-alert-ip">${adminIP(e.ip)}</div><div class="small">Mã: <code>${esc(e.device_code||'—')}</code></div></div>`).join('')}</details>${accountButton(a.user_id,'Xem tài khoản có cảnh báo')}</div>`;
+  }).join('')}</article>`;
+ }).join(''):empty('Chưa có cảnh báo Link hôm nay','Các sự kiện sẽ xuất hiện khi hệ thống phát hiện hạn mức.')}</div>`;
+}
 async function adminSecurity(){
  const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
  const proxy=d.proxy_guard||{},proxyCounts=proxy.counts||[],proxyEvents=proxy.events||[];
@@ -1813,24 +1854,7 @@ async function adminSecurity(){
  ${groups('IPv4 trình duyệt báo',`${fmt((d.ipv4_observations||[]).length)} báo cáo trong 7 ngày`,`
  <p class="note">Các địa chỉ này là phản hồi dịch vụ kiểm tra trên mạng của khách. IP kết nối do Cloudflare ghi nhận được hiển thị bên cạnh để đối chiếu.</p>
  ${table(['Thời gian / Thành viên','IPv4 trình duyệt báo','IP Cloudflare ghi nhận'],(d.ipv4_observations||[]).map(r=>`<tr><td>${dt(r.created_at)}<div class="small">${esc(r.name||r.email||'—')}</div></td><td><code>${esc(r.observed_ipv4)}</code></td><td>${adminIP(r.cloudflare_ip)}</td></tr>`))}`)}
- <div id="fraud-link-alerts">${groups('⚠ Cảnh báo Link hôm nay',`${fmt(d.link_alert_count||0)} cảnh báo`,`
- <p class="note">Cảnh báo không đồng nghĩa đã hoàn thành nhiệm vụ. Kiểm tra bước phát sinh và bằng chứng gửi nhiệm vụ của tài khoản liên quan bên dưới.</p>
- <div class="fraud-link-summary"><strong>${fmt(d.link_alert_count||0)} cảnh báo</strong> · ${fmt(d.link_alert_accounts||0)} tài khoản · Đặt lại 00:00</div>
- <div class="fraud-alert-list">${(d.link_alerts||[]).length?(d.link_alerts||[]).map(r=>{
- const stage=r.stage||(r.detail==='link_browser_owner:list'?'list':'unknown');
- const stageText={list:'Chỉ phát hiện khi xem danh sách',start:'Bị chặn trước khi cấp Link',return:'Bị chặn khi quay về',submit:'Bị chặn khi gửi xác minh',unknown:'Bản ghi cũ – chưa rõ bước'}[stage]||'Chưa rõ bước';
- const reason=r.reason||String(r.detail||'').split(':')[0];
- const reasonText={link_owner:'Trùng IP / dải IPv6 với tài khoản khác',link_browser_owner:'Trùng mã trình duyệt với tài khoản khác',link_reserved_ip:'Tài khoản khác đang giữ phiên Link này trên cùng mạng',link_reserved_browser:'Tài khoản khác đang giữ phiên Link trên cùng mã trình duyệt',link_task_limit:'Đã hết lượt nhiệm vụ riêng',link_limit:'Đã hết hạn mức IP',link_browser_limit:'Đã hết hạn mức trình duyệt'}[reason]||'Cảnh báo hạn mức';
- return `<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div>
- <div class="small muted">${esc(r.email||r.user_id||'—')}</div>
- <div class="fraud-alert-stage ${stage==='list'||stage==='unknown'?'passive':'action'}">${esc(stageText)}</div>
- <p class="fraud-alert-reason"><strong>${esc(reasonText)}</strong><br>Nhiệm vụ: ${esc(r.task_title||(stage==='list'?'Danh sách Link (không xác định nhiệm vụ)':'Chưa xác định'))}</p>
- <div class="fraud-alert-proof">${r.related_attempt_id?`<strong>Phiên giữ chỗ liên quan</strong><div>${esc(r.reserved_name||r.reserved_email||'Thành viên')}</div><div class="small muted">${esc(r.reserved_email||'')}</div><div class="small">${esc(r.reserved_task_title||'Link')} · ${dt(r.reserved_at)}</div><p class="small muted">Có bản ghi giữ chỗ, chưa chứng minh đã truy cập đối tác hay gửi nhiệm vụ.</p><button type="button" class="btn alt sm" data-action="view-fraud-account" data-id="${esc(r.reserved_user_id)}">Xem tài khoản giữ chỗ</button>`:''}<strong>Bằng chứng tài khoản liên quan đã gửi nhiệm vụ</strong>
- ${r.related_completion_id?`<div>${esc(r.owner_name||r.owner_email||'Thành viên')}</div><div class="small muted">${esc(r.owner_email||'')}</div><div class="small">${esc(r.owner_task_title||'Link')} · ${dt(r.owner_submitted_at)} · ${chip(r.owner_completion_status)}</div><p class="small muted">Trạng thái hiện tại của lượt gửi, không phải xác nhận doanh thu.</p>`:'<p class="small muted">Chưa tìm thấy lượt gửi liên quan phù hợp trong dữ liệu hiện có.</p>'}</div>
- <details class="fraud-alert-technical"><summary>IP và mã trình duyệt</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div><div class="small">Mã: <code>${esc(r.device_code||'—')}</code></div></details>
- <div class="fraud-alert-actions">${r.user_id?`<button type="button" class="btn alt sm" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản bị chặn</button>`:''}${r.owner_user_id?`<button type="button" class="btn alt sm" data-action="view-fraud-account" data-id="${esc(r.owner_user_id)}">Xem tài khoản liên quan</button>`:''}</div>
- </article>`;
- }).join(''):empty('Chưa có cảnh báo Link hôm nay','Các sự kiện sẽ xuất hiện khi hệ thống phát hiện hạn mức.')}</div>`)}</div>
+ <div id="fraud-link-alerts">${groups('⚠ Cảnh báo Link hôm nay',`${fmt(d.link_alert_count||0)} bản ghi cảnh báo`,renderGroupedLinkAlerts(d))}</div>
  ${groups('📋 Nhật ký và dữ liệu đối chiếu','Sự kiện gần đây • dữ liệu IP và trình duyệt 30 ngày',`<h4>IP dùng bởi nhiều tài khoản trong 30 ngày</h4>
  ${table(['IP','Tài khoản'],d.repeated_ips.map(r=>`<tr><td>${adminIP(r.ip)}</td><td>${r.n}</td></tr>`))}
  <h4>Mã trình duyệt dùng bởi nhiều tài khoản (30 ngày)</h4>
