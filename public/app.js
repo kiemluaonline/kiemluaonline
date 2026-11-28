@@ -9,7 +9,7 @@ const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.Tr
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false,payoutMethod:'bank' };
 let paidRotationTimer=null,paidRefreshTimer=null;
 function stopPaidRotation(){
  if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
@@ -97,7 +97,7 @@ const BANK_LIST = [
 ];
 const NAV = [
   ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['shop','🛍️','Mua sắm nhận Lúa'],['shop-orders','📦','Đơn hàng & Lúa'],['referrals','♧','Tuyển Ref'],
-  ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['cards','🎁','Đổi thẻ cào'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
+  ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
 ];
 const ADMIN_NAV = [
   ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],['admin-shop','🛍️','Quản lý mua sắm'],['admin-shop-orders','📦','Duyệt đơn TikTok'],
@@ -765,20 +765,23 @@ async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)ren
 // Keep the selected menu within this browser tab, isolated by signed-in account and role.
 function menuKey(user){return 'tram-lua.menu.v1.'+user.role+'.'+user.id;}
 function validMenu(user,view){
+ if(user.role==='member'&&view==='cards')view='withdrawals';
  const nav=user.role==='admin'?ADMIN_NAV:NAV;
  return nav.some(n=>n[0]===view)?view:(user.role==='admin'?'admin-overview':'overview');
 }
 function restoreMenu(){
  const user=state.me.user;
+ state.payoutMethod='bank';
  try{
   const saved=JSON.parse(sessionStorage.getItem(menuKey(user))||'null');
+  if(user.role==='member'&&(saved?.view==='cards'||saved?.payoutMethod==='card'))state.payoutMethod='card';
   if(saved?.filter==='app'||saved?.filter==='link')state.taskFilter=saved.filter;
   return validMenu(user,saved?.view);
  }catch{return validMenu(user,null);}
 }
 function rememberMenu(view){
  const user=state.me?.user;if(!user)return;
- try{sessionStorage.setItem(menuKey(user),JSON.stringify({view:validMenu(user,view),filter:state.taskFilter}));}catch{}
+ try{sessionStorage.setItem(menuKey(user),JSON.stringify({view:validMenu(user,view),filter:state.taskFilter,payoutMethod:state.payoutMethod}));}catch{}
 }
 function overviewNoticeKey(user){return 'tram-lua.overview-notice.v1.'+user.id;}
 let overviewNoticePending=false;
@@ -811,6 +814,8 @@ function closeOverviewNotice(){
 let navigationSequence=0;
 async function navigate(view,{checkedMe=false}={}){
  const user=state.me?.user;if(!user)return;
+ // Existing card actions and old menu links keep opening the correct method.
+ if(user.role==='member'&&view==='cards')state.payoutMethod='card';
  view=validMenu(user,view);
  const sequence=++navigationSequence;
  closeHeaderNotifications();
@@ -863,7 +868,7 @@ async function navigate(view,{checkedMe=false}={}){
 async function page(view){
  switch(view){
  case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'shop-orders':return shopOrdersPage({api,esc,heading,fmt,dt});case 'referrals':return referrals();
- case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'cards':return cardRedemptionsPage({api,esc,heading,dt});case 'history':return history();case 'profile':return profile();
+ case 'benefits':return benefits();case 'withdrawals':return memberPayoutPage();case 'history':return history();case 'profile':return profile();
  case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt});case 'admin-users':return adminUsers();
  case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();case 'admin-cards':return adminCardRedemptionsPage({api,esc,heading,dt});
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
@@ -1226,6 +1231,13 @@ async function benefits(){
  <div class="grid two"><section class="card"><span class="eyebrow">QUÀ MỖI NGÀY</span><h3>☀ Điểm danh hôm nay</h3><div class="metric">+${fmt(state.meta.checkin_reward)} Lúa</div><p>Ngày Việt Nam: ${esc(c.today)}. Mỗi tài khoản chỉ được điểm danh một lần trong ngày.</p>
  ${c.checked_today?chip('approved'):`<button class="btn" data-action="checkin">Điểm danh ngay</button>`}</section>
  <section class="card"><h3>Điều kiện nhận thưởng</h3><p>Hệ thống tự kiểm tra lượt đã nhận để ngăn ghi Lúa trùng lặp. Admin có thể điều chỉnh mức quà.</p><div class="callout">Nếu mức thưởng đang bằng 0, thao tác điểm danh vẫn được lưu nhưng không phát sinh Lúa.</div></section></div>`;
+}
+async function memberPayoutPage(){
+ const method=state.payoutMethod==='card'?'card':'bank';
+ const options=[['bank','🏦 Chuyển khoản ngân hàng'],['card','🎁 Đổi thẻ cào']];
+ const tabs=`<div role="group" aria-label="Rút tiền" class="section" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:0">${options.map(([key,label])=>`<button type="button" class="btn ${method===key?'':'alt'}" style="min-height:48px;white-space:normal;line-height:1.3;padding:10px 6px" data-action="payout-method" data-method="${key}" aria-pressed="${method===key}">${esc(label)}</button>`).join('')}</div>`;
+ const content=method==='card'?await cardRedemptionsPage({api,esc,heading,dt}):await withdrawals();
+ return tabs+content;
 }
 async function withdrawals(){
  const [data,accountsData]=await Promise.all([api('/api/history'),api('/api/payout-accounts').catch(()=>({accounts:[],unavailable:true}))]);
@@ -1980,6 +1992,11 @@ app.addEventListener('click',async e=>{
  if(el.dataset.go){if(!state.me)return;if(state.me.user.role==='member'&&el.dataset.go==='tasks'&&['app','link'].includes(el.dataset.filter))state.taskFilter=el.dataset.filter;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
+  if(act==='payout-method'){
+   if(state.me?.user?.role!=='member'||state.view!=='withdrawals'||!['bank','card'].includes(el.dataset.method))return;
+   if(state.payoutMethod===el.dataset.method)return;
+   state.payoutMethod=el.dataset.method;await navigate('withdrawals');return;
+  }
   if(act.startsWith('payout-account-')){
    if(await handlePayoutAccountAction(act,el,{api,toast,navigate:async()=>{state.savedManagerOpen=true;await navigate('withdrawals');}}))return;
   }
