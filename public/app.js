@@ -1258,8 +1258,7 @@ async function memberPayoutPage(){
  return tabs+content;
 }
 async function withdrawals(){
- const [data,accountsData]=await Promise.all([api('/api/history'),api('/api/payout-accounts').catch(()=>({accounts:[],unavailable:true}))]);
- const meta=state.meta;
+ const [data,accountsData,meta]=await Promise.all([api('/api/history'),api('/api/payout-accounts').catch(()=>({accounts:[],unavailable:true})),api('/api/meta')]);
  state.savedPayoutAccounts=accountsData.accounts||[];
  const savedAccounts=state.savedPayoutAccounts.filter(x=>x.payment_method==='bank');
  const defaultBank=savedAccounts.find(x=>x.is_default);
