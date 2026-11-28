@@ -1799,9 +1799,10 @@ const outcomeDocument={
   remove(v){outcomeClasses.delete(v);}
  }}
 };
-const outcomeFns=new Function('document','fmt',outcomeCode+
+let overviewResumeCalls=0;
+const outcomeFns=new Function('document','fmt','showOverviewNotice',outcomeCode+
  '\nreturn {renderTaskResultModal,closeTaskResultModal};')(
- outcomeDocument,n=>String(n)
+ outcomeDocument,n=>String(n),()=>{overviewResumeCalls++;}
 );
 outcomeFns.renderTaskResultModal({status:'approved',reward:400});
 assert.match(outcomeRoot.innerHTML,/task-result-success/);
@@ -1812,6 +1813,7 @@ assert.match(outcomeRoot.innerHTML,/Đã cộng Lúa/);
 assert.doesNotMatch(outcomeRoot.innerHTML,/Chờ Admin duyệt/);
 assert.ok(outcomeClasses.has('task-result-open'));
 outcomeFns.closeTaskResultModal();
+assert.equal(overviewResumeCalls,1);
 assert.equal(outcomeRoot.innerHTML,'');
 assert.ok(!outcomeClasses.has('task-result-open'));
 outcomeFns.renderTaskResultModal({status:'pending',reward:400});
