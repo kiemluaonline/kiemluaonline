@@ -1584,7 +1584,7 @@ async function adminSecurity(){
  const proxy=d.proxy_guard||{},proxyCounts=proxy.counts||[],proxyEvents=proxy.events||[];
  const proxyN=(reason)=>proxyCounts.filter(x=>x.event_type==='link_proxy_blocked'&&x.reason===reason).reduce((sum,x)=>sum+Number(x.n||0),0);
  const unavailableN=proxyCounts.filter(x=>x.event_type==='link_proxy_unavailable').reduce((sum,x)=>sum+Number(x.n||0),0);
- const proxyReason={vpn:'VPN',proxy:'Proxy',tor:'Tor',missing_key:'Thiếu API key',missing_ip:'Không xác định IP',service_error:'Dịch vụ lỗi hoặc quá hạn mức',invalid_response:'Phản hồi API không hợp lệ',busy:'Dịch vụ đang bận'};
+ const proxyReason={vpn:'VPN',proxy:'Proxy',tor:'Tor',missing_key:'Thiếu API key',missing_ip:'Không xác định IP',service_error:'Dịch vụ trả lỗi',network_error:'Lỗi kết nối máy chủ',timeout:'API quá thời hạn',auth_error:'API từ chối xác thực',rate_limit:'Vượt hạn mức API',unexpected_redirect:'API chuyển hướng bất thường',invalid_response:'Phản hồi API không hợp lệ',busy:'Dịch vụ đang bận'};
  const members=(anti.profiles||[]);
  const matching=members.filter(p=>
   (state.fraudFilter==='all'||state.fraudFilter===p.level)&&
@@ -2162,7 +2162,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
    try{
     const d=await api('/api/admin/proxy-test','POST',{});
     const good=d.status==='clear'||d.status==='blocked';
-    const reason={vpn:'VPN',proxy:'Proxy',tor:'Tor',missing_key:'Chưa có Secret IPAPI_API_KEY',missing_ip:'Chưa xác định được IP kết nối',service_error:'API lỗi, hết hạn mức hoặc không phản hồi',invalid_response:'API không trả đủ dữ liệu bảo vệ',busy:'Dịch vụ đang bận'}[d.reason]||'Không xác định';
+    const reason={vpn:'VPN',proxy:'Proxy',tor:'Tor',missing_key:'Chưa có Secret IPAPI_API_KEY',missing_ip:'Chưa xác định được IP kết nối',service_error:'Máy chủ ipapi.is trả lỗi',network_error:'Không kết nối được từ Cloudflare tới ipapi.is',timeout:'API phản hồi quá thời hạn',auth_error:'API từ chối xác thực hoặc quyền truy cập',rate_limit:'API báo vượt giới hạn yêu cầu',unexpected_redirect:'API trả chuyển hướng ngoài dự kiến',invalid_response:'API không trả đủ dữ liệu bảo vệ',busy:'Dịch vụ đang bận'}[d.reason]||'Không xác định';
     const advice=d.status==='clear'?'Không phát hiện VPN/Proxy/Tor trên IP này.':d.status==='blocked'?'Phát hiện '+reason+' — kết nối này sẽ bị chặn khi bắt đầu Link nếu bảo vệ đang bật.':reason+'. Chưa xác minh được API hoạt động.';
     result.innerHTML=`<div class="fraud-alert-card"><strong class="${good?'':'red'}">${good?'✓ API phản hồi hợp lệ':'⚠ Kiểm tra API chưa thành công'}</strong><p>${esc(advice)}</p><div class="small">Bảo vệ nhiệm vụ: <strong>${d.enabled?'Đang bật':'Chưa bật'}</strong></div><div class="small">IP kết nối: ${adminIP(d.ip)}</div><div class="small">Thời gian: ${dt(d.checked_at)} · ${fmt(d.duration_ms)} ms${d.http_status?' · HTTP '+esc(d.http_status):''}</div><p class="small muted">Chỉ là phép thử của Admin, không tính là lượt nhiệm vụ hoặc cảnh báo gian lận.</p></div>`;
    }catch(err){result.textContent=err.message||'Không kiểm tra được API.';}
