@@ -13,6 +13,7 @@ const SESSION_MS = 14 * DAY;
 const LINK_RETURN_FAST_SECONDS = 20;
 // Returned Link claims stay recoverable until processed; not a client timer.
 const LINK_CONFIRM_OPEN = 253402300799000;
+// Zero expiry on a returned Link means explicitly abandoned, not timed out.
 // Cloudflare Workers WebCrypto supports at most 100000 PBKDF2 iterations.
 const PBKDF2_ROUNDS = 100000;
 const encoder = new TextEncoder();
@@ -1304,7 +1305,7 @@ async function handler(req, env) {
             AND date(datetime(-available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')
           GROUP BY task_id
        ) GROUP BY task_id`).bind(me.id,me.id).all(),
-      env.DB.prepare('SELECT DISTINCT task_id FROM task_attempts WHERE user_id=? AND consumed_by IS NULL AND available_at<0').bind(me.id).all()
+      env.DB.prepare('SELECT DISTINCT task_id FROM task_attempts WHERE user_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0').bind(me.id).all()
     ]);
     const limits=new Map(overrides.results.map(r=>[r.key,int(r.value,1)]));
     const done=new Map(counts.results.map(r=>[r.task_id,{n:Number(r.n),pending:Number(r.pending||0)}]));
@@ -1334,7 +1335,7 @@ async function handler(req, env) {
   if (m === 'GET' && p === '/api/member-overview') {
     const me=await auth(req,env);
     const at=now(),today=vnDay(at),first=vnDay(at-6*DAY);
-    const active="consumed_by IS NULL AND (available_at<0 OR expires_at>?)";
+    const active="consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?)";
     const [counts,ongoing,earnings,recent]=await Promise.all([
       env.DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) AS approved,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending FROM task_completions WHERE user_id=?").bind(me.id).first(),
       env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND "+active).bind(me.id,at).first(),
@@ -1402,11 +1403,11 @@ async function handler(req, env) {
       fail(409, 'Admin cần chọn chế độ duyệt thủ công cho nhiệm vụ Link trước khi sử dụng xác minh quay về.');
     let attempt = exactAttempt
       ? await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL').bind(exactAttempt,me.id,task.id).first()
-      : await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
+      : await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?) ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
     // A static destination has no session token. Recover only an unambiguous
     // expired attempt, never guess between multiple old starts.
     if(!attempt&&!exactAttempt&&sourceConfig.creation!=='api'){
-      const candidates=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL ORDER BY created_at DESC,id DESC LIMIT 2').bind(me.id,task.id).all();
+      const candidates=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND expires_at<>0 ORDER BY created_at DESC,id DESC LIMIT 2').bind(me.id,task.id).all();
       if(candidates.results.length===1)attempt=candidates.results[0];
     }
     if (!attempt) fail(409, 'Chưa tìm được đúng phiên nhiệm vụ. Hãy giữ đường dẫn này và liên hệ Admin để đối soát; không cần làm lại ngay.');
@@ -1418,11 +1419,27 @@ async function handler(req, env) {
       fail(409,'Hãy xác minh bằng trình duyệt đã mở nhiệm vụ.');
     if(attempt.available_at<0&&attempt.ip!==returnIP)
       fail(409,'Hãy dùng lại mạng tại thời điểm bắt đầu xác minh. Lượt cũ vẫn được giữ trong thời hạn.');
+    if(attempt.available_at<0&&attempt.expires_at===0){
+      if(body.abandon===true)return json({ok:true,status:'abandoned'});
+      fail(409,'Bạn đã xác nhận bỏ lượt này. Lượt vẫn được ghi nhận, không nhận Lúa.',{confirmation_abandoned:true});
+    }
+    if(body.abandon===true){
+      if(!exactAttempt||attempt.available_at>=0)fail(409,'Chỉ có thể bỏ phiên xác minh đã quay về.');
+      // Same row as the reward claim: only one of abandon or consume can win.
+      const abandoned=await env.DB.prepare('UPDATE task_attempts SET expires_at=0 WHERE id=? AND user_id=? AND task_id=? AND available_at<0 AND consumed_by IS NULL')
+        .bind(attempt.id,me.id,task.id).run();
+      if(!abandoned.meta?.changes){
+        const receipt=await savedReturn();
+        if(receipt)return json(receipt);
+        fail(409,'Phiên đã thay đổi. Hãy thử lại để kiểm tra kết quả.');
+      }
+      return json({ok:true,status:'abandoned'});
+    }
     if(attempt.available_at<0&&attempt.expires_at!==LINK_CONFIRM_OPEN){
       // Legacy 60-minute claims remain owned by the original account and browser.
       // Reopen confirmation only; the claim still checks all quotas and provider evidence.
       if(attempt.expires_at<=now())await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING').bind('link_return_recovery:'+attempt.id,'1').run();
-      await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL AND available_at=?').bind(LINK_CONFIRM_OPEN,attempt.id,attempt.available_at).run();
+      await env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND consumed_by IS NULL AND available_at=? AND expires_at<>0').bind(LINK_CONFIRM_OPEN,attempt.id,attempt.available_at).run();
       attempt.expires_at=LINK_CONFIRM_OPEN;
     }
     const hasAnswer=Object.prototype.hasOwnProperty.call(body,'answer');
@@ -1452,10 +1469,10 @@ async function handler(req, env) {
       }
       const mark=await env.DB.prepare(`UPDATE task_attempts SET available_at=?,expires_at=?,ip=?
         WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0
-          AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0)`)
+          AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0 AND x.expires_at<>0)`)
         .bind(-arrivedAt,LINK_CONFIRM_OPEN,returnIP,attempt.id,me.id,me.id,task.id,attempt.id).run();
       if(!mark.meta?.changes){
-        const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND ip=? AND device_code=?').bind(attempt.id,me.id,returnIP,attempt.device_code).first();
+        const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0 AND ip=? AND device_code=?').bind(attempt.id,me.id,returnIP,attempt.device_code).first();
         if(!same){
           const receipt=await savedReturn();
           if(receipt)return json(receipt);
@@ -1562,7 +1579,7 @@ async function handler(req, env) {
     // A returned attempt has already reserved a daily slot. Resume it before checking
     // new-start quotas; the existing CAPTCHA submission still enforces all claim quotas.
     if(task.category==='link'){
-      const unfinished=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 ORDER BY available_at ASC,id DESC LIMIT 1').bind(me.id,task.id).first();
+      const unfinished=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0 ORDER BY available_at ASC,id DESC LIMIT 1').bind(me.id,task.id).first();
       if(unfinished){
         if(unfinished.ip!==clientIP(req)||unfinished.device_code!==await deviceCode(req,env))
           fail(409,'Bạn còn lượt chưa xác minh. Hãy dùng lại mạng và trình duyệt ban đầu hoặc liên hệ Admin. Lượt cũ vẫn được giữ.');
@@ -1636,7 +1653,7 @@ async function handler(req, env) {
       await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
       const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
-         SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND (available_at<0 OR expires_at>?)
+         SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?)
         ) AND (${LINK_START_CONFLICT}) IS NULL`)
         .bind(...baseArgs,me.id,task.id,startedNow,...conflictArgs);
       const writes=[await reserve.run()];

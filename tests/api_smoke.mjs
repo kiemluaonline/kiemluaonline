@@ -2412,15 +2412,17 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(html,/width:min\(100%,400px\)/);
  assert.match(html,/min-height:48px/);
  const actions=[];
- const liveState={me:{user:{role:'member'}},returnChallenge:{expiresAt:12345}};
- let confirmChoice=false,busy=false;
- const leave=new Function('state','app','localizedConfirm','rememberReturn','clearLinkReturnQuery','renderShell','navigate',code+'\nreturn leaveLinkReturn;')(
-  liveState,{querySelector:()=>({disabled:busy})},msg=>{assert.match(msg,/Lượt đã được ghi nhận/);assert.doesNotMatch(msg,/quá hạn|thời hạn/);return confirmChoice;},
-  expiry=>actions.push(['save',expiry]),()=>actions.push('clear'),()=>actions.push('shell'),async v=>actions.push(v));
+ const liveState={me:{user:{role:'member'}},returnChallenge:{taskId:'task',attemptId:'attempt',linkSession:'session',expiresAt:12345}};
+ let confirmChoice=false,busy=false,failRequest=false;
+ const leave=new Function('state','app','localizedConfirm','api','returnStorageKey','localStorage','clearLinkReturnQuery','renderShell','navigate','toast','finishLinkReturn',code+'\nreturn leaveLinkReturn;')(
+  liveState,{querySelector:()=>({disabled:busy})},msg=>{assert.match(msg,/không nhận được Lúa/);assert.match(msg,/không được hoàn lại/);return confirmChoice;},
+  async (path,method,body)=>{assert.equal(path,'/api/tasks/task/return');assert.equal(method,'POST');assert.deepEqual(body,{attempt_id:'attempt',link_session:'session',abandon:true});actions.push('abandon');if(failRequest)throw new Error('offline');return {ok:true,status:'abandoned'};},
+  ()=>'return-key',{removeItem:key=>actions.push(['remove',key])},()=>actions.push('clear'),()=>actions.push('shell'),async v=>actions.push(v),()=>actions.push('toast'),()=>{throw new Error('unexpected receipt');});
  await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
  confirmChoice=true;busy=true;await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
- busy=false;await leave();assert.deepEqual(actions,[['save',12345],'clear','shell','tasks']);assert.equal(liveState.returnChallenge,null);
- console.log('PASS: branded verification gate hides deadline, explicit warning before leaving, saved recovery, no departure during submission.');
+ busy=false;failRequest=true;await assert.rejects(leave(),/offline/);assert.deepEqual(actions,['abandon']);assert.ok(liveState.returnChallenge);
+ actions.length=0;failRequest=false;await leave();assert.deepEqual(actions,['abandon',['remove','return-key'],'clear','shell','tasks','toast']);assert.equal(liveState.returnChallenge,null);
+ console.log('PASS: branded verification gate hides deadline, explicit warning before leaving, server-confirmed abandonment, failed request preserves recovery, no departure during submission.');
 }
 
 {
