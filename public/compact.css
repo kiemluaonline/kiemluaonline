@@ -329,7 +329,6 @@
 .admin-workspace .nav button{min-height:44px;gap:10px;text-align:left;border-radius:11px}
 .admin-workspace .nav button.active{background:#e9f3ed;color:#144a36}
 .admin-workspace .topbar{background:#fff;border-bottom:1px solid var(--admin-line)}
-.admin-workspace .topbar #topBalance{display:none}
 .admin-workspace .content{max-width:1440px;margin:0 auto}
 .admin-workspace .content .card{border:1px solid var(--admin-line);box-shadow:0 2px 12px #133f3210;border-radius:17px;min-width:0}
 .admin-workspace .content .page-head h2{color:var(--admin-ink);font-size:clamp(20px,3vw,26px)}
@@ -404,3 +403,6 @@
  .admin-workspace .sorder-admin-card,.admin-workspace .cards-admin-item{overflow-wrap:anywhere}
  .admin-workspace .shop-admin-layout{grid-template-columns:minmax(0,1fr)}
 }
+
+.admin-workspace .admin-panel-fold>.card{border:0!important;box-shadow:none!important;padding:5px 0!important;margin:0!important}
+.admin-workspace .admin-panel-fold{margin-bottom:10px;min-width:0}
