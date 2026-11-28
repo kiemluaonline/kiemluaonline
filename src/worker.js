@@ -358,6 +358,40 @@ async function loadFraudConnections(env){
  return buildFraudConnections(rows.results);
 }
 
+// Anti-Fraud 3.0: advisory relationships from recorded Link attempts, not hardware IDs.
+function buildLinkBrowserHistory(rows,limit=5000){
+ const truncated=rows.length>limit,accounts=new Map(),browsers=new Map();
+ for(const r of rows.slice(0,limit)){
+  const code=String(r.device_code||'').toUpperCase();
+  if(!r.user_id||!/^[0-9A-F]{16}$/.test(code))continue;
+  let a=accounts.get(r.user_id);
+  if(!a){a={user_id:r.user_id,name:r.name||'',email:r.email||'',codes:new Set(),last_seen:r.created_at};accounts.set(r.user_id,a);}
+  a.codes.add(code);
+  if(r.created_at>a.last_seen)a.last_seen=r.created_at;
+  let b=browsers.get(code);
+  if(!b){b={device_code:code,accounts:new Map(),last_seen:r.created_at};browsers.set(code,b);}
+  b.accounts.set(r.user_id,{user_id:r.user_id,name:r.name||'',email:r.email||''});
+  if(r.created_at>b.last_seen)b.last_seen=r.created_at;
+ }
+ const changes=[...accounts.values()].filter(a=>a.codes.size>=3).map(a=>({
+  user_id:a.user_id,name:a.name,email:a.email,code_count:a.codes.size,codes:[...a.codes].slice(0,10),last_seen:a.last_seen
+ })).sort((a,b)=>b.code_count-a.code_count||String(b.last_seen).localeCompare(String(a.last_seen)));
+ const shared=[...browsers.values()].filter(b=>b.accounts.size>=2).map(b=>({
+  device_code:b.device_code,account_count:b.accounts.size,accounts:[...b.accounts.values()].slice(0,15),last_seen:b.last_seen
+ })).sort((a,b)=>b.account_count-a.account_count||String(b.last_seen).localeCompare(String(a.last_seen)));
+ return {window_hours:24,sampled_attempts:Math.min(rows.length,limit),truncated,
+  observed_accounts:accounts.size,changed_accounts:changes.length,shared_codes:shared.length,
+  changes:changes.slice(0,50),shared:shared.slice(0,50)};
+}
+async function loadLinkBrowserHistory(env){
+ const rows=await env.DB.prepare(`SELECT a.user_id,a.device_code,a.created_at,u.name,u.email
+  FROM task_attempts a JOIN tasks t ON t.id=a.task_id JOIN users u ON u.id=a.user_id
+  WHERE t.category='link' AND u.role='member' AND a.created_at>=datetime('now','-24 hours')
+  AND a.device_code IS NOT NULL AND a.device_code<>''
+  ORDER BY a.created_at DESC,a.id DESC LIMIT 5001`).all();
+ return buildLinkBrowserHistory(rows.results);
+}
+
 async function loadFraudProfiles(env,targetId=null){
  // Các giới hạn bảo vệ D1 Free: không quét toàn bộ lịch sử của site.
  // Khi chấm điểm cho một yêu cầu rút, luôn nạp đúng tài khoản đích dù cũ.
@@ -2486,7 +2520,8 @@ async function handler(req, env) {
         env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts FROM risk_events
           WHERE event_type='link_preflight_observation' AND date(created_at,'+7 hours')=date('now','+7 hours')`).first()
       ]);
-      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},link_observations:{events:observed.results,count:observedCount?.n||0,accounts:observedCount?.accounts||0},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
+      const browserHistory=await loadLinkBrowserHistory(env).catch(()=>null);
+      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},browser_history:browserHistory,link_observations:{events:observed.results,count:observedCount?.n||0,accounts:observedCount?.accounts||0},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
         network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
         ipv4_inventory:ipv4Inventory(networkSeen.results,unverifiedIPv4.results),
