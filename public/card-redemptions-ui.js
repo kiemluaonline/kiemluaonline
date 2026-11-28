@@ -83,7 +83,8 @@ export async function adminCardRedemptionsPage(ctx){
       </select>
       <button type="submit" class="btn">Lưu cấu hình đổi thẻ</button>
     </form>
-    <p class="cards-note">Các nhà mạng: Viettel, VinaPhone, MobiFone. Mệnh giá: 10.000đ, 20.000đ, 50.000đ, 100.000đ, 200.000đ. Bạn cần chuẩn bị sẵn thẻ thật. Lúa được hoàn khi từ chối.</p>
+    ${data.catalog_expanded===false?`<div class="cards-warning">Cần nâng cấp D1 bằng migration 0008_card_catalog.sql để mở Vietnamobile, Garena và mệnh giá 500.000đ. Các yêu cầu cũ vẫn hoạt động.</div>`:''}
+    <p class="cards-note">Các nhà mạng/thẻ: ${(data.carriers||[]).map(v=>esc(v)).join(', ')}. Mệnh giá: ${(data.denominations||[]).map(v=>money(v)+'đ').join(', ')}. Bạn cần chuẩn bị sẵn thẻ thật. Lúa được hoàn khi từ chối.</p>
     <div class="cards-key-setup"><strong>🔐 Thiết lập khóa mã thẻ trên iPhone</strong>
      <p>Nhấn tạo khóa để sao chép một giá trị bí mật ngẫu nhiên. Dán vào Cloudflare Workers → Settings → Variables and Secrets với tên <code>CARD_VOUCHER_SECRET</code>. Không gửi khóa cho ai, không đăng công khai và không đổi khóa sau khi đã phát thẻ.</p>
      <button class="btn alt" type="button" data-action="card-generate-key">🔑 Tạo và sao chép khóa bí mật</button>
