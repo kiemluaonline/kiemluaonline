@@ -2039,3 +2039,7 @@ body.task-result-open{overflow:hidden}
  .welcome-site .welcome-nav-actions .language-toggle{flex-basis:100%;width:max-content;justify-content:center}
  .welcome-site .welcome-nav-actions .welcome-link-login,.welcome-site .welcome-nav-actions .welcome-nav-signup{flex:1}
 }
+
+/* Public introduction: three remaining task categories, balanced on mobile. */
+.welcome-site .welcome-type-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:730px){.welcome-site .welcome-type-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.welcome-site .welcome-type-grid>.welcome-type-card:last-child{grid-column:1/-1}}
