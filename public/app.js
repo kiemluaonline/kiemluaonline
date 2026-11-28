@@ -278,14 +278,14 @@ function renderLinkReturnModal(){
  inputmode="numeric" min="0" max="30" required autocomplete="off" placeholder="Nhập kết quả">
  <button class="btn" type="submit">Xác minh</button></form>
  <button type="button" class="btn alt return-gate-back" data-action="leave-link-return">Quay lại nhiệm vụ</button>
- <p class="return-gate-foot">Hãy xác minh trước khi rời trang để không bỏ lỡ phần thưởng.</p>`);
+ <p class="return-gate-foot">⚠️ Vui lòng hoàn thành phép tính trước khi rời trang. Nếu tự ý thoát khi chưa xác minh, lượt nhiệm vụ vẫn được ghi nhận nhưng bạn sẽ không nhận được Lúa.</p>`);
 }
 async function leaveLinkReturn(){
  const c=state.returnChallenge;
  if(!c||state.me?.user?.role!=='member')return;
  // Do not navigate away while a reward receipt may be arriving.
  if(app.querySelector('form[data-form="link-return-captcha"] button[type="submit"]')?.disabled)return;
- if(!localizedConfirm('Bạn chưa xác minh nhiệm vụ. Bạn có thể tiếp tục xác minh trong thời hạn cho phép. Nếu quá hạn, bạn sẽ không nhận được Lúa và lượt đã sử dụng không được hoàn lại. Bạn vẫn muốn quay lại nhiệm vụ?'))return;
+ if(!localizedConfirm('Bạn chưa xác minh nhiệm vụ. Lượt đã được ghi nhận, nhưng bạn chưa nhận được Lúa. Bạn vẫn muốn quay lại nhiệm vụ?'))return;
  rememberReturn(c.expiresAt);
  state.returnChallenge=null;
  clearLinkReturnQuery();
