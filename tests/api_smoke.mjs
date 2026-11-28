@@ -1807,6 +1807,21 @@ console.log('PASS: exact return session retained until server receipt is display
 
 const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 {
+ const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function linkObservationTags('),linkFraudWorkerSource.indexOf('async function recordTaskDevice('));
+ const tag=new Function(source+'\nreturn linkObservationTags;')();
+ for(const [flags,ua,check,expected] of [['000','fixture',null,'no_signal'],['00?','fixture',null,'unknown'],['','fixture',null,'unknown'],['000','',null,'unknown'],['100','fixture',null,'signal'],['???','fixture',{hosting:'hosting'},'signal'],['000','Genymotion',null,'signal']]){
+  const req=new Request('https://example.com',{headers:{'X-TL-Link-Signals':flags,'User-Agent':ua}});
+  assert.equal(tag(req,check).result,expected);
+ }
+ const before=await call('/api/admin/risk-events','GET',undefined,admCookie);
+ assert.equal((await call('/api/admin/preflight-test','POST',{},cookie)).status,403);
+ const probe=await call('/api/admin/preflight-test','POST',{},admCookie);
+ assert.equal(probe.status,200);assert.equal(probe.data.test_only,true);
+ const after=await call('/api/admin/risk-events','GET',undefined,admCookie);
+ assert.deepEqual(after.data.link_observations.checks,before.data.link_observations.checks,'Admin test must not count as live member traffic');
+}
+
+{
  const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function telegramGroupUrl('),linkFraudWorkerSource.indexOf('async function getSettings('));
  const {telegramGroupUrl,telegramCommunity}=new Function(source+'\nreturn {telegramGroupUrl,telegramCommunity};')();
  const invite='https://t.me/+fixture_12345';
