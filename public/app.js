@@ -207,7 +207,7 @@ async function api(path, method='GET', body=null, linkSignals=''){
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;
     // Member-facing task errors keep recovery information but avoid exposing quota diagnostics.
     if(r.status===429&&/^\/api\/tasks\/[^/]+\/(?:start|return|submit)$/.test(path)&&data.quota_scope){
-      error.message=data.quota_scope==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.';
+      error.message=String(data.quota_scope).startsWith('source_')?'Nguồn nhiệm vụ đã hết hạn mức hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':data.quota_scope==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.';
     }
     throw error; }
   return data;
@@ -1501,6 +1501,13 @@ function sourceSettingsForm(source={}){
  ${field('view_path','Trường JSON chứa tổng view',source.view_path||'','placeholder="views, data.views hoặc data.chart.*.views"')}
  <p class="note">Nếu API trả danh sách view theo ngày, dùng dạng data.chart.*.views để cộng các dòng trong kỳ API trả về. Dùng {destination}, {alias}, {token} theo tài liệu đối tác. Không dán token thật vào đây. Nếu cần token, tạo Secret ${esc(source.secret_name||'LINK_PROVIDER_TOKEN_MÃ_NGUỒN_VIẾT_HOA')} trong Cloudflare Worker. ${source.id?(source.token_configured?'Đã có Secret.':'Chưa có Secret (không cần nếu API công khai).'):''}</p>
  <button class="btn" type="submit">Lưu nguồn</button></form>
+ ${source.id?`<form class="section card" data-form="link-source-quota"><input type="hidden" name="id" value="${esc(source.id)}">
+ <h4>🛡️ Hạn mức riêng của nguồn</h4>
+ <p class="note">Giới hạn số lần cấp phiên Link mới trong ngày Việt Nam (00:00 đặt lại), tính chung các nhiệm vụ gắn nguồn này. Tính cả phiên chưa hoàn thành hoặc cấp Link lỗi để bảo vệ nguồn. Phiên cũ đang làm vẫn theo quy tắc cũ. IP dùng chung có thể hết lượt chung. Phiên cũ chưa có mã nguồn lưu riêng được đối chiếu theo cấu hình nhiệm vụ hiện tại. 0 = không giới hạn riêng; các quy tắc chung vẫn áp dụng.</p>
+ ${field('account','Lượt cấp / tài khoản / ngày',source.quota?.account??0,'type="number" min="0" max="1000" step="1" required')}
+ ${field('ip','Lượt cấp / IP hoặc nhóm IPv6 / ngày',source.quota?.ip??0,'type="number" min="0" max="1000" step="1" required')}
+ ${field('browser','Lượt cấp / mã trình duyệt / ngày',source.quota?.browser??0,'type="number" min="0" max="1000" step="1" required')}
+ <button class="btn" type="submit">Lưu hạn mức nguồn</button></form>`:''}
  ${source.id?`<form class="section" data-form="link-source-test"><input type="hidden" name="id" value="${esc(source.id)}">
  ${select('kind','Kiểm tra API',[...(source.view_url&&source.view_path?[['view','Kiểm tra view']]:[]),['create','Tạo link kiểm thử (không thưởng)']],source.view_url&&source.view_path?'view':'create')}
  <p class="note">Tạo link kiểm thử sẽ tạo một link thật bên đối tác, kể cả khi phản hồi không hợp lệ. Chỉ bấm một lần; nếu lỗi, đọc thông báo trước khi thử lại. Không phát thưởng.</p>
@@ -1726,7 +1733,7 @@ async function adminSecurity(){
   (p.name+' '+p.email).toLowerCase().includes(state.fraudSearch.trim().toLowerCase())
  );
  const groups=(title,summary,content)=>`<details class="card section fraud-group"><summary><span><strong>${title}</strong><small>${summary}</small></span><span aria-hidden="true" class="fraud-chevron">⌄</span></summary><div class="fraud-group-body">${content}</div></details>`;
- const eventLabels={captcha_wrong:'Sai phép tính',login_failed:'Đăng nhập thất bại',device_seen:'Ghi nhận trình duyệt',browser_ipv4_report:'Báo cáo IPv4',task_quota_denied:'Chặn giới hạn nhiệm vụ App',link_ip_quota_denied:'Chặn Link theo IP',link_browser_quota_denied:'Chặn Link theo trình duyệt',link_browser_missing:'Chưa nhận diện trình duyệt',link_return_too_fast:'Quay về Link quá nhanh',link_return_network_changed:'Thay đổi mạng khi quay về Link',link_source_create_failed:'Lỗi cấp link từ nguồn',link_preflight_observation:'Dấu hiệu tham khảo trước cấp Link',link_proxy_blocked:'Chặn VPN / Proxy / Tor trước cấp Link',link_proxy_unavailable:'Tạm dừng cấp Link do chưa kiểm tra được IP',signup_completed:'Đăng ký thành công',signup_device_limit:'Chặn đăng ký theo trình duyệt',signup_rate_limited:'Giới hạn tốc độ đăng ký',too_many_task_starts:'Bắt đầu nhiệm vụ quá nhiều',fraud_payout_override:'Admin xác minh rủi ro thanh toán',link_fast_return_approved:'Admin đối chiếu lượt quay về nhanh',task_device_start:'Bắt đầu nhiệm vụ',task_device_submit:'Gửi nhiệm vụ',admin_settings:'Admin lưu cài đặt',admin_user_status:'Admin đổi trạng thái tài khoản',admin_withdrawal_action:'Admin xử lý rút tiền'};
+ const eventLabels={captcha_wrong:'Sai phép tính',login_failed:'Đăng nhập thất bại',device_seen:'Ghi nhận trình duyệt',browser_ipv4_report:'Báo cáo IPv4',task_quota_denied:'Chặn giới hạn nhiệm vụ App',link_ip_quota_denied:'Chặn Link theo IP',link_browser_quota_denied:'Chặn Link theo trình duyệt',link_browser_missing:'Chưa nhận diện trình duyệt',link_return_too_fast:'Quay về Link quá nhanh',link_return_network_changed:'Thay đổi mạng khi quay về Link',link_source_create_failed:'Lỗi cấp link từ nguồn',link_preflight_observation:'Dấu hiệu tham khảo trước cấp Link',link_source_quota_denied:'Chặn theo hạn mức riêng nguồn Link',link_proxy_blocked:'Chặn VPN / Proxy / Tor trước cấp Link',link_proxy_unavailable:'Tạm dừng cấp Link do chưa kiểm tra được IP',signup_completed:'Đăng ký thành công',signup_device_limit:'Chặn đăng ký theo trình duyệt',signup_rate_limited:'Giới hạn tốc độ đăng ký',too_many_task_starts:'Bắt đầu nhiệm vụ quá nhiều',fraud_payout_override:'Admin xác minh rủi ro thanh toán',link_fast_return_approved:'Admin đối chiếu lượt quay về nhanh',task_device_start:'Bắt đầu nhiệm vụ',task_device_submit:'Gửi nhiệm vụ',admin_settings:'Admin lưu cài đặt',admin_user_status:'Admin đổi trạng thái tài khoản',admin_withdrawal_action:'Admin xử lý rút tiền'};
  return `${heading('Chống gian lận','Theo dõi rủi ro, kiểm tra bằng chứng và bảo vệ thành viên.')}
  <div class="fraud-kpis">${[['all','Tài khoản',anti.summary?.checked_accounts],['serious','Nghiêm trọng',anti.summary?.serious],['review','Cần kiểm tra',anti.summary?.review],['low','Mức thấp',anti.summary?.low]].map(([v,label,n])=>`<button type="button" class="fraud-kpi fraud-kpi-${v}" aria-pressed="${state.fraudFilter===v}" data-action="fraud-filter" data-level="${v}"><strong>${fmt(n||0)}</strong><span>${label}</span></button>`).join('')}</div>
  <div class="fraud-today"><strong>⚠ Link hôm nay: ${fmt(d.link_alert_count||0)} cảnh báo</strong><span>${fmt(d.link_alert_accounts||0)} tài khoản • Đặt lại 00:00</span><button type="button" class="btn alt sm" data-action="fraud-open-link-alerts">Xem cảnh báo Link</button></div>
@@ -2556,6 +2563,9 @@ app.addEventListener('submit',async e=>{
   if(kind==='settings'){await api('/api/admin/settings','PUT',b);state.meta=await api('/api/meta');toast('Đã lưu cài đặt.');await navigate('admin-settings');}
   if(kind==='link-source-save'){
     await api('/api/admin/link-sources','POST',b);toast('Đã lưu nguồn rút gọn.');await navigate('admin-tasks');return;
+  }
+  if(kind==='link-source-quota'){
+    await api('/api/admin/link-sources/quota','POST',b);toast('Đã lưu hạn mức riêng nguồn.');await navigate('admin-tasks');return;
   }
   if(kind==='link-source-test'){
     const output=form.querySelector('[data-source-result]');

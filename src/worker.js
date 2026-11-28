@@ -897,6 +897,51 @@ async function denyLinkStartConflict(env,req,userId,taskId,args){
  fail(429,browser?'Mã trình duyệt này đang được tài khoản khác sử dụng cho nhiệm vụ Link. Chưa cấp Link.':'Mạng này đã có tài khoản khác giữ lượt nhiệm vụ này. Chưa cấp Link.',{quota_scope:reason});
 }
 
+// Per-provider daily NEW Link reservations. Policy is separate from the provider
+// configuration snapshot used by payment reconciliation. Zero means unlimited.
+const SOURCE_QUOTA_PREFIX='link_source_quota:';
+const SOURCE_ISSUED_PREFIX='link_source_issued:';
+function normalizeSourceQuota(body){
+ const out={};
+ for(const key of ['account','ip','browser']){
+  const v=body?.[key]??0;
+  if(!/^\d+$/.test(String(v))||!Number.isSafeInteger(Number(v))||Number(v)>1000)throw Error('Hạn mức nguồn phải là số nguyên 0–1000.');
+  out[key]=Number(v);
+ }
+ return out;
+}
+// All current-day reservations count, including failed or expired requests.
+// The source marker is written atomically with a new attempt. Legacy attempts
+// fall back to their API snapshot, then current task assignment.
+const SOURCE_QUOTA_CONFLICT=`SELECT CASE
+ WHEN lim.account>0 AND used.account>=lim.account THEN 'source_account'
+ WHEN lim.ip>0 AND used.ip>=lim.ip THEN 'source_ip'
+ WHEN lim.browser>0 AND used.browser>=lim.browser THEN 'source_browser'
+ ELSE NULL END AS reason
+ FROM (SELECT COALESCE(json_extract(value,'$.account'),0) AS account,
+ COALESCE(json_extract(value,'$.ip'),0) AS ip,
+ COALESCE(json_extract(value,'$.browser'),0) AS browser
+ FROM settings WHERE key=?) lim
+ CROSS JOIN (SELECT COALESCE(SUM(a.user_id=?),0) AS account,
+ COALESCE(SUM(lower(a.ip) LIKE ?),0) AS ip,
+ COALESCE(SUM(a.device_code=?),0) AS browser
+ FROM task_attempts a JOIN tasks t ON t.id=a.task_id
+ LEFT JOIN settings marker ON marker.key='link_source_issued:'||a.id
+ LEFT JOIN settings snap ON snap.key='link_source_attempt:'||a.id
+ LEFT JOIN settings mapping ON mapping.key='link_source_task:'||a.task_id
+ WHERE t.category='link' AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+ AND COALESCE(marker.value,json_extract(snap.value,'$.id'),json_extract(mapping.value,'$.id'),'')=?) used`;
+function sourceQuotaArgs(sourceId,userId,ip,code){
+ return [SOURCE_QUOTA_PREFIX+sourceId,userId,linkNetworkPattern(ip),code,sourceId];
+}
+async function denySourceQuota(env,req,userId,taskId,args){
+ const row=await env.DB.prepare(SOURCE_QUOTA_CONFLICT).bind(...args).first();
+ const reason=row?.reason;
+ if(!reason)return;
+ await event(env,req,'link_source_quota_denied',userId,reason+':'+taskId+'|start').catch(()=>{});
+ fail(429,'Nguồn nhiệm vụ đã hết hạn mức cấp Link hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).',{quota_scope:reason});
+}
+
 function normalizeLinkTaskLimit(value){return Math.max(1,Math.min(20,int(value,1)));}
 async function linkTaskPerAccountLimit(env,task){
  if(task.category!=='link')return 1;
@@ -1719,16 +1764,21 @@ async function handler(req, env) {
     const baseArgs=[attempt,me.id,task.id,a,b,available,startedNow+attemptSeconds*1000,startIP,startCode];
     if(task.category==='link'){
       const conflictArgs=linkStartConflictArgs(settings,me.id,task.id,startIP,startCode,startedNow);
+      const sourceId=sourceConfig.id||'', sourceArgs=sourceQuotaArgs(sourceId,me.id,startIP,startCode);
+      if(sourceId)await denySourceQuota(env,req,me.id,task.id,sourceArgs);
       // Early rejection is for clarity; the INSERT below is the actual atomic gate.
       await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
       const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
          SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?)
-        ) AND (${LINK_START_CONFLICT}) IS NULL`)
-        .bind(...baseArgs,me.id,task.id,startedNow,...conflictArgs);
-      const writes=[await reserve.run()];
+        ) AND (${LINK_START_CONFLICT}) IS NULL
+          AND COALESCE((SELECT json_extract(value,'$.id') FROM settings WHERE key=?),'')=?
+          AND (${SOURCE_QUOTA_CONFLICT}) IS NULL`)
+        .bind(...baseArgs,me.id,task.id,startedNow,...conflictArgs,TASK_SOURCE_PREFIX+task.id,sourceId,...sourceArgs);
+      const writes=await env.DB.batch([reserve,env.DB.prepare('INSERT INTO settings(key,value) SELECT ?,? WHERE EXISTS(SELECT 1 FROM task_attempts WHERE id=?)').bind(SOURCE_ISSUED_PREFIX+attempt,sourceId,attempt)]);
       if(!writes[0].meta?.changes){
         await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
+        if(sourceId)await denySourceQuota(env,req,me.id,task.id,sourceArgs);
         fail(409,'Đang có yêu cầu cấp link hoặc lượt chờ xác minh. Không tạo thêm link.');
       }
     }else{
@@ -1965,13 +2015,22 @@ async function handler(req, env) {
       const rows=await env.DB.prepare("SELECT value FROM settings WHERE key LIKE 'link_source_config:%' ORDER BY key LIMIT 100").all();
       const sources=new Map();
       for(const row of rows.results){const source=normalizeSource(JSON.parse(row.value));sources.set(source.id,source);}
-      return json({sources:[...sources.values()].map(source=>presentSource(env,source))});
+      const policies=await env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_source_quota:%'").all();
+      const quotas=new Map(policies.results.map(row=>[row.key,normalizeSourceQuota(JSON.parse(row.value))]));
+      return json({sources:[...sources.values()].map(source=>({...presentSource(env,source),quota:quotas.get(SOURCE_QUOTA_PREFIX+source.id)||normalizeSourceQuota({})}))});
     }
     if(m==='POST'&&p==='/api/admin/link-sources'){
       const body=await readBody(req);
       let source;try{source=normalizeSource(body);}catch(error){fail(400,error.message);}
       await env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SOURCE_PREFIX+source.id,JSON.stringify(source)).run();
       return json({ok:true,source:presentSource(env,source)});
+    }
+    if(m==='POST'&&p==='/api/admin/link-sources/quota'){
+      const body=await readBody(req),source=await getSource(env,String(body.id||''));
+      if(!source)fail(404,'Không tìm thấy nguồn.');
+      let quota;try{quota=normalizeSourceQuota(body);}catch(error){fail(400,error.message);}
+      await env.DB.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SOURCE_QUOTA_PREFIX+source.id,JSON.stringify(quota)).run();
+      return json({ok:true,quota});
     }
     if(m==='POST'&&p==='/api/admin/link-sources/remove'){
       const body=await readBody(req),source=await getSource(env,String(body.id||''));
@@ -2628,6 +2687,7 @@ export default {
       env.DB.prepare("DELETE FROM login_attempts WHERE created_at<datetime('now','-30 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_view_retry:%' AND NOT EXISTS(SELECT 1 FROM task_completions c WHERE c.id=substr(settings.key,17) AND c.status='pending' AND c.created_at>=datetime('now','-72 hours'))"),
       env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days') AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=task_attempts.task_id AND t.category='link')"),
+      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_source_issued:%' AND NOT EXISTS(SELECT 1 FROM task_attempts a WHERE a.id=substr(settings.key,20) AND a.created_at>=datetime('now','-2 days'))"),
       env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now()),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_signup_pending:%' AND json_extract(value,'$.expires')<?").bind(now())
