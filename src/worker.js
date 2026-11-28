@@ -425,6 +425,8 @@ async function isColorSortReferralTask(env, task) {
   return setting?.value === '11493356';
 }
 const PROOF_REMOVED_MARKER = 'EVIDENCE_REMOVED_V1';
+const ADMIN_REVIEW_CLEARED = 'ADMIN_REVIEW_CLEARED_V1';
+const REVIEW_CATEGORY_SQL = "CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END";
 const APP_PHOTO_MAX_BYTES = 180000;
 // Ảnh do trình duyệt thu nhỏ, lưu trong D1 với mức dung lượng nhỏ;
 // không cần R2, chỉ Admin mới có đường dẫn đọc ảnh.
@@ -1770,7 +1772,7 @@ async function handler(req, env) {
     const [walletEntries, completionRows, withdrawals] = await Promise.all([
       env.DB.prepare('SELECT * FROM wallet_entries WHERE user_id=? ORDER BY created_at DESC LIMIT 80').bind(me.id).all(),
       env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
-            CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN '[Ảnh bằng chứng đã gửi]' WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN '[Bằng chứng đã xóa sau xét duyệt]' ELSE c.evidence END AS evidence,
+            CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN '[Ảnh bằng chứng đã gửi]' WHEN c.evidence IN ('EVIDENCE_REMOVED_V1','ADMIN_REVIEW_CLEARED_V1') THEN '[Bằng chứng đã xóa sau xét duyệt]' ELSE c.evidence END AS evidence,
             c.ip,c.device_code,c.created_at,c.reviewed_at,t.title FROM task_completions c JOIN tasks t ON t.id=c.task_id
           WHERE c.user_id=? ORDER BY c.created_at DESC LIMIT 80`).bind(me.id).all(),
       env.DB.prepare(`SELECT w.*,
@@ -2099,22 +2101,25 @@ async function handler(req, env) {
       if(scoped&&(!['pending','approved','rejected'].includes(reviewStatus)||!['link','app','archive'].includes(reviewCategory)))fail(400,'Bộ lọc duyệt nhiệm vụ không hợp lệ.');
       const pageRaw=u.searchParams.get('page')||'1',page=Number(pageRaw),pageSize=150;
       if(scoped&&(!/^\d+$/.test(pageRaw)||!Number.isSafeInteger(page)||page<1||page>1000000))fail(400,'Trang không hợp lệ.');
-      const effectiveCategory="CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END";
+      const effectiveCategory=REVIEW_CATEGORY_SQL;
+      const retryOnly=u.searchParams.get('retry_only')==='1';
+      if(retryOnly&&(!scoped||reviewCategory!=='app'||reviewStatus!=='rejected'))fail(400,'Bộ lọc lượt App không hợp lệ.');
+      const visibleWhere=retryOnly?"c.evidence='ADMIN_REVIEW_CLEARED_V1' AND c.period_key NOT LIKE 'app_retry_rejected:%'":"c.evidence<>'ADMIN_REVIEW_CLEARED_V1'";
       const categoryWhere=reviewCategory==='archive'?`(${effectiveCategory}) NOT IN ('link','app')`:`(${effectiveCategory})=?`;
       const categoryArgs=reviewCategory==='archive'?[]:[reviewCategory];
       const statusCounts={pending:0,approved:0,rejected:0};
       if(scoped){
-        const grouped=await env.DB.prepare(`SELECT c.status,COUNT(*) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id WHERE ${categoryWhere} GROUP BY c.status`).bind(...categoryArgs).all();
+        const grouped=await env.DB.prepare(`SELECT c.status,COUNT(*) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id WHERE ${categoryWhere} AND ${visibleWhere} GROUP BY c.status`).bind(...categoryArgs).all();
         for(const row of grouped.results)if(Object.hasOwn(statusCounts,row.status))statusCounts[row.status]=Number(row.n)||0;
       }
       const safePage=scoped?Math.min(page,Math.max(1,Math.ceil(statusCounts[reviewStatus]/pageSize))):1;
       const rowsQuery = await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
         CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN 1 ELSE 0 END AS has_photo,
-        CASE WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN 1 ELSE 0 END AS evidence_removed,
-        CASE WHEN c.evidence NOT IN ('','EVIDENCE_REMOVED_V1') THEN 1 ELSE 0 END AS has_evidence,
+        CASE WHEN c.evidence IN ('EVIDENCE_REMOVED_V1','ADMIN_REVIEW_CLEARED_V1') THEN 1 ELSE 0 END AS evidence_removed,
+        CASE WHEN c.evidence NOT IN ('','EVIDENCE_REMOVED_V1','ADMIN_REVIEW_CLEARED_V1') THEN 1 ELSE 0 END AS has_evidence,
         CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|'
           THEN substr(c.evidence,14,instr(substr(c.evidence,14),'|')-1)
-          WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN ''
+          WHEN c.evidence IN ('EVIDENCE_REMOVED_V1','ADMIN_REVIEW_CLEARED_V1') THEN ''
           ELSE c.evidence END AS evidence,
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,
         ${effectiveCategory} AS category,
@@ -2124,7 +2129,7 @@ async function handler(req, env) {
         a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         LEFT JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id
-        ${scoped?`WHERE ${categoryWhere} AND c.status=?`:''}
+        WHERE ${visibleWhere}${scoped?` AND ${categoryWhere} AND c.status=?`:''}
         ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, ${scoped&&reviewStatus!=='pending'?'COALESCE(c.reviewed_at,c.created_at)':'c.created_at'} DESC,c.id DESC LIMIT 150${scoped?' OFFSET ?':''}`);
       const rows=await (scoped?rowsQuery.bind(...categoryArgs,reviewStatus,(safePage-1)*pageSize):rowsQuery).all();
       // Query only the attempts visible in this Admin page; older records without
@@ -2139,35 +2144,36 @@ async function handler(req, env) {
           ORDER BY created_at DESC LIMIT ${group.length*3+10}`).bind(...group).all();
         deviceEvents.push(...result.results);
       }
-      const pendingErase = await env.DB.prepare(`SELECT COUNT(*) AS n FROM task_completions
-        WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
-        .bind(PROOF_REMOVED_MARKER).first();
       return json({
         reviews: attachTaskDeviceAudit(rows.results,deviceEvents).map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})),
-        processed_evidence_count: Number(pendingErase.n) || 0,
+        processed_evidence_count: scoped&&!retryOnly&&reviewStatus!=='pending'?statusCounts[reviewStatus]:0,
         ...(scoped?{status_counts:statusCounts,page:safePage,page_size:pageSize,total:statusCounts[reviewStatus]}:{})
       });
     }
-    // Chỉ xóa tệp/ghi chú sau khi Admin ra quyết định. Giữ nguyên trạng thái,
-    // lịch sử nhiệm vụ, giới hạn lượt và sổ Lúa để tránh làm sai số dư.
+    // Xóa thật ảnh/nội dung bằng chứng, chỉ giữ bản ghi tối thiểu phục vụ ví,
+    // chống trùng lượt, lịch sử thành viên và đối soát. Không xóa bản ghi chờ.
     if(m==='POST' && p==='/api/admin/reviews/erase-processed'){
       const b=await readBody(req);
       if(b.confirm!=='DELETE_REVIEWED_EVIDENCE')
-        fail(400,'Cần xác nhận thao tác xóa bằng chứng đã xử lý.');
+        fail(400,'Cần xác nhận thao tác xóa hồ sơ.');
+      if(!['approved','rejected'].includes(b.status)||!['link','app','archive'].includes(b.category))
+        fail(400,'Cần chọn đúng loại nhiệm vụ và mục Đã duyệt hoặc Từ chối.');
       const expected=Number(b.expected_count);
       if(!Number.isSafeInteger(expected)||expected<1)
-        fail(400,'Cần xác nhận số lượng bằng chứng muốn xóa.');
-      const actual=await env.DB.prepare(`SELECT COUNT(*) AS n FROM task_completions
-        WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
-        .bind(PROOF_REMOVED_MARKER).first();
-      if(Number(actual.n)!==expected)
-        fail(409,'Số lượng bằng chứng đã thay đổi. Vui lòng tải lại danh sách và kiểm tra trước khi xóa.');
-      const result=await env.DB.prepare(`UPDATE task_completions SET evidence=?
-        WHERE status IN ('approved','rejected') AND evidence NOT IN ('',?)`)
-        .bind(PROOF_REMOVED_MARKER,PROOF_REMOVED_MARKER).run();
-      const count=result.meta?.changes||0;
-      await event(env,req,'admin_evidence_deleted_bulk',admin.id,'Đã xóa '+count+' bằng chứng đã xử lý (giữ lịch sử và số Lúa)');
-      return json({ok:true,deleted:count,message:'Đã xóa '+count+' bằng chứng đã xử lý. Lịch sử và số Lúa được giữ nguyên.'});
+        fail(400,'Cần xác nhận số lượng hồ sơ muốn xóa.');
+      const single=b.id!==undefined;
+      if(single&&(typeof b.id!=='string'||!b.id||expected!==1))fail(400,'Hồ sơ muốn xóa không hợp lệ.');
+      const categoryWhere=b.category==='archive'?`(${REVIEW_CATEGORY_SQL}) NOT IN ('link','app')`:`(${REVIEW_CATEGORY_SQL})=?`;
+      const scope=`status=? AND evidence<>? AND task_id IN (SELECT t.id FROM tasks t WHERE ${categoryWhere})${single?' AND id=?':''}`;
+      const args=[b.status,ADMIN_REVIEW_CLEARED,...(b.category==='archive'?[]:[b.category]),...(single?[b.id]:[])];
+      // One atomic statement: a changed count cannot partially clear a selection.
+      const result=await env.DB.prepare(`UPDATE task_completions SET evidence=? WHERE ${scope}
+        AND (SELECT COUNT(*) FROM task_completions WHERE ${scope})=?`)
+        .bind(ADMIN_REVIEW_CLEARED,...args,...args,expected).run();
+      const count=Number(result.meta?.changes||0);
+      if(count!==expected)fail(409,'Danh sách đã thay đổi. Vui lòng tải lại trước khi xóa.');
+      await event(env,req,'admin_evidence_deleted_bulk',admin.id,'Đã dọn '+count+' hồ sơ '+b.category+'/'+b.status+'; giữ sổ Lúa và giới hạn lượt.');
+      return json({ok:true,deleted:count,message:'Đã xóa bằng chứng và dọn '+count+' hồ sơ trong mục đã chọn. Lúa và giới hạn lượt được giữ nguyên.'});
     }
     const eraseProof=p.match(/^\/api\/admin\/reviews\/([^/]+)\/erase-evidence$/);
     if(m==='POST' && eraseProof){
@@ -2175,8 +2181,8 @@ async function handler(req, env) {
       if(b.confirm!=='DELETE_EVIDENCE')fail(400,'Cần xác nhận xóa bằng chứng.');
       const result=await env.DB.prepare(`UPDATE task_completions SET evidence=?
         WHERE id=? AND status IN ('approved','rejected')
-        AND evidence NOT IN ('',?)`)
-        .bind(PROOF_REMOVED_MARKER,eraseProof[1],PROOF_REMOVED_MARKER).run();
+        AND evidence NOT IN ('',?,?)`)
+        .bind(PROOF_REMOVED_MARKER,eraseProof[1],PROOF_REMOVED_MARKER,ADMIN_REVIEW_CLEARED).run();
       if(!result.meta?.changes)fail(409,'Không tìm thấy bằng chứng đã xử lý để xóa. Hãy duyệt hoặc từ chối trước.');
       await event(env,req,'admin_evidence_deleted',admin.id,'Nhiệm vụ đã xử lý: '+eraseProof[1]);
       return json({ok:true,message:'Đã xóa bằng chứng. Quyết định duyệt và số Lúa được giữ nguyên.'});
