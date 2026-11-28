@@ -14,3 +14,13 @@ assert.equal((await checkLinkProxy('test-key','unknown',mock)).reason,'missing_i
 assert.equal((await checkLinkProxy('test-key','192.0.2.1',async()=>({ok:false}))).status,'unavailable');
 assert.equal((await checkLinkProxy('test-key','192.0.2.2',async()=>{throw Error('test');})).status,'unavailable');
 console.log('PASS: ipapi.is classification, POST authentication, cache and fail-closed errors (mock only).');
+
+// Diagnostic must make a real fresh call even when the task cache is populated.
+let diagnosticCalls=0;
+const diagnosticMock=async()=>({ok:true,status:200,json:async()=>({...clean,is_vpn:++diagnosticCalls===2})});
+assert.equal((await checkLinkProxy('test-key','192.0.2.100',diagnosticMock,()=>1000)).status,'clear');
+const diagnostic=await checkLinkProxy('test-key','192.0.2.100',diagnosticMock,()=>1000,{fresh:true});
+assert.equal(diagnostic.status,'blocked');assert.equal(diagnostic.http_status,200);
+assert.equal((await checkLinkProxy('test-key','192.0.2.100',diagnosticMock,()=>1000)).status,'clear');
+assert.equal(diagnosticCalls,2);
+assert.equal((await checkLinkProxy('test-key','192.0.2.100',async()=>({ok:false,status:429}),()=>1000,{fresh:true})).http_status,429);
