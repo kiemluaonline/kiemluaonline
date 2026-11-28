@@ -1050,6 +1050,7 @@ const earlyBlocked=await call('/api/tasks/'+ten[0]+'/start','POST',{},secondPhon
 assert.equal(earlyBlocked.status,429,JSON.stringify(earlyBlocked));
 assert.equal(earlyBlocked.data.quota_scope,'link_reserved_ip');
 assert.equal(earlyBlocked.data.task_url,undefined);
+assert.equal((await call('/api/tasks','GET',undefined,secondPhone.cookie,sharedIP,phone2)).data.tasks.find(t=>t.id===ten[0]).url,'','Member listing must not expose provider URL before start');
 const earlyDeviceBlocked=await call('/api/tasks/'+ten[1]+'/start','POST',{},secondPhone.cookie,'203.0.113.241',phone1);
 assert.equal(earlyDeviceBlocked.status,429,JSON.stringify(earlyDeviceBlocked));
 assert.equal(earlyDeviceBlocked.data.quota_scope,'link_reserved_browser');
