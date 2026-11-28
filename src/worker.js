@@ -824,7 +824,7 @@ async function linkReturnUsage(env,userId,taskId){
    AS n`).bind(userId,taskId,userId,taskId).first();
  return Number(row?.n||0);
 }
-async function linkIPQuota(env,req,userId,task,settings){
+async function linkIPQuota(env,req,userId,task,settings,stage='unknown'){
  if(task.category!=='link')return {enabled:0,owner:0,limit:0,ip:'',perTask:0};
  const ip=clientIP(req);
  if(ip==='unknown'||ip==='local')fail(429,'Không xác minh được IP mạng cho nhiệm vụ link. Vui lòng thử lại.',{quota_scope:'link_missing_ip'});
@@ -836,7 +836,7 @@ async function linkIPQuota(env,req,userId,task,settings){
    .bind(userId,task.id).first();
  const denied=exclusive&&used.other>0?'link_owner':limit>0&&used.total>=limit?'link_limit':perTaskLimit>1&&Number(own.n)>=perTaskLimit?'link_task_limit':null;
  if(denied){
-  await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id);
+  await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id+'|'+stage);
   fail(429,denied==='link_owner'
    ?'IP này đã được tài khoản khác sử dụng cho nhiệm vụ này hôm nay. Bạn vẫn có thể làm các nhiệm vụ khác đủ điều kiện. Lượt mới mở lúc 00:00 (giờ Việt Nam).'
    :denied==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
@@ -858,7 +858,7 @@ async function linkBrowserUsage(env,code,userId){
  ).bind(userId,code).first();
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
-async function linkBrowserQuota(env,req,userId,task,settings){
+async function linkBrowserQuota(env,req,userId,task,settings,stage='unknown'){
  if(task.category!=='link')return {enabled:0,owner:0,limit:0,code:''};
  if(!browserDeviceId(req)){
   await event(env,req,'link_browser_missing',userId,'Missing browser ID for link task');
@@ -870,7 +870,7 @@ async function linkBrowserQuota(env,req,userId,task,settings){
  const exclusive=settings.quota_link_device_exclusive!=='0';
  const denied=exclusive&&used.other>0?'link_browser_owner':limit>0&&used.total>=limit?'link_browser_limit':null;
  if(denied){
-  await event(env,req,'link_browser_quota_denied',userId,denied+':'+task.id);
+  await event(env,req,'link_browser_quota_denied',userId,denied+':'+task.id+'|'+stage);
   fail(429,denied==='link_browser_owner'
    ?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt này đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
    :'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi Wi-Fi, VPN hay 4G không đặt lại lượt.',
@@ -1240,14 +1240,14 @@ async function handler(req, env) {
       const seen=await env.DB.prepare(`SELECT detail FROM risk_events WHERE user_id=? AND ip=? AND device_code=?
         AND event_type='link_ip_quota_denied' AND date(created_at,'+7 hours')=date('now','+7 hours')`).bind(me.id,ip,browserCode).all();
       const recorded=new Set(seen.results.map(r=>r.detail));
-      for(const taskId of ipBlockedTasks)if(!recorded.has('link_owner:'+taskId))
-        await event(env,req,'link_ip_quota_denied',me.id,'link_owner:'+taskId);
+      for(const taskId of ipBlockedTasks)if(!recorded.has('link_owner:'+taskId+'|list'))
+        await event(env,req,'link_ip_quota_denied',me.id,'link_owner:'+taskId+'|list');
     }
     if(browserDenied==='link_browser_owner'){
       const seen=await env.DB.prepare(`SELECT id FROM risk_events WHERE user_id=? AND ip=? AND device_code=?
-        AND event_type='link_browser_quota_denied' AND detail LIKE 'link_browser_owner:%'
+        AND event_type='link_browser_quota_denied' AND detail IN ('link_browser_owner:list','link_browser_owner:list|list')
         AND date(created_at,'+7 hours')=date('now','+7 hours') LIMIT 1`).bind(me.id,ip,browserCode).first();
-      if(!seen)await event(env,req,'link_browser_quota_denied',me.id,'link_browser_owner:list');
+      if(!seen)await event(env,req,'link_browser_quota_denied',me.id,'link_browser_owner:list|list');
     }
     const [overrides,counts,linkReturnCounts,unfinishedReturns]=await Promise.all([
       env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'link_source_task:%'").all(),
@@ -1392,8 +1392,8 @@ async function handler(req, env) {
       // Check current network/browser eligibility before the first return.
       // Bind that observed IP atomically, then never rebind during verification.
       const arrivalSettings=await getSettings(env);
-      await linkIPQuota(env,req,me.id,task,arrivalSettings);
-      await linkBrowserQuota(env,req,me.id,task,arrivalSettings);
+      await linkIPQuota(env,req,me.id,task,arrivalSettings,'return');
+      await linkBrowserQuota(env,req,me.id,task,arrivalSettings,'return');
       const arrivedAt=now();
       const mark=await env.DB.prepare(
         'UPDATE task_attempts SET available_at=?,expires_at=?,ip=? WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?'
@@ -1430,8 +1430,8 @@ async function handler(req, env) {
     }
     const settings=await getSettings(env);
     const quota=await taskQuota(env,req,me.id,settings,'link');
-    const link=await linkIPQuota(env,req,me.id,task,settings);
-    const browserLink=await linkBrowserQuota(env,req,me.id,task,settings);
+    const link=await linkIPQuota(env,req,me.id,task,settings,'submit');
+    const browserLink=await linkBrowserQuota(env,req,me.id,task,settings,'submit');
     const completionId=id();
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
     const fastReturn=await env.DB.prepare(
@@ -1513,8 +1513,8 @@ async function handler(req, env) {
     }
     const settings=await getSettings(env);
     await taskQuota(env,req,me.id,settings,task.category);
-    await linkIPQuota(env,req,me.id,task,settings);
-    await linkBrowserQuota(env,req,me.id,task,settings);
+    await linkIPQuota(env,req,me.id,task,settings,'start');
+    await linkBrowserQuota(env,req,me.id,task,settings,'start');
     if(task.category==='link'&&await linkReturnUsage(env,me.id,task.id)>=await linkTaskPerAccountLimit(env,task))
       fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
     const sourceConfig=task.category==='link'?await getTaskSource(env,task.id):{creation:'manual'};
@@ -1631,8 +1631,8 @@ async function handler(req, env) {
     const quota=await taskQuota(env,req,me.id,settings,task.category);
     if(task.category==='link'&&attempt.device_code!==await deviceCode(req,env))
       fail(409,'Mã trình duyệt thay đổi trong lúc làm nhiệm vụ link. Vui lòng mở lại trên cùng trình duyệt.');
-    const link=await linkIPQuota(env,req,me.id,task,settings);
-    const browserLink=await linkBrowserQuota(env,req,me.id,task,settings);
+    const link=await linkIPQuota(env,req,me.id,task,settings,'submit');
+    const browserLink=await linkBrowserQuota(env,req,me.id,task,settings,'submit');
     const completionId = id();
     const status = task.review_mode === 'manual' ? 'pending' : 'approved';
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
@@ -1661,8 +1661,8 @@ async function handler(req, env) {
     ]);
     if ((batch[0].meta?.changes || 0) < 1 || (batch[1].meta?.changes || 0) < 1) {
       if(task.category==='link'){
-        await linkIPQuota(env,req,me.id,task,settings);
-        await linkBrowserQuota(env,req,me.id,task,settings);
+        await linkIPQuota(env,req,me.id,task,settings,'submit');
+        await linkBrowserQuota(env,req,me.id,task,settings,'submit');
       }
       fail(409,'Nhiệm vụ đã được gửi hoặc nhận thưởng trước đó.');
     }
@@ -2227,18 +2227,43 @@ async function handler(req, env) {
           AND created_at>=datetime('now','-30 days')
           GROUP BY device_code HAVING COUNT(DISTINCT user_id)>=2 ORDER BY n DESC LIMIT 40`).all()
       ]);
-      const linkAlerts=await env.DB.prepare(`SELECT r.*,u.email,u.name,t.title AS task_title,
-        (SELECT u2.email FROM task_completions c JOIN tasks lt ON lt.id=c.task_id JOIN users u2 ON u2.id=c.user_id
-         WHERE lt.category='link' AND c.user_id<>r.user_id AND c.status IN ('pending','approved')
-          AND date(c.created_at,'+7 hours')=date(r.created_at,'+7 hours')
-          AND ((r.event_type='link_ip_quota_denied' AND c.ip=r.ip AND c.task_id=substr(r.detail,instr(r.detail,':')+1))
-            OR (r.event_type='link_browser_quota_denied' AND c.device_code=r.device_code))
-         ORDER BY c.created_at LIMIT 1) AS owner_email
+      // Historical IP warnings did not record request stage. Never infer an action from those rows.
+      // Match IPv6 /64 exactly as the existing Link rule does (four explicit hex groups).
+      // Only link submissions existing at the warning time qualify as evidence.
+      const linkAlerts=await env.DB.prepare(`WITH RECURSIVE raw AS (
+        SELECT r.*,u.email,u.name,substr(r.detail,1,instr(r.detail,':')-1) AS reason,
+          CASE WHEN instr(r.detail,'|')>0 THEN substr(r.detail,instr(r.detail,'|')+1)
+               WHEN r.detail='link_browser_owner:list' THEN 'list' ELSE 'unknown' END AS stage,
+          CASE WHEN instr(r.detail,'|')>0 THEN substr(r.detail,instr(r.detail,':')+1,instr(r.detail,'|')-instr(r.detail,':')-1)
+               ELSE substr(r.detail,instr(r.detail,':')+1) END AS alert_task_id
         FROM risk_events r LEFT JOIN users u ON u.id=r.user_id
-        LEFT JOIN tasks t ON t.id=substr(r.detail,instr(r.detail,':')+1)
         WHERE r.event_type IN ('link_ip_quota_denied','link_browser_quota_denied')
-         AND date(r.created_at,'+7 hours')=date('now','+7 hours')
-        ORDER BY r.created_at DESC LIMIT 100`).all();
+          AND date(r.created_at,'+7 hours')=date('now','+7 hours')
+        ORDER BY r.created_at DESC LIMIT 100
+      ), parts(id,rest,prefix,n) AS (
+        SELECT id,lower(ip),'',0 FROM raw
+        UNION ALL
+        SELECT id,substr(rest,instr(rest,':')+1),prefix||substr(rest,1,instr(rest,':')),n+1
+        FROM parts WHERE n<4 AND instr(rest,':') BETWEEN 2 AND 5
+          AND substr(rest,1,instr(rest,':')-1) NOT GLOB '*[^0-9a-f]*'
+      ), alerts AS (
+        SELECT raw.*,COALESCE((SELECT prefix||'%' FROM parts WHERE parts.id=raw.id AND n=4),lower(raw.ip)) AS network_pattern
+        FROM raw
+      ), evidence AS (
+        SELECT a.*,t.title AS task_title,
+          (SELECT c.id FROM task_completions c JOIN tasks lt ON lt.id=c.task_id
+           WHERE lt.category='link' AND c.user_id<>a.user_id AND c.status IN ('pending','approved','rejected')
+            AND date(c.created_at,'+7 hours')=date(a.created_at,'+7 hours') AND c.created_at<=a.created_at
+            AND ((a.reason='link_owner' AND lower(c.ip) LIKE a.network_pattern AND c.task_id=a.alert_task_id)
+              OR (a.reason='link_browser_owner' AND c.device_code=a.device_code))
+           ORDER BY CASE WHEN c.status IN ('pending','approved') THEN 0 ELSE 1 END,c.created_at,c.id LIMIT 1) AS related_completion_id
+        FROM alerts a LEFT JOIN tasks t ON t.id=a.alert_task_id
+      )
+      SELECT e.*,u2.email AS owner_email,u2.name AS owner_name,c.user_id AS owner_user_id,
+         c.status AS owner_completion_status,c.created_at AS owner_submitted_at,ot.title AS owner_task_title
+      FROM evidence e LEFT JOIN task_completions c ON c.id=e.related_completion_id
+        LEFT JOIN users u2 ON u2.id=c.user_id LEFT JOIN tasks ot ON ot.id=c.task_id
+      ORDER BY e.created_at DESC`).all();
       const alertCount=await env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts
         FROM risk_events WHERE event_type IN ('link_ip_quota_denied','link_browser_quota_denied')
         AND date(created_at,'+7 hours')=date('now','+7 hours')`).first();
