@@ -180,7 +180,7 @@ function computeFraudProfiles(users,events,withdrawals,completions){
  const current=Date.now();
  for(const e of events){
   if(!e.user_id)continue;
-  const stats=accountEvents.get(e.user_id)||{captcha:0,link:0,devices:new Set()};
+  const stats=accountEvents.get(e.user_id)||{captcha:0,devices:new Set()};
   if(e.event_type==='captcha_wrong')stats.captcha++;
   // Quota denials (including passive listing and legitimate shared networks) are audit-only.
   accountEvents.set(e.user_id,stats);
@@ -219,7 +219,7 @@ function computeFraudProfiles(users,events,withdrawals,completions){
  };
  const deviceMax=groupMax(deviceGroups),networkMax=groupMax(networkGroups),paymentMax=groupMax(paymentGroups);
  return users.filter(u=>u.role==='member').map(u=>{
-  const activity=accountEvents.get(u.id)||{captcha:0,link:0,devices:new Set()};
+  const activity=accountEvents.get(u.id)||{captcha:0,devices:new Set()};
   const reasons=[];
   let points=0,strongSignals=0;
   const add=(score,reason,strong=false)=>{
