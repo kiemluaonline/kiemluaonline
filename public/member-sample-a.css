@@ -19,9 +19,9 @@
 .layout:not(.admin-workspace) .content .card:not(.task-payment){border-color:#dce5d8;border-radius:15px;box-shadow:0 3px 10px #264c3510}
 .layout:not(.admin-workspace) .content .card:not(.task-payment):hover{box-shadow:0 3px 10px #264c3510}
 .layout:not(.admin-workspace) .content .page-head h2{color:#234f39;letter-spacing:-.4px}
-.layout:not(.admin-workspace) .content .btn:not(.alt):not(.danger):not(.gold):not(.is-disabled):not(:disabled){background:#1d6d50;border-color:#1d6d50;color:#fff;box-shadow:none}
-.layout:not(.admin-workspace) .content .btn:not(.alt):not(.danger):not(.gold):not(.is-disabled):not(:disabled):hover{background:#17563f}
-.layout:not(.admin-workspace) .content .btn.alt:not(:disabled):not(.is-disabled){border-color:#cdddcf;color:#25583e;background:#fff}
+.layout:not(.admin-workspace) .content .btn:not(.alt):not(.danger):not(.gold):not(.is-disabled):not(:disabled):not(.member-overview-wallet *){background:#1d6d50;border-color:#1d6d50;color:#fff;box-shadow:none}
+.layout:not(.admin-workspace) .content .btn:not(.alt):not(.danger):not(.gold):not(.is-disabled):not(:disabled):not(.member-overview-wallet *):hover{background:#17563f}
+.layout:not(.admin-workspace) .content .btn.alt:not(:disabled):not(.is-disabled):not(.member-overview-wallet *){border-color:#cdddcf;color:#25583e;background:#fff}
 .layout:not(.admin-workspace) .content .btn.gold:not(:disabled){background:#e8cc80;color:#3d482d;border-color:#d8bb70}
 .layout:not(.admin-workspace) .content .field input,.layout:not(.admin-workspace) .content .field select,.layout:not(.admin-workspace) .content .field textarea{border-radius:9px;max-width:100%}
 .layout:not(.admin-workspace) .content .table-wrap{border-color:#dce5d8;border-radius:12px}
