@@ -147,7 +147,8 @@ function browserDeviceId(){
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)){
    value=crypto.randomUUID();localStorage.setItem(DEVICE_STORAGE_KEY,value);
   }
-  return value;
+  // A generated ID is not considered persistent until storage really returns it.
+  return localStorage.getItem(DEVICE_STORAGE_KEY)===value?value:'';
  }catch{return '';}
 }
 function toast(msg,bad=false){ const t=document.getElementById('toast');t.textContent=msg;t.className='visible'+(bad?' bad':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',4500); }
@@ -316,10 +317,38 @@ async function processLinkReturn(){
  }
  return true;
 }
+// This hint only controls the startup illustration; it never grants authentication.
+const STARTUP_ROLE_HINT='tram-lua.startup-role.v1';
+function rememberStartupRole(role){
+ try{if(role==='member'||role==='admin')localStorage.setItem(STARTUP_ROLE_HINT,role);else localStorage.removeItem(STARTUP_ROLE_HINT);}catch{}
+}
+function memberStartupHint(){
+ try{
+  const hint=localStorage.getItem(STARTUP_ROLE_HINT);
+  if(hint)return hint==='member';
+  // Upgrade path for a previously opened member tab.
+  return Array.from({length:sessionStorage.length},(_,i)=>sessionStorage.key(i)).some(k=>k?.startsWith('tram-lua.menu.v1.member.'));
+ }catch{return false;}
+}
+function showStartupCheck(failed=false,member=true){
+ app.className='';
+ app.innerHTML=`<main class="startup-check-page"><section class="startup-check-card" role="${failed?'alert':'status'}" aria-live="polite" aria-busy="${!failed}">
+  <div class="startup-check-symbol"><svg viewBox="0 0 48 48" width="46" height="46" fill="none" aria-hidden="true"><path d="M24 5 40 11v12c0 10-6 16-16 21C14 39 8 33 8 23V11L24 5Z" fill="#176c50" stroke="#176c50" stroke-width="2"/><path d="M16 24l6 6 11-13" stroke="#ffe29a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <p class="startup-check-brand">TRẠM CÓ LÚA</p>
+  <h2>${failed?'Chưa thể kết nối hệ thống':member?'Đang kiểm tra thiết bị…':'Đang kết nối hệ thống…'}</h2>
+  <p>${failed?'Vui lòng kiểm tra kết nối mạng và thử lại.':'Vui lòng chờ trong giây lát.'}</p>
+  ${failed?'<button type="button" class="btn" data-action="retry-startup">Thử lại</button>':'<div class="startup-check-track" aria-hidden="true"><span></span></div>'}
+ </section></main>`;
+}
 async function boot(){
-  try{ state.meta=await api('/api/meta');document.title=state.meta.site_name+' · Nhiệm vụ'; }
-  catch(e){ app.innerHTML=`<div class="auth-page"><div class="auth-card"><h2>Chưa thể kết nối hệ thống</h2><p>${esc(e.message)}. Hãy kiểm tra D1 và migration.</p></div></div>`;return; }
-  await loadMe();
+  const returning=new URLSearchParams(location.search).has('link_return');
+  const member=memberStartupHint();
+  if(member&&!returning)showStartupCheck();
+  try{
+   state.meta=await api('/api/meta');document.title=state.meta.site_name+' · Nhiệm vụ';
+   // Wait for real server session, network and browser audit. No artificial delay.
+   await loadMe({strict:true});
+  }catch(e){showStartupCheck(true,member);return;}
   if(new URLSearchParams(location.search).has('link_return')){
    if(state.accountHold)renderLocked();
    else if(!state.me){state.authMode='login';renderAuth();toast('Đăng nhập đúng tài khoản đã mở nhiệm vụ.');}
@@ -327,7 +356,9 @@ async function boot(){
    return;
   }
   if(state.me?.user?.role==='member'&&resumeStoredReturn())return;
-  if(state.me){state.view=restoreMenu();renderShell();await navigate(state.view);}
+  if(state.me){state.view=restoreMenu();renderShell();await navigate(state.view,{checkedMe:true});
+   if(state.me?.user?.role==='member'&&state.me.device_registered===false)toast('Chưa thể xác minh đầy đủ thiết bị. Một số nhiệm vụ có thể không khả dụng.',true);
+  }
   else if(state.accountHold){renderLocked();}
   else {
     if(state.meta.setup_required) state.authMode='setup';
@@ -362,8 +393,9 @@ if(googleError==='suspended'){
  window.history.replaceState(null,'',location.pathname);
 }
 }
-async function loadMe(){
+async function loadMe({strict=false}={}){
  try{state.me=await api('/api/me');state.accountHold=null;
+  rememberStartupRole(state.me?.user?.role);
   if(state.me?.user?.role==='member'&&String(state.me.ip||'').includes(':'))
    setTimeout(()=>captureMemberIPv4().catch(()=>{}),0);
  }
@@ -371,8 +403,10 @@ async function loadMe(){
   state.me=null;state.accountHold=null;
   if(err.status===403){
    const hold=await api('/api/account-status').catch(()=>null);
-   if(hold?.account_status==='suspended')state.accountHold=hold;
+   if(hold?.account_status==='suspended'){state.accountHold=hold;return;}
   }
+  if(err.status===401){rememberStartupRole(null);return;}
+  if(strict)throw err;
  }
 }
 function renderLocked(){
@@ -775,7 +809,7 @@ function closeOverviewNotice(){
  root.innerHTML='';
 }
 let navigationSequence=0;
-async function navigate(view){
+async function navigate(view,{checkedMe=false}={}){
  const user=state.me?.user;if(!user)return;
  view=validMenu(user,view);
  const sequence=++navigationSequence;
@@ -793,7 +827,7 @@ async function navigate(view){
  root.innerHTML='<div class="app-loading" style="min-height:180px"><span class="spinner"></span></div>';
  const current=()=>sequence===navigationSequence&&root.isConnected&&state.me?.user?.id===user.id;
  try{
-  const fresh=await api('/api/me');
+  const fresh=checkedMe?state.me:await api('/api/me');
   if(!current())return;
   state.me=fresh;
   const balance=document.getElementById('topBalance');if(balance)balance.textContent='🌾 '+fmt(fresh.balance)+' Lúa';
@@ -2004,7 +2038,8 @@ app.addEventListener('click',async e=>{
 }
 if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
-  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
+  if(act==='retry-startup'){el.disabled=true;await boot();return;}
+  if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});rememberStartupRole(null);state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
   if(act==='toggle-task-nav'){if(state.me?.user?.role==='member')setTaskNavOpen(el.getAttribute('aria-expanded')!=='true');return;}
   if(act==='resume-link-confirmation'){await startTask(el.dataset.id);return;}
   if(act==='start-task'){const t=state.memberTasks.find(x=>x.id===el.dataset.id);if(t?.category==='app'){await startTask(el.dataset.id);return;}showTaskRules(el.dataset.id);return;}

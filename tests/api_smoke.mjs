@@ -2472,3 +2472,22 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.doesNotMatch(render(nav,{role:'admin'}),/task-nav-children/);
  console.log('PASS: member-only collapsible task navigation, correct selected submenu, no page tabs.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('async function loadMe('),client.indexOf('function renderLocked(){'));
+ const state={me:null,accountHold:null};let failure=null,hold=null,role='';
+ const api=async path=>{if(path==='/api/account-status')return hold;if(failure)throw failure;return {user:{id:'fixture',role:'member'},ip:'203.0.113.1',device_registered:true};};
+ const load=new Function('state','api','rememberStartupRole','setTimeout','captureMemberIPv4',code+'\nreturn loadMe;')(state,api,r=>{role=r;},()=>{},()=>{});
+ await load({strict:true});assert.equal(state.me.device_registered,true);assert.equal(role,'member');
+ failure=Object.assign(new Error('offline'),{status:503});await assert.rejects(()=>load({strict:true}),/offline/);assert.equal(role,'member');
+ failure=Object.assign(new Error('locked'),{status:403});hold={account_status:'suspended'};await load({strict:true});assert.equal(state.accountHold.account_status,'suspended');
+ failure=Object.assign(new Error('expired'),{status:401});await load({strict:true});assert.equal(role,null);
+ const start=client.slice(client.indexOf('async function boot(){'),client.indexOf('async function loadMe('));
+ assert.match(start,/await loadMe\(\{strict:true\}\)/);assert.match(start,/resumeStoredReturn\(\)/);assert.match(start,/navigate\(state.view,\{checkedMe:true\}\)/);assert.doesNotMatch(start,/await new Promise|await sleep/);
+ const device=client.slice(client.indexOf('function browserDeviceId(){'),client.indexOf('function toast('));
+ const badStorage={getItem:()=>'',setItem:()=>{}};
+ const getDevice=new Function('DEVICE_STORAGE_KEY','localStorage','crypto',device+'\nreturn browserDeviceId;')('device',badStorage,{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'});
+ assert.equal(getDevice(),'');
+ console.log('PASS: real boot session/device check, fail-safe retry, suspended and expired session distinction, storage readback and no fake timer.');
+}
