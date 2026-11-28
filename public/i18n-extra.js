@@ -1,5 +1,9 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Không khả dụng": "Siv tsis tau",
+  "Nhiệm vụ hiện không khả dụng": "Txoj haujlwm no siv tsis tau tam sim no",
+  "Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.": "Txoj haujlwm no siv tsis tau tam sim no. Yog xav tau kev pab, hu rau Admin.",
+  "Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).": "Hnub no tsis tshuav lượt lawm. Lượt tshiab qhib thaum 00:00 (Vietnam lub sijhawm).",
   "Xem ảnh hướng dẫn:": "Saib daim duab qhia:",
   "Cách 1: Mua qua trang trưng bày TikTok Shop của Admin": "Txoj kev 1: Yuav ntawm Admin TikTok Shop nplooj khoom",
   "Cách 2: Mua sản phẩm đã có trên gian hàng website": "Txoj kev 2: Yuav cov khoom uas twb muaj hauv website",

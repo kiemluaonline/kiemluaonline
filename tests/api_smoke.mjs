@@ -1931,7 +1931,9 @@ const memberQuotaUi=memberSafeClient.slice(memberSafeClient.indexOf('function re
 assert.ok(memberQuotaUi.length>1500,'Member task card renderer must exist');
 assert.doesNotMatch(memberQuotaUi,/link đích|trang đích|lượt quay về/i,'Member quota must not reveal destination-link terminology');
 assert.match(memberQuotaUi,/Đã sử dụng \$\{used\}\/\$\{maxUses\} lượt hôm nay/);
-assert.match(memberQuotaUi,/Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay/);
+assert.match(memberQuotaUi,/Đã hết lượt hôm nay/);
+assert.match(memberQuotaUi,/Không khả dụng/);
+assert.doesNotMatch(memberQuotaUi,/IP này đã|Mã trình duyệt đã|Tạm khóa lượt theo mạng/);
 assert.match(memberQuotaUi,/Lượt mới mở lúc 00:00/);
 assert.match(memberSafeWorker,/Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay/);
 assert.doesNotMatch(memberSafeWorker,/fail\(429,'Bạn đã dùng hết lượt quay về/);
@@ -2363,4 +2365,24 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  confirmChoice=true;busy=true;await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
  busy=false;await leave();assert.deepEqual(actions,[['save',12345],'clear','shell','tasks']);assert.equal(liveState.returnChallenge,null);
  console.log('PASS: branded verification gate hides deadline, explicit warning before leaving, saved recovery, no departure during submission.');
+}
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function renderMemberTaskCard('),client.indexOf('async function tasks(){'));
+ const render=new Function('esc','fmt','chip',code+'\nreturn renderMemberTaskCard;')(v=>String(v??''),String,String);
+ const base={id:'fixture',category:'link',title:'Fixture',reward:1,link_24h_limit:1,link_24h_count:0,repeat_policy:'daily'};
+ for(const block of ['link_owner','link_browser_owner','link_browser_missing','link_browser_limit','link_limit']){
+  const out=render({...base,link_blocked:block});
+  assert.match(out,/disabled><span aria-hidden="true">🔒<\/span> Không khả dụng/);
+  assert.match(out,/0\/1/);
+  assert.doesNotMatch(out,/IP này|Mã trình duyệt|mạng\/thiết bị|data-action="start-task"/);
+ }
+ assert.match(render({...base,link_blocked:'link_task_limit',link_24h_count:1}),/Đã hết lượt hôm nay/);
+ assert.match(render({...base,link_blocked:'link_owner',link_needs_confirmation:true}),/Tiếp tục xác minh/);
+ assert.match(render(base),/data-action="start-task"/);
+ const apiCode=client.slice(client.indexOf('async function api('),client.indexOf('const PUBLIC_TITLE'));
+ const memberApi=new Function('browserDeviceId','fetch',apiCode+'\nreturn api;')(()=>'',async()=>({ok:false,status:429,json:async()=>({error:'IP chi tiết',quota_scope:'link_owner'})}));
+ await assert.rejects(()=>memberApi('/api/tasks/fixture/start','POST',{}),/Nhiệm vụ hiện không khả dụng/);
+ console.log('PASS: neutral member lock label, true quota count, recovery and Admin diagnostics unchanged.');
 }

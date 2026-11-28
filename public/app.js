@@ -201,7 +201,12 @@ async function api(path, method='GET', body=null){
   const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
   const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin'});
   const data=await r.json().catch(()=>({error:'Không nhận được phản hồi máy chủ.'}));
-  if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;throw error; }
+  if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;
+    // Member-facing task errors keep recovery information but avoid exposing quota diagnostics.
+    if(r.status===429&&/^\/api\/tasks\/[^/]+\/(?:start|return|submit)$/.test(path)&&data.quota_scope){
+      error.message=data.quota_scope==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.';
+    }
+    throw error; }
   return data;
 }
 const PUBLIC_TITLE = 'Trạm Có Lúa – Làm nhiệm vụ, tích Lúa mỗi ngày';
@@ -1031,26 +1036,19 @@ function renderMemberTaskCard(t){
  const usedLabel=isLink&&maxUses>1?`${used}/${maxUses}`:null;
  const badge=usedLabel||`${used}/${maxUses}`;
  const countText=t.link_needs_confirmation?'Đang chờ xác minh phép tính':t.link_blocked==='link_task_limit'?`Đã sử dụng ${used}/${maxUses} lượt hôm nay`:
-   t.link_blocked?'Tạm khóa lượt theo mạng/thiết bị':
+   t.link_blocked?'Nhiệm vụ hiện không khả dụng':
    t.my_status==='pending'?'Đã gửi, đang chờ Admin đối soát':
    t.my_status==='approved'?'Nhiệm vụ đã được duyệt':
    t.my_status==='rejected'?'Nhiệm vụ đã bị từ chối':
    daily?`Còn ${left}/${maxUses} lượt hôm nay`:
    `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
  const progress=Math.round(used/maxUses*100);
- const blockNote=t.link_needs_confirmation?'Hoàn tất xác minh lượt cũ trước khi làm lượt mới.':t.link_blocked?(
-  t.link_blocked==='link_task_limit'?'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
-  t.link_blocked==='link_browser_owner'?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).':
-  t.link_blocked==='link_browser_limit'?'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi mạng không làm mới lượt.':
-  t.link_blocked==='link_browser_missing'?'Chưa xác minh được mã nhận diện trình duyệt. Hãy tải lại trang.':
-  t.link_blocked==='link_owner'?'IP này đã được tài khoản khác sử dụng cho nhiệm vụ này hôm nay. Bạn vẫn có thể làm nhiệm vụ khác đủ điều kiện. Lượt mới mở lúc 00:00 (giờ Việt Nam).':
-  t.link_blocked==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay.':
-  'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
- ):'';
+ const blockNote=t.link_needs_confirmation?'Hoàn tất xác minh lượt cũ trước khi làm lượt mới.':
+  t.link_blocked==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'';
  const button=t.link_needs_confirmation?
   `<button class="btn task-card-modern-action" type="button" data-action="resume-link-confirmation" data-id="${esc(t.id)}">Tiếp tục xác minh</button>`:
   t.link_blocked?
-  `<button class="btn task-card-modern-action is-disabled" type="button" disabled>⛔ Chưa thể bắt đầu</button>`:
+  `<button class="btn task-card-modern-action is-disabled" type="button" disabled><span aria-hidden="true">🔒</span> Không khả dụng</button>`:
   t.my_status?
    `<div class="task-card-modern-completed">${chip(t.my_status)}<span>Trạng thái được cập nhật từ hệ thống.</span></div>`:
    `<button class="btn task-card-modern-action" type="button" data-action="start-task" data-id="${esc(t.id)}"><span aria-hidden="true" class="task-card-modern-play">▶</span> ${t.category==='app'?'Bắt đầu / Tiếp tục xác nhận':'Làm nhiệm vụ'} <span aria-hidden="true">›</span></button>`;
