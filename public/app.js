@@ -1639,7 +1639,7 @@ async function showFraudAccount(userId){
   <h3>🔎 Báo cáo chống gian lận</h3>
   <p><strong>${esc(p.name)}</strong><div class="small muted">${esc(p.email)}</div></p>
   <div class="fraud-detail-score"><strong>${fmt(p.score)} / 100</strong> ${chip(p.level)} ${chip(p.status)}</div>
-  <p class="note">Điểm rủi ro là cảnh báo để xác minh, không phải kết luận gian lận. Thống kê kết nối trong ${fmt(days||30)} ngày qua.</p>
+  <p class="note">Điểm rủi ro là cảnh báo để xác minh, không phải kết luận gian lận. Cảnh báo hết hạn mức Link chỉ dùng đối chiếu, không cộng điểm rủi ro. Thống kê kết nối trong ${fmt(days||30)} ngày qua.</p>
   <div class="fraud-detail-stats">
    <div><strong>${fmt(p.ip_count||0)}</strong><span>IP / dải mạng</span></div>
    <div><strong>${fmt(p.device_count||0)}</strong><span>Mã trình duyệt</span></div>
