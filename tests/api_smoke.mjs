@@ -795,9 +795,15 @@ const pendingIP='198.51.100.240';
 const pendingStart=await call('/api/tasks/'+pendingTask.data.id+'/start','POST',{},user2.cookie,pendingIP,user2Device);
 assert.equal(pendingStart.status,200);
 sqlite.prepare('UPDATE task_attempts SET available_at=0 WHERE id=?').run(pendingStart.data.attempt_id);
-const pendingSubmit=await call('/api/tasks/'+pendingTask.data.id+'/submit','POST',{
+const pendingDirect=await call('/api/tasks/'+pendingTask.data.id+'/submit','POST',{
  attempt_id:pendingStart.data.attempt_id,answer:pendingStart.data.a+pendingStart.data.b,
  evidence:'Bằng chứng kiểm thử bằng liên kết https://example.com/test-pending'
+},user2.cookie,pendingIP,user2Device);
+assert.equal(pendingDirect.status,409,'Manual Link cannot use old direct-submit route');
+const pendingLanding=await call('/api/tasks/'+pendingTask.data.id+'/return','POST',{},user2.cookie,pendingIP,user2Device);
+assert.equal(pendingLanding.status,200,JSON.stringify(pendingLanding));
+const pendingSubmit=await call('/api/tasks/'+pendingTask.data.id+'/return','POST',{
+ attempt_id:pendingLanding.data.attempt_id,answer:pendingLanding.data.a+pendingLanding.data.b
 },user2.cookie,pendingIP,user2Device);
 assert.equal(pendingSubmit.status,200,JSON.stringify(pendingSubmit));
 assert.equal(pendingSubmit.data.status,'pending');
@@ -1800,6 +1806,14 @@ assert.match(cleanedReturnClient,/attempt_id:c\.attemptId/);
 console.log('PASS: exact return session retained until server receipt is displayed.');
 
 const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
+{
+ const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function computeFraudProfiles('),linkFraudWorkerSource.indexOf('// Tập hợp quan hệ'));
+ const score=new Function('isPublicIPv4','ipv6Network',source+'\nreturn computeFraudProfiles;')(()=>true,()=>null);
+ const user={id:'quota-fixture',role:'member',email:'quota@example.com',status:'active'};
+ const warnings=Array.from({length:20},(_,i)=>({user_id:user.id,event_type:i%2?'link_ip_quota_denied':'link_browser_quota_denied',detail:'link_owner:test|list'}));
+ assert.equal(score([user],warnings,[],[])[0].score,0,'Quota warnings alone never increase payout risk');
+}
+
 assert.match(linkFraudWorkerSource,/LINK_RETURN_FAST_SECONDS = 20/);
 assert.match(linkFraudWorkerSource,/event\(env,req,'link_return_too_fast'/);
 assert.match(linkFraudWorkerSource,/LINK_CONFIRM_OPEN = 253402300799000/,'Returned Link verification remains recoverable');
@@ -2163,44 +2177,45 @@ console.log('PASS: Android and iPhone swipe-back reloads frozen task page once, 
    creates++;assert.equal(u.searchParams.get('token'),'mock-only-secret');const dest=new URL(u.searchParams.get('url'));assert.equal(dest.origin,'https://nhiemvu.click');assert.equal(dest.searchParams.get('link_return'),taskId);assert.match(dest.searchParams.get('link_session'),/^[0-9a-f-]{36}$/i);
    return new Response(JSON.stringify({shortenedUrl:'https://example.com/go/mock'+creates}),{headers:{'Content-Type':'application/json'}});
   }
-  if(u.pathname==='/view/mock1'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
+  if(u.pathname==='/view/mock2'){checks++;return new Response('{"views":1}',{headers:{'Content-Type':'application/json'}});}
   throw Error('Unexpected provider URL');
  };
  try{
   const start=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(start.status,200,JSON.stringify(start));assert.equal(start.data.task_url,'https://example.com/go/mock1');
   const newIP='203.0.113.210';
-  const changedNetwork=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
-  assert.equal(changedNetwork.status,409,'Do not issue another URL on a changed network');
   const repeatStart=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(repeatStart.status,200,JSON.stringify(repeatStart));
   assert.equal(repeatStart.data.attempt_id,start.data.attempt_id);
   assert.equal(repeatStart.data.task_url,start.data.task_url);
-  assert.equal(creates,1,'Repeated start preserves the original Link and alias');
-  assert.ok(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(start.data.attempt_id).expires_at>Date.now());
-  assert.ok(!JSON.stringify(repeatStart).includes('mock-only-secret'));
-  const fresh=repeatStart.data;
+  assert.equal(creates,1,'Same-network retry reuses original alias');
+  const changedNetwork=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
+  assert.equal(changedNetwork.status,200,JSON.stringify(changedNetwork));
+  assert.notEqual(changedNetwork.data.attempt_id,start.data.attempt_id);
+  assert.equal(changedNetwork.data.task_url,'https://example.com/go/mock2');
+  assert.equal(creates,2);
+  assert.equal(sqlite.prepare('SELECT expires_at FROM task_attempts WHERE id=?').get(start.data.attempt_id).expires_at,0);
+  const path='/api/tasks/'+taskId+'/return';
+  assert.equal((await call(path,'POST',{link_session:start.data.attempt_id},member.cookie,ip,device)).status,409,'Retired exact session cannot reopen');
+  const fresh=changedNetwork.data;
   const direct=await call('/api/tasks/'+taskId+'/submit','POST',{attempt_id:fresh.attempt_id,answer:fresh.a+fresh.b,evidence:'mock proof direct bypass'},member.cookie,newIP,device);
   assert.equal(direct.status,409);
-  const path='/api/tasks/'+taskId+'/return';
   assert.equal((await call(path,'POST',{},member.cookie,newIP,device)).status,409);
-  // Simulate a legacy issued attempt which was prematurely expired before landing.
-  sqlite.prepare('UPDATE task_attempts SET expires_at=? WHERE id=?').run(Date.now()-1,start.data.attempt_id);
-  const challenge=await call(path,'POST',{link_session:fresh.attempt_id},member.cookie,ip,device);assert.equal(challenge.status,200,JSON.stringify(challenge));
-  const blockedRestart=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,newIP,device);
-  assert.equal(blockedRestart.status,409,'Đổi IP sau khi đã quay về không cấp lượt mới');
-  const blockedAnswer=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:fresh.attempt_id},member.cookie,newIP,device);
-  assert.equal(blockedAnswer.status,409,'Old network cannot replace verification IP');
+  // A recoverable old issuance may return on a new IP, but the reservation stays at issuance IP.
+  sqlite.prepare('UPDATE task_attempts SET expires_at=? WHERE id=?').run(Date.now()-1,fresh.attempt_id);
+  const challenge=await call(path,'POST',{link_session:fresh.attempt_id},member.cookie,ip,device);
+  assert.equal(challenge.status,200,JSON.stringify(challenge));
+  assert.equal(sqlite.prepare('SELECT ip FROM task_attempts WHERE id=?').get(fresh.attempt_id).ip,newIP);
   const resumeConfirm=await call('/api/tasks/'+taskId+'/start','POST',{},member.cookie,ip,device);
   assert.equal(resumeConfirm.status,200);assert.equal(resumeConfirm.data.resume_confirmation,true);
-  assert.equal(resumeConfirm.data.attempt_id,fresh.attempt_id);assert.equal(creates,1);
+  assert.equal(resumeConfirm.data.attempt_id,fresh.attempt_id);assert.equal(creates,2);
   const result=await call(path,'POST',{answer:challenge.data.a+challenge.data.b,link_session:fresh.attempt_id},member.cookie,ip,device);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.status,'pending');assert.equal(checks,1);
   const audit=(await call('/api/admin/reviews','GET',undefined,admCookie)).data.reviews.find(x=>x.task_id===taskId);
-  assert.equal(audit.started_ip,ip);assert.equal(audit.submitted_ip,ip);
-  const record=sqlite.prepare('SELECT evidence,status FROM task_completions WHERE task_id=?').get(taskId);
-  assert.match(record.evidence,/Alias: mock1; View API: 1/);assert.match(record.evidence,/LINK_RETURN_RECOVERED_V1/);
-  assert.equal(record.status,'pending');
+  assert.equal(audit.started_ip,newIP);assert.equal(audit.submitted_ip,ip);
+  const record=sqlite.prepare('SELECT evidence,status,ip FROM task_completions WHERE task_id=?').get(taskId);
+  assert.match(record.evidence,/Alias: mock2; View API: 1/);assert.match(record.evidence,/LINK_RETURN_RECOVERED_V1/);
+  assert.equal(record.status,'pending');assert.equal(record.ip,newIP);
   assert.equal((await call('/api/me','GET',undefined,member.cookie,ip,device)).data.balance,balance);
   const failedTask=await call('/api/admin/tasks','POST',{title:'Mock timeout guard',category:'link',url:'',reward:3,review_mode:'manual',repeat_policy:'daily',is_active:true,link_source_id:'mock_source',link_source_creation:'api',link_source_verification:'api_view'},admCookie);
   assert.equal(failedTask.status,201,JSON.stringify(failedTask));
