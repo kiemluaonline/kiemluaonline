@@ -182,7 +182,7 @@ function computeFraudProfiles(users,events,withdrawals,completions){
   if(!e.user_id)continue;
   const stats=accountEvents.get(e.user_id)||{captcha:0,link:0,devices:new Set()};
   if(e.event_type==='captcha_wrong')stats.captcha++;
-  if(e.event_type==='link_ip_quota_denied'||e.event_type==='link_browser_quota_denied')stats.link++;
+  // Quota denials (including passive listing and legitimate shared networks) are audit-only.
   accountEvents.set(e.user_id,stats);
   if(e.event_type!=='device_seen')continue;
   if(e.detail==='browser_id'&&e.device_code){
@@ -232,7 +232,7 @@ function computeFraudProfiles(users,events,withdrawals,completions){
   const claims=hourlyClaims.get(u.id)||0;
   if(receivers>=2)add(45,`${receivers} tài khoản dùng chung kênh nhận tiền (cần xác minh chủ sở hữu)`,true);
   if(devices>=2)add(35,`${devices} tài khoản có cùng mã trình duyệt (mã có thể bị thay đổi)`,true);
-  if(activity.link>=3)add(20,`${activity.link} cảnh báo hạn mức link trong 14 ngày`);
+  // A quota denial alone is not evidence of abuse; do not use it to score payouts.
   if(claims>=12)add(15,`${claims} lần gửi nhiệm vụ trong một giờ`);
   if(activity.captcha>=5)add(10,`${activity.captcha} lần trả lời CAPTCHA sai trong 14 ngày`);
   if(networks>=3)add(10,`${networks} tài khoản cùng IP/dải IPv6 (không chứng minh gian lận)`);
@@ -1534,7 +1534,7 @@ async function handler(req, env) {
     if(attempt.device_code!==await deviceCode(req,env))
       fail(409,'Hãy xác minh bằng trình duyệt đã mở nhiệm vụ.');
     // Once the confirmation is open, the same account and browser may resume on a different IP.
-    // Keep attempt.ip pinned to the first verified return for all quota checks.
+    // Keep attempt.ip pinned to the original reservation for all quota checks.
     if(attempt.available_at<0&&attempt.expires_at===0){
       if(body.abandon===true)return json({ok:true,status:'abandoned'});
       fail(409,'Bạn đã xác nhận bỏ lượt này. Lượt vẫn được ghi nhận, không nhận Lúa.',{confirmation_abandoned:true});
@@ -1568,11 +1568,11 @@ async function handler(req, env) {
       const perTaskLimit=await linkTaskPerAccountLimit(env,task);
       if(await linkReturnUsage(env,me.id,task.id)>=perTaskLimit)
         fail(429,'Bạn đã sử dụng hết số lượt của nhiệm vụ này hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).');
-      // Check current network/browser eligibility before the first return.
-      // Bind that observed IP atomically, then never rebind during verification.
+      // Preserve the server-owned original reservation, never move quota to the current network.
       const arrivalSettings=await getSettings(env);
-      await linkIPQuota(env,req,me.id,task,arrivalSettings,'return');
+      await linkIPQuota(env,req,me.id,task,arrivalSettings,'return',attempt.ip);
       await linkBrowserQuota(env,req,me.id,task,arrivalSettings,'return');
+      const arrivalConflict=linkStartConflictArgs(arrivalSettings,me.id,task.id,attempt.ip,attempt.device_code,now());
       const arrivedAt=now();
       const late=attempt.expires_at<=arrivedAt;
       if(late){
@@ -1583,10 +1583,11 @@ async function handler(req, env) {
         await env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING')
           .bind('link_return_recovery:'+attempt.id,'1').run();
       }
-      const mark=await env.DB.prepare(`UPDATE task_attempts SET available_at=?,expires_at=?,ip=?
+      const mark=await env.DB.prepare(`UPDATE task_attempts SET available_at=?,expires_at=?
         WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at<>0
-          AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0 AND x.expires_at<>0)`)
-        .bind(-arrivedAt,LINK_CONFIRM_OPEN,returnIP,attempt.id,me.id,me.id,task.id,attempt.id).run();
+          AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0 AND x.expires_at<>0)
+          AND (${LINK_START_CONFLICT}) IS NULL`)
+        .bind(-arrivedAt,LINK_CONFIRM_OPEN,attempt.id,me.id,me.id,task.id,attempt.id,...arrivalConflict).run();
       if(!mark.meta?.changes){
         const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0 AND device_code=?').bind(attempt.id,me.id,attempt.device_code).first();
         if(!same){
@@ -1597,7 +1598,6 @@ async function handler(req, env) {
         attempt=same;
       }else{
         if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
-        attempt.ip=returnIP;
         attempt.available_at=-arrivedAt;
         attempt.expires_at=LINK_CONFIRM_OPEN;
       }
@@ -1628,7 +1628,7 @@ async function handler(req, env) {
     }
     const settings=await getSettings(env);
     const quota=await taskQuota(env,req,me.id,settings,'link');
-    // Charge the original confirmation network even if Wi-Fi/4G changes during CAPTCHA.
+    // Charge the stored reservation network even if Wi-Fi/4G changes during CAPTCHA.
     // The actual new IP is recorded separately, not used to move or reset the reserved quota.
     const confirmationIP=attempt.ip;
     const link=await linkIPQuota(env,req,me.id,task,settings,'submit',confirmationIP);
@@ -1840,7 +1840,7 @@ async function handler(req, env) {
     const attempt = await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND task_id=?')
       .bind(str(body.attempt_id, 60), me.id, task.id).first();
     if (!attempt || attempt.consumed_by || attempt.expires_at <= now()) fail(410, 'Phiên nhiệm vụ hết hạn. Vui lòng mở lại nhiệm vụ.');
-    if(task.category==='link'&&(attempt.available_at<0||(await getTaskSource(env,task.id)).creation==='api'||await getAttemptSource(env,attempt.id)))fail(409,'Nhiệm vụ link riêng phải xác nhận qua trang đích.');
+    if(task.category==='link'&&(task.review_mode==='manual'||attempt.available_at<0||(await getTaskSource(env,task.id)).creation==='api'||await getAttemptSource(env,attempt.id)))fail(409,'Nhiệm vụ Link phải xác nhận qua trang đích.');
     if (task.category === 'video' && now() < attempt.available_at) fail(425, 'Chưa đủ thời gian thực hiện nhiệm vụ.', { remaining_seconds: Math.ceil((attempt.available_at - now()) / 1000) });
     if (task.category!=='app' && (Number(body.answer) !== attempt.captcha_a + attempt.captcha_b || !/^\d+$/.test(String(body.answer)))) {
       const a = rand(), b = rand();
