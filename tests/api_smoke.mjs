@@ -2407,3 +2407,28 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  await assert.rejects(()=>memberApi('/api/tasks/fixture/start','POST',{}),/Nhiệm vụ hiện không khả dụng/);
  console.log('PASS: neutral member lock label, true quota count, recovery and Admin diagnostics unchanged.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function renderMemberTaskCard('),client.indexOf('async function tasks(){'));
+ const render=new Function('esc','fmt','chip',code+'\nreturn renderMemberTaskCard;')(v=>String(v??''),String,String);
+ for(const limit of [1,2,3,4,7,20]){
+  for(let used=0;used<=limit;used++){
+   const base={id:'test',category:'link',title:'Test',reward:1,link_24h_limit:limit,link_24h_count:used,repeat_policy:'daily'};
+   const out=render(base),width=Number((used/limit*100).toFixed(2));
+   assert.match(out,new RegExp('aria-valuemax="'+limit+'" aria-valuenow="'+used+'"'));
+   assert.ok(out.includes('width:'+width+'%;background-size:'+(width?Number((10000/width).toFixed(4)):100)+'% 100%'));
+   assert.doesNotMatch(out,/task-card-modern-track is-unavailable/);
+   const locked=render({...base,link_blocked:'link_owner'});
+   assert.match(locked,/task-card-modern-track is-unavailable/);
+   assert.match(locked,/width:100%;background-size:100% 100%/);
+   assert.ok(locked.includes('aria-valuenow="'+used+'"'));
+   const resume=render({...base,link_blocked:'link_owner',link_needs_confirmation:true});
+   assert.doesNotMatch(resume,/task-card-modern-track is-unavailable/);
+  }
+ }
+ const css=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
+ assert.match(css,/border-radius:99px;background:#fff/);
+ assert.match(css,/linear-gradient\(90deg,#16865c 0%,#42bd65 25%,#e6c43a 50%,#f09b39 75%,#ed475c 100%\)/);
+ console.log('PASS: continuous adaptive task gradient, empty zero progress, red disabled state and truthful counts.');
+}

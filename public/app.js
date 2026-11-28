@@ -1042,7 +1042,10 @@ function renderMemberTaskCard(t){
    t.my_status==='rejected'?'Nhiệm vụ đã bị từ chối':
    daily?`Còn ${left}/${maxUses} lượt hôm nay`:
    `Còn ${left}/${maxUses} lượt cho nhiệm vụ này`;
- const progress=Math.round(used/maxUses*100);
+ const progress=Number((used/maxUses*100).toFixed(2));
+ const progressLocked=Boolean(t.link_blocked&&!t.link_needs_confirmation);
+ const progressWidth=progressLocked?100:progress;
+ const gradientScale=progressWidth>0?Number((10000/progressWidth).toFixed(4)):100;
  const blockNote=t.link_needs_confirmation?'Hoàn tất xác minh lượt cũ trước khi làm lượt mới.':
   t.link_blocked==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'';
  const button=t.link_needs_confirmation?
@@ -1069,7 +1072,7 @@ function renderMemberTaskCard(t){
   ${t.category==='app'?`<div class="app-ref-code">Mã giới thiệu: <strong>${esc(t.app_referral_code||'—')}</strong> <button class="btn alt sm" data-action="copy" data-value="${esc(t.app_referral_code||'')}">Sao chép mã</button></div><p class="note">Đăng ký và nhập mã theo hướng dẫn, sau đó gửi xác nhận. Chỉ nhận Lúa khi Admin duyệt.</p>`:''}
   <div class="task-card-modern-bottom">
    <div class="task-card-modern-quota"><span class="task-card-modern-quota-icon" aria-hidden="true">◉</span><span>${esc(countText)}</span></div>
-   <div class="task-card-modern-track" role="progressbar" aria-label="Lượt đã thực hiện" aria-valuemin="0" aria-valuemax="${maxUses}" aria-valuenow="${used}"><span style="width:${progress}%"></span></div>
+   <div class="task-card-modern-track${progressLocked?' is-unavailable':''}" role="progressbar" aria-label="Lượt đã thực hiện" aria-valuemin="0" aria-valuemax="${maxUses}" aria-valuenow="${used}"${progressLocked?` aria-valuetext="${used}/${maxUses} · Không khả dụng"`:''}><span style="width:${progressWidth}%;background-size:${gradientScale}% 100%"></span></div>
    ${blockNote?`<p class="task-link-blocked">⛔ ${esc(blockNote)}</p>`:''}
    ${button}
   </div>
