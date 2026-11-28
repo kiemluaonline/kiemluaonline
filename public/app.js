@@ -1276,6 +1276,8 @@ async function withdrawals(){
  const defaultBank=savedAccounts.find(x=>x.is_default);
  const preferred=defaultBank||savedAccounts[0];
  const savedSelection=preferred?.id||'';
+ const policy=meta.withdrawal_rules||'✅ Yêu cầu hợp lệ và không vi phạm quy định sẽ được thanh toán.\n⚠️ Nếu xác minh có gian lận hoặc vi phạm quy định, yêu cầu sẽ bị từ chối thanh toán.';
+ const paymentTime=meta.withdrawal_payment_time||'1–3 ngày làm việc';
  const t=`${heading('Yêu cầu rút tiền','Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra trước khi chuyển khoản ngân hàng.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
  const form=`<form class="card" data-form="withdraw" data-balance="${Number(state.me.balance)||0}" data-fee-vnd="${Number(meta.withdrawal_fee_vnd??2000)}" data-free-from-vnd="${Number(meta.withdrawal_free_from_vnd)||25000}" data-min-vnd="${Number(meta.withdrawal_min_vnd)||5000}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="0">
@@ -1319,7 +1321,7 @@ async function withdrawals(){
   <p>${esc(w.admin_note|| (w.status==='paid'?'Tiền đã được Admin xác nhận chuyển.':w.status==='approved'?'Yêu cầu đã duyệt, đang chờ chuyển tiền.':w.status==='pending'?'Yêu cầu đang chờ Admin duyệt.':'—'))}</p>
  </article>`).join('');
  const manager=await payoutAccountsPage({api,esc,heading,bankList:BANK_LIST,embedded:true,initialData:accountsData});
- return t+info+`<section class="card section"><h3>📋 Quy định rút tiền</h3><p>✅ Yêu cầu hợp lệ và không vi phạm quy định sẽ được thanh toán.</p><p>⚠️ Nếu xác minh có gian lận hoặc vi phạm quy định, yêu cầu sẽ bị từ chối thanh toán.</p><p>🕒 Thời gian thanh toán: <strong>1–3 ngày làm việc</strong> kể từ khi gửi yêu cầu hợp lệ.</p></section><section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>🕘 Lịch sử yêu cầu rút</h3>${withdrawalCards?'<div class="withdraw-history-list">'+withdrawalCards+'</div>':empty('Chưa có yêu cầu rút','Yêu cầu rút mới sẽ hiển thị tại đây kèm mã lệnh.')}</section>`;
+ return t+info+`<section class="card section"><h3>📋 Quy định rút tiền</h3>${String(policy).split(/\r?\n/).filter(line=>line.trim()).map(line=>`<p style="overflow-wrap:anywhere">${esc(line)}</p>`).join('')}<p>🕒 Thời gian thanh toán: <strong style="overflow-wrap:anywhere">${esc(paymentTime)}</strong> kể từ khi gửi yêu cầu hợp lệ.</p></section><section class="grid two section">${form}<div class="card"><h3>Thông tin minh bạch</h3><p>Hệ thống không tự chuyển tiền. Admin duyệt yêu cầu trước, sau đó chuyển khoản ngân hàng ngoài website và đối chiếu giao dịch thực tế mới xác nhận <strong>Đã thanh toán</strong>.</p><p>Được duyệt không có nghĩa đã nhận tiền. Khách có thể theo dõi từng trạng thái trong lịch sử.</p></div></section><details class="card section withdraw-account-manager" ${state.savedManagerOpen?'open':''}><summary>⚙ Quản lý tài khoản nhận tiền đã lưu (nếu cần)</summary>${manager}</details><section class="section"><h3>🕘 Lịch sử yêu cầu rút</h3>${withdrawalCards?'<div class="withdraw-history-list">'+withdrawalCards+'</div>':empty('Chưa có yêu cầu rút','Yêu cầu rút mới sẽ hiển thị tại đây kèm mã lệnh.')}</section>`;
 }
 async function history(){
  const d=await api('/api/history');
@@ -1715,6 +1717,10 @@ async function adminSettings(){
  ${field('withdrawal_fee_vnd','Phí rút tiền dưới ngưỡng (VNĐ)',s.withdrawal_fee_vnd,'type="number" min="0" max="10000000" step="1" required')}
  ${field('card_fee_lua','Phí mỗi thẻ dưới ngưỡng (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
  <p class="note">Yêu cầu cũ giữ nguyên phí. Từ chối sẽ hoàn đủ Lúa và phí đã giữ. Cần đặt tỷ giá và chuẩn bị nguồn chi trả trước khi bật rút.</p>`)}
+ ${group('📋 Quy định rút tiền','Nội dung và thời gian thanh toán hiển thị cho thành viên',`
+ <div class="field"><label for="withdrawal_rules">Nội dung quy định rút tiền</label><textarea id="withdrawal_rules" name="withdrawal_rules" rows="6" maxlength="2000" required>${esc(s.withdrawal_rules||'')}</textarea></div>
+ ${field('withdrawal_payment_time','Thời gian thanh toán',s.withdrawal_payment_time||'1–3 ngày làm việc','required maxlength="120" placeholder="Ví dụ: 1–3 ngày làm việc"')}
+ <p class="note">Nội dung hiển thị ngay trên trang rút tiền ngân hàng. Cài đặt này chỉ thay đổi thông báo, không tự duyệt hay chuyển tiền.</p>`)}
  ${group('🛡️ Chống gian lận nhiệm vụ App','Kiểm soát tài khoản theo IP và trình duyệt',`
  <p class="note">Mỗi App chỉ làm một lần/tài khoản. Không giới hạn tổng số App được làm. Hai mục dưới chỉ kiểm soát số tài khoản, không phải số lượt nhiệm vụ.</p>
  ${select('quota_device_accounts_daily','Một tài khoản trên mỗi mã trình duyệt/ngày',[['1','Bật – chỉ 1 tài khoản'],['0','Tắt']],s.quota_device_accounts_daily)}
