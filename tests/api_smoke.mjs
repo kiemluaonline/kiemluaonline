@@ -2446,6 +2446,7 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  const sessionStorage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)};
  const menus=new Function('state','sessionStorage','NAV','ADMIN_NAV',helpers+'\nreturn {rememberMenu,restoreMenu};')(state,sessionStorage,[['overview'],['tasks'],['withdrawals']],[['admin-overview'],['admin-reviews']]);
  menus.rememberMenu('withdrawals');assert.equal(menus.restoreMenu(),'withdrawals');
+ menus.rememberMenu('cards');assert.equal(menus.restoreMenu(),'cards');
  menus.rememberMenu('tasks');state.taskFilter='link';assert.equal(menus.restoreMenu(),'tasks');assert.equal(state.taskFilter,'app');
  state.me.user.id='b';assert.equal(menus.restoreMenu(),'overview');
  state.me.user={id:'a',role:'admin'};assert.equal(menus.restoreMenu(),'admin-overview');
@@ -2490,4 +2491,19 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  const getDevice=new Function('DEVICE_STORAGE_KEY','localStorage','crypto',device+'\nreturn browserDeviceId;')('device',badStorage,{randomUUID:()=> '12345678-1234-1234-1234-123456789abc'});
  assert.equal(getDevice(),'');
  console.log('PASS: real boot session/device check, fail-safe retry, suspended and expired session distinction, storage readback and no fake timer.');
+}
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const menu=client.slice(client.indexOf('const NAV = ['),client.indexOf('const ADMIN_NAV = ['));
+ assert.doesNotMatch(menu,/\['cards',/);assert.match(menu,/\['withdrawals',/);
+ const code=client.slice(client.indexOf('async function memberPayoutPage('),client.indexOf('async function withdrawals(){'));
+ let bank=0,cards=0;
+ const page=new Function('api','esc','heading','dt','cardRedemptionsPage','withdrawals',code+'\nreturn memberPayoutPage;')(()=>{},String,()=>{},()=>{},async()=>{cards++;return 'CARD_FORM';},async()=>{bank++;return 'BANK_FORM';});
+ const b=await page('withdrawals');assert.match(b,/data-go="withdrawals" class="member-payout-method is-selected" aria-pressed="true"/);assert.match(b,/BANK_FORM/);assert.doesNotMatch(b,/CARD_FORM/);
+ const c=await page('cards');assert.match(c,/data-go="cards" class="member-payout-method is-selected" aria-pressed="true"/);assert.match(c,/CARD_FORM/);assert.doesNotMatch(c,/BANK_FORM/);assert.equal(bank,1);assert.equal(cards,1);
+ assert.match(client,/case 'withdrawals':case 'cards':return memberPayoutPage\(view\)/);
+ assert.match(client,/user.role==='member'&&view==='cards'/);
+ const cardUI=readFileSync(new URL('../public/card-redemptions-ui.js',import.meta.url),'utf8');assert.match(cardUI,/await navigate\('cards'\)/);
+ console.log('PASS: combined member payout navigation, isolated bank/card rendering, legacy card route and post-submit refresh.');
 }

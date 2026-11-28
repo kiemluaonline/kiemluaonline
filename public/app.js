@@ -97,7 +97,7 @@ const BANK_LIST = [
 ];
 const NAV = [
   ['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ'],['shop','🛍️','Mua sắm nhận Lúa'],['shop-orders','📦','Đơn hàng & Lúa'],['referrals','♧','Tuyển Ref'],
-  ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['cards','🎁','Đổi thẻ cào'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
+  ['benefits','✦','Phúc lợi'],['withdrawals','⇢','Rút tiền'],['history','◷','Lịch sử'],['profile','☻','Hồ sơ']
 ];
 const ADMIN_NAV = [
   ['admin-overview','◈','Tổng quan Admin'],['admin-tasks','▤','Quản lý nhiệm vụ'],['admin-shop','🛍️','Quản lý mua sắm'],['admin-shop-orders','📦','Duyệt đơn TikTok'],
@@ -712,7 +712,7 @@ async function initGlobalPaidCard(userId){
 }
 function renderSidebarNav(nav,user){
  return nav.map(([key,symbol,name])=>{
-  if(user.role!=='member'||key!=='tasks')return `<button type="button" data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`;
+  if(user.role!=='member'||key!=='tasks')return `<button type="button" data-go="${key}" class="${(state.view===key||(user.role==='member'&&key==='withdrawals'&&state.view==='cards'))?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`;
   const open=state.view==='tasks';
   return `<div class="task-nav-group"><button type="button" id="task-nav-toggle" class="task-nav-parent ${open?'active':''}" data-action="toggle-task-nav" aria-expanded="${open}" aria-controls="task-nav-children"><span class="symbol">${symbol}</span><span>${esc(name)}</span><svg class="task-nav-chevron" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button>
    <div id="task-nav-children" class="task-nav-children" ${open?'':'hidden'}>${[['link','🔗 Link'],['app','📱 Nhiệm vụ App']].map(([filter,label])=>`<button type="button" data-go="tasks" data-filter="${filter}" class="${open&&state.taskFilter===filter?'active':''}" ${open&&state.taskFilter===filter?'aria-current="page"':''}><span aria-hidden="true" class="task-nav-branch">–</span><span>${esc(label)}</span></button>`).join('')}</div></div>`;
@@ -727,7 +727,8 @@ function setTaskNavOpen(open){
 function syncSidebarSelection(view){
  document.querySelectorAll('[data-go]').forEach(btn=>{
   const sub=btn.closest('.task-nav-children');
-  const active=btn.dataset.go===view&&(!sub||btn.dataset.filter===state.taskFilter);
+  const groupedPayout=view==='cards'&&state.me?.user?.role==='member'&&btn.dataset.go==='withdrawals'&&btn.closest('.nav');
+  const active=Boolean(groupedPayout||(btn.dataset.go===view&&(!sub||btn.dataset.filter===state.taskFilter)));
   btn.classList.toggle('active',active);
   if(sub){if(active)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');}
  });
@@ -765,6 +766,8 @@ async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)ren
 // Keep the selected menu within this browser tab, isolated by signed-in account and role.
 function menuKey(user){return 'tram-lua.menu.v1.'+user.role+'.'+user.id;}
 function validMenu(user,view){
+ // Keep the internal card tab and old in-app links valid; only the sidebar entry is merged.
+ if(user.role==='member'&&view==='cards')return 'cards';
  const nav=user.role==='admin'?ADMIN_NAV:NAV;
  return nav.some(n=>n[0]===view)?view:(user.role==='admin'?'admin-overview':'overview');
 }
@@ -820,7 +823,7 @@ async function navigate(view,{checkedMe=false}={}){
  state.view=view;
  rememberMenu(view);
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
- const found=nav.find(n=>n[0]===view);
+ const found=nav.find(n=>n[0]===(view==='cards'&&user.role==='member'?'withdrawals':view));
  syncSidebarSelection(view);
  const top=document.getElementById('topTitle');if(top)top.textContent=found?.[2]||'Tổng quan';
  const root=document.getElementById('viewContent');if(!root)return;
@@ -863,7 +866,7 @@ async function navigate(view,{checkedMe=false}={}){
 async function page(view){
  switch(view){
  case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'shop-orders':return shopOrdersPage({api,esc,heading,fmt,dt});case 'referrals':return referrals();
- case 'benefits':return benefits();case 'withdrawals':return withdrawals();case 'cards':return cardRedemptionsPage({api,esc,heading,dt});case 'history':return history();case 'profile':return profile();
+ case 'benefits':return benefits();case 'withdrawals':case 'cards':return memberPayoutPage(view);case 'history':return history();case 'profile':return profile();
  case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt});case 'admin-users':return adminUsers();
  case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();case 'admin-cards':return adminCardRedemptionsPage({api,esc,heading,dt});
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
@@ -1226,6 +1229,13 @@ async function benefits(){
  <div class="grid two"><section class="card"><span class="eyebrow">QUÀ MỖI NGÀY</span><h3>☀ Điểm danh hôm nay</h3><div class="metric">+${fmt(state.meta.checkin_reward)} Lúa</div><p>Ngày Việt Nam: ${esc(c.today)}. Mỗi tài khoản chỉ được điểm danh một lần trong ngày.</p>
  ${c.checked_today?chip('approved'):`<button class="btn" data-action="checkin">Điểm danh ngay</button>`}</section>
  <section class="card"><h3>Điều kiện nhận thưởng</h3><p>Hệ thống tự kiểm tra lượt đã nhận để ngăn ghi Lúa trùng lặp. Admin có thể điều chỉnh mức quà.</p><div class="callout">Nếu mức thưởng đang bằng 0, thao tác điểm danh vẫn được lưu nhưng không phát sinh Lúa.</div></section></div>`;
+}
+async function memberPayoutPage(view){
+ const cardTab=view==='cards';
+ const methods=[['withdrawals','🏦','Chuyển khoản ngân hàng'],['cards','🎁','Đổi thẻ cào']];
+ const selector=`<div class="member-payout-methods" role="group" aria-label="Phương thức nhận tiền">${methods.map(([key,icon,label])=>`<button type="button" data-go="${key}" class="member-payout-method ${view===key?'is-selected':''}" aria-pressed="${view===key}"><span class="member-payout-icon" aria-hidden="true">${icon}</span><span>${esc(label)}</span></button>`).join('')}</div>`;
+ const content=cardTab?await cardRedemptionsPage({api,esc,heading,dt}):await withdrawals();
+ return selector+content;
 }
 async function withdrawals(){
  const [data,accountsData]=await Promise.all([api('/api/history'),api('/api/payout-accounts').catch(()=>({accounts:[],unavailable:true}))]);
