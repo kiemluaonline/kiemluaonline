@@ -1289,6 +1289,25 @@ async function handler(req, env) {
     // Nạp nhẹ để thẻ thanh toán tự cập nhật; chỉ giao dịch đã thanh toán >= 5.000đ.
     return json({recent_payments:await publicPaidAnnouncements(env)});
   }
+  // Read-only member overview: exact totals and seven local-calendar days, independent of history pagination.
+  if (m === 'GET' && p === '/api/member-overview') {
+    const me=await auth(req,env);
+    const at=now(),today=vnDay(at),first=vnDay(at-6*DAY);
+    const active="consumed_by IS NULL AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))";
+    const [counts,ongoing,earnings,recent]=await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) AS approved,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending FROM task_completions WHERE user_id=?").bind(me.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND "+active).bind(me.id,at,LINK_CONFIRM_WINDOW_MS,at).first(),
+      env.DB.prepare("SELECT date(created_at,'+7 hours') AS day,SUM(amount) AS lua FROM wallet_entries WHERE user_id=? AND amount>0 AND reference_type IN ('task','referral','checkin','shop_order') AND date(created_at,'+7 hours') BETWEEN ? AND ? GROUP BY day").bind(me.id,first,today).all(),
+      env.DB.prepare(`SELECT title,status,created_at,category FROM (
+        SELECT t.title,c.status,c.created_at,t.category FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=?
+        UNION ALL
+        SELECT t.title,'in_progress',a.created_at,t.category FROM task_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.user_id=? AND ${active}
+      ) ORDER BY created_at DESC LIMIT 5`).bind(me.id,me.id,at,LINK_CONFIRM_WINDOW_MS,at).all()
+    ]);
+    const byDay=new Map(earnings.results.map(r=>[r.day,Number(r.lua)||0]));
+    const days=Array.from({length:7},(_,i)=>{const day=vnDay(at-(6-i)*DAY);return {day,lua:byDay.get(day)||0};});
+    return json({total:Number(counts.total)+Number(ongoing.n),approved:Number(counts.approved),pending:Number(counts.pending),in_progress:Number(ongoing.n),days,recent:recent.results});
+  }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
     const [todayLua,linkLua,submittedToday,paidAnnouncements] = await Promise.all([
