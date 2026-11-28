@@ -157,6 +157,7 @@ function closeTaskResultModal(){
  const root=document.getElementById('modal-root');
  if(root?.querySelector('.task-result-cover'))root.innerHTML='';
  document.body.classList.remove('task-result-open');
+ showOverviewNotice();
 }
 function renderTaskResultModal(result,{linkReturn=false}={}){
  const root=document.getElementById('modal-root');
@@ -199,7 +200,7 @@ async function api(path, method='GET', body=null){
   // All state-changing requests require same-origin JSON, including bodyless DELETE.
   if(body===null&&['POST','PUT','PATCH','DELETE'].includes(method.toUpperCase()))body={};
   const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
-  const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin'});
+  const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin',...(method.toUpperCase()==='GET'?{cache:'no-store'}:{})});
   const data=await r.json().catch(()=>({error:'Không nhận được phản hồi máy chủ.'}));
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;
     // Member-facing task errors keep recovery information but avoid exposing quota diagnostics.
@@ -326,7 +327,7 @@ async function boot(){
    return;
   }
   if(state.me?.user?.role==='member'&&resumeStoredReturn())return;
-  if(state.me){state.view=state.me.user.role==='admin'?'admin-overview':'overview';renderShell();await navigate(state.view);}
+  if(state.me){state.view=restoreMenu();renderShell();await navigate(state.view);}
   else if(state.accountHold){renderLocked();}
   else {
     if(state.meta.setup_required) state.authMode='setup';
@@ -703,18 +704,83 @@ function renderShell(){
  if(user.role==='member')checkApprovedTaskPopups().catch(()=>{});
 }
 async function refreshMe(){await loadMe();if(!state.me){if(state.accountHold)renderLocked();else renderHome();return;}document.getElementById('topBalance').textContent='🌾 '+fmt(state.me.balance)+' Lúa';}
+// Keep the selected menu within this browser tab, isolated by signed-in account and role.
+function menuKey(user){return 'tram-lua.menu.v1.'+user.role+'.'+user.id;}
+function validMenu(user,view){
+ const nav=user.role==='admin'?ADMIN_NAV:NAV;
+ return nav.some(n=>n[0]===view)?view:(user.role==='admin'?'admin-overview':'overview');
+}
+function restoreMenu(){
+ const user=state.me.user;
+ try{
+  const saved=JSON.parse(sessionStorage.getItem(menuKey(user))||'null');
+  if(saved?.filter==='app'||saved?.filter==='link')state.taskFilter=saved.filter;
+  return validMenu(user,saved?.view);
+ }catch{return validMenu(user,null);}
+}
+function rememberMenu(view){
+ const user=state.me?.user;if(!user)return;
+ try{sessionStorage.setItem(menuKey(user),JSON.stringify({view:validMenu(user,view),filter:state.taskFilter}));}catch{}
+}
+function overviewNoticeKey(user){return 'tram-lua.overview-notice.v1.'+user.id;}
+let overviewNoticePending=false;
+function showOverviewNotice(){
+ const user=state.me?.user;
+ if(!overviewNoticePending||user?.role!=='member'||state.view!=='overview'||new URLSearchParams(location.search).has('link_return'))return;
+ const root=document.getElementById('modal-root');if(!root||root.children.length)return;
+ try{if(Number(localStorage.getItem(overviewNoticeKey(user)))>Date.now()){overviewNoticePending=false;return;}}catch{}
+ overviewNoticePending=false;
+ root.innerHTML=`<div class="modal-cover overview-notice-cover"><section class="modal overview-notice" role="dialog" aria-modal="true" aria-labelledby="overview-notice-title">
+  <header class="overview-notice-head"><span class="overview-notice-mark" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M24 5 40 11v12c0 10-6 16-16 21C14 39 8 33 8 23V11L24 5Z" stroke="currentColor" stroke-width="2.5"/><path d="m16 24 6 6 11-13" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><h3 id="overview-notice-title">Chào mừng đến với Trạm Có Lúa</h3><p>Vài lưu ý quan trọng trước khi bắt đầu</p></div></header>
+  <div class="overview-notice-rules">
+   <div><span aria-hidden="true">①</span><p>Chỉ sử dụng một tài khoản cho tất cả nhiệm vụ.</p></div>
+   <div><span aria-hidden="true">✓</span><p>Thực hiện nhiệm vụ đúng hướng dẫn và trung thực.</p></div>
+   <div><span aria-hidden="true">!</span><p>Gian lận có thể bị khóa tài khoản và từ chối thanh toán theo quy định.</p></div>
+  </div>
+  <label class="overview-notice-option"><input type="checkbox" id="overview-notice-snooze"><span>Không hiển thị lại trong 12 giờ</span></label>
+  <button type="button" class="btn overview-notice-action" data-action="ack-overview-notice">Đã hiểu, bắt đầu kiếm Lúa →</button>
+ </section></div>`;
+ root.querySelector('[data-action="ack-overview-notice"]')?.focus({preventScroll:true});
+}
+function closeOverviewNotice(){
+ const root=document.getElementById('modal-root'),user=state.me?.user;
+ if(!root?.querySelector('.overview-notice-cover')||user?.role!=='member')return;
+ if(root.querySelector('#overview-notice-snooze')?.checked){
+  try{localStorage.setItem(overviewNoticeKey(user),String(Date.now()+12*60*60*1000));}catch{}
+ }
+ root.innerHTML='';
+}
+let navigationSequence=0;
 async function navigate(view){
+ const user=state.me?.user;if(!user)return;
+ view=validMenu(user,view);
+ const sequence=++navigationSequence;
  closeHeaderNotifications();
+ const modal=document.getElementById('modal-root');
+ if(modal?.querySelector('.overview-notice-cover'))modal.innerHTML='';
+ overviewNoticePending=false;
  state.view=view;
+ rememberMenu(view);
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
  const found=nav.find(n=>n[0]===view);
  document.querySelectorAll('[data-go]').forEach(btn=>btn.classList.toggle('active',btn.dataset.go===view));
  const top=document.getElementById('topTitle');if(top)top.textContent=found?.[2]||'Tổng quan';
  const root=document.getElementById('viewContent');if(!root)return;
  root.innerHTML='<div class="app-loading" style="min-height:180px"><span class="spinner"></span></div>';
- try{root.innerHTML=await page(view);}catch(e){
+ const current=()=>sequence===navigationSequence&&root.isConnected&&state.me?.user?.id===user.id;
+ try{
+  const fresh=await api('/api/me');
+  if(!current())return;
+  state.me=fresh;
+  const balance=document.getElementById('topBalance');if(balance)balance.textContent='🌾 '+fmt(fresh.balance)+' Lúa';
+  const html=await page(view);if(!current())return;
+  root.innerHTML=html;
+  if(view==='overview'&&user.role==='member'){overviewNoticePending=true;showOverviewNotice();}
+ }catch(e){
+  if(!current())return;
   if(e.status===403){
    const hold=await api('/api/account-status').catch(()=>null);
+   if(!current())return;
    if(hold?.account_status==='suspended'){state.me=null;state.accountHold=hold;renderLocked();return;}
   }
   root.innerHTML=`<div class="callout">Không tải được dữ liệu: ${esc(e.message)}</div>`;
@@ -1939,6 +2005,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   }
   if(act==='retry-link-return'){await processLinkReturn();return;}
   if(act==='leave-link-return'){await leaveLinkReturn();return;}
+  if(act==='ack-overview-notice'){closeOverviewNotice();checkApprovedTaskPopups().catch(()=>{});return;}
   if(act==='close-task-result'){closeTaskResultModal();setTimeout(()=>checkApprovedTaskPopups().catch(()=>{}),0);return;}
   if(act==='close-modal'){state.attempt=null;document.getElementById('modal-root').innerHTML='';return;}
   if(act==='copy'){await navigator.clipboard.writeText(el.dataset.value);toast('Đã sao chép liên kết.');return;}

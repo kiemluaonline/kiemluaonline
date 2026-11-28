@@ -1,5 +1,12 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Chào mừng đến với Trạm Có Lúa": "Zoo siab txais tos rau Trạm Có Lúa",
+  "Vài lưu ý quan trọng trước khi bắt đầu": "Tej yam tseem ceeb ua ntej pib",
+  "Chỉ sử dụng một tài khoản cho tất cả nhiệm vụ.": "Siv ib tug as khauj xwb rau txhua txoj haujlwm.",
+  "Thực hiện nhiệm vụ đúng hướng dẫn và trung thực.": "Ua haujlwm raws li cov lus qhia thiab ua ncaj ncees.",
+  "Gian lận có thể bị khóa tài khoản và từ chối thanh toán theo quy định.": "Yog dag ces tej zaum yuav raug xauv as khauj thiab tsis them nyiaj raws txoj cai.",
+  "Không hiển thị lại trong 12 giờ": "Tsis txhob qhia dua hauv 12 teev",
+  "Đã hiểu, bắt đầu kiếm Lúa →": "Nkag siab lawm, pib khwv Lúa →",
   "Không khả dụng": "Siv tsis tau",
   "Nhiệm vụ hiện không khả dụng": "Txoj haujlwm no siv tsis tau tam sim no",
   "Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.": "Txoj haujlwm no siv tsis tau tam sim no. Yog xav tau kev pab, hu rau Admin.",
