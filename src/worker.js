@@ -2152,7 +2152,8 @@ async function handler(req, env) {
     }
     // Xóa thật ảnh/nội dung bằng chứng, chỉ giữ bản ghi tối thiểu phục vụ ví,
     // chống trùng lượt, lịch sử thành viên và đối soát. Không xóa bản ghi chờ.
-    if(m==='POST' && p==='/api/admin/reviews/erase-processed'){
+    if(m==='POST' && p==='/api/admin/reviews/erase-processed')fail(400,'Thao tác xóa chung đã bị khóa. Vui lòng tải lại trang Admin.');
+    if(m==='POST' && p==='/api/admin/reviews/erase-scoped'){
       const b=await readBody(req);
       if(b.confirm!=='DELETE_REVIEWED_EVIDENCE')
         fail(400,'Cần xác nhận thao tác xóa hồ sơ.');
