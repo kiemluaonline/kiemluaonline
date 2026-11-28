@@ -638,11 +638,34 @@ function linkObservationTags(req,check){
  const ua=req.headers.get('user-agent')||'';
  if(/\b(?:bluestacks|noxplayer|ldplayer|mumuplayer|genymotion|android sdk built for x86|sdk_gphone|goldfish|ranchu)\b/i.test(ua))tags.push('emulator_ua');
  if(check?.hosting==='hosting')tags.push('hosting');
- return {tags,coverage:valid?'reported':'unknown',hosting:check?.hosting==='not_detected'?'not_detected':check?.hosting==='hosting'?'hosting':'unknown'};
+ return {tags,coverage:valid?'reported':'unknown',result:tags.length?'signal':reported==='000'&&Boolean(ua.trim())?'no_signal':'unknown',hosting:check?.hosting==='not_detected'?'not_detected':check?.hosting==='hosting'?'hosting':'unknown'};
+}
+// Aggregate only; do not fill the risk event log with normal traffic.
+// One atomic upsert per recorded check, independent of reward and alert deduplication.
+const LINK_PREFLIGHT_STATS_PREFIX='link_preflight_stats:';
+async function countLinkPreflight(env,result,at=now()){
+ const key=LINK_PREFLIGHT_STATS_PREFIX+vnDay(at)+':'+result;
+ await env.DB.prepare(`INSERT INTO settings(key,value) VALUES(?,json_object('count',1,'last_at',?))
+ ON CONFLICT(key) DO UPDATE SET value=json_object(
+ 'count',CAST(json_extract(settings.value,'$.count') AS INTEGER)+1,
+ 'last_at',MAX(CAST(json_extract(settings.value,'$.last_at') AS INTEGER),CAST(json_extract(excluded.value,'$.last_at') AS INTEGER)))`)
+ .bind(key,at).run();
+}
+async function loadLinkPreflightStats(env){
+ const day=vnDay(),prefix=LINK_PREFLIGHT_STATS_PREFIX+day+':';
+ const rows=await env.DB.prepare('SELECT key,value FROM settings WHERE key IN (?,?,?)').bind(prefix+'signal',prefix+'no_signal',prefix+'unknown').all();
+ const out={day,total:0,signal:0,no_signal:0,unknown:0,last_at:null};
+ for(const row of rows.results){
+  const kind=row.key.slice(prefix.length),v=JSON.parse(row.value);
+  if(!['signal','no_signal','unknown'].includes(kind)||!Number.isSafeInteger(v.count)||v.count<1||!Number.isFinite(v.last_at))throw Error('Invalid preflight statistics');
+  out[kind]=v.count;out.total+=v.count;out.last_at=Math.max(out.last_at||0,v.last_at);
+ }
+ return out;
 }
 async function recordLinkObservation(env,req,userId,taskId,check){
  try{
   const observation=linkObservationTags(req,check);
+  try{await countLinkPreflight(env,observation.result);}catch(error){console.warn('Link preflight counter unavailable:',String(error?.message||error));}
   // Log only advisory positive signals; absence of records never proves a device is safe.
   if(!observation.tags.length)return;
   const detail=observation.tags.join(',')+':'+taskId+'|start';
@@ -2519,6 +2542,9 @@ async function handler(req, env) {
       await event(env, req, 'admin_withdrawal_action', admin.id, `${w.id}:${status}`);
       return json({ ok: true, message: status === 'paid' ? 'Đã đánh dấu thanh toán. Giao dịch đã được đối chiếu.' : status === 'invalid_account' ? 'Đã báo thông tin nhận tiền không đúng và hoàn Lúa để khách gửi lại.' : 'Đã từ chối và hoàn Lúa.' });
     }
+    if (m === 'POST' && p === '/api/admin/preflight-test') {
+      return json({ok:true,observation:linkObservationTags(req,null),server_at:now(),test_only:true});
+    }
     if (m === 'GET' && p === '/api/admin/fraud-priority') return json(await loadPriorityFraudGroups(env));
     if (m === 'GET' && p === '/api/admin/fraud-scores') {
       const [profiles,links]=await Promise.all([loadFraudProfiles(env),loadFraudConnections(env)]);
@@ -2652,8 +2678,8 @@ async function handler(req, env) {
         env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts FROM risk_events
           WHERE event_type='link_preflight_observation' AND date(created_at,'+7 hours')=date('now','+7 hours')`).first()
       ]);
-      const browserHistory=await loadLinkBrowserHistory(env).catch(()=>null);
-      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},browser_history:browserHistory,link_observations:{events:observed.results,count:observedCount?.n||0,accounts:observedCount?.accounts||0},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
+      const [browserHistory,preflightStats]=await Promise.all([loadLinkBrowserHistory(env).catch(()=>null),loadLinkPreflightStats(env).catch(()=>null)]);
+      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},browser_history:browserHistory,link_observations:{events:observed.results,count:observedCount?.n||0,accounts:observedCount?.accounts||0,checks:preflightStats},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
         network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
         ipv4_inventory:ipv4Inventory(networkSeen.results,unverifiedIPv4.results),
@@ -2771,6 +2797,7 @@ export default {
       env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days') AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=task_attempts.task_id AND t.category='link')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_source_issued:%' AND NOT EXISTS(SELECT 1 FROM task_attempts a WHERE a.id=substr(settings.key,20) AND a.created_at>=datetime('now','-2 days'))"),
       env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
+      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_preflight_stats:%' AND substr(key,22,10)<?").bind(vnDay(now()-90*DAY)),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now()),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_signup_pending:%' AND json_extract(value,'$.expires')<?").bind(now())
     ]);

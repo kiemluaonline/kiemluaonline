@@ -201,7 +201,7 @@ async function api(path, method='GET', body=null, linkSignals=''){
   // All state-changing requests require same-origin JSON, including bodyless DELETE.
   if(body===null&&['POST','PUT','PATCH','DELETE'].includes(method.toUpperCase()))body={};
   const headers={...(body===null?{}:{'Content-Type':'application/json','X-Tram-Lua':'1'}),...(device?{'X-TL-Device':device}:{})};
-  if(method==='POST'&&/^\/api\/tasks\/[^/]+\/start$/.test(path)&&/^[01?]{3}$/.test(linkSignals))headers['X-TL-Link-Signals']=linkSignals;
+  if(method==='POST'&&(/^\/api\/tasks\/[^/]+\/start$/.test(path)||path==='/api/admin/preflight-test')&&/^[01?]{3}$/.test(linkSignals))headers['X-TL-Link-Signals']=linkSignals;
   const r=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body),credentials:'same-origin',...(method.toUpperCase()==='GET'?{cache:'no-store'}:{})});
   const data=await r.json().catch(()=>({error:'Không nhận được phản hồi máy chủ.'}));
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;
@@ -1804,10 +1804,12 @@ async function adminSecurity(){
  ${proxyEvents.length?`<details class="fraud-alert-technical"><summary>Xem nhật ký kiểm tra hôm nay (tối đa 100)</summary><div class="fraud-alert-list">${proxyEvents.map(r=>`<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div><div class="small muted">${esc(r.email||'')}</div><div class="fraud-alert-stage action">${r.event_type==='link_proxy_blocked'?'Bị chặn trước khi cấp Link':'Tạm dừng vì không kiểm tra được'}</div><p class="fraud-alert-reason">${esc(proxyReason[String(r.detail||'').split(':')[0]]||'Chưa rõ')} · ${esc(r.task_title||'Link')}</p><details class="fraud-alert-technical"><summary>IP kết nối</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div></details><button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản</button></article>`).join('')}</div></details>`:''}
  </section>
  <section class="card section"><h3>🛡️ Anti-Fraud 3.0 · Nghi vấn giả lập / tự động hóa</h3>
- <p class="note">Giám sát thực tế trước cấp Link: trình duyệt thành viên gửi tối đa ba cờ tín hiệu; máy chủ đối chiếu User-Agent và kết quả Hosting nếu có. Không gửi chuỗi đồ họa thô, không tự khóa tài khoản hoặc thay đổi quyết định cấp Link. Công cụ kiểm thử chỉ chạy trên máy Admin.</p>
+ <p class="note">Giám sát thực tế trước cấp Link: trình duyệt thành viên gửi tối đa ba cờ tín hiệu; máy chủ đối chiếu User-Agent và kết quả Hosting nếu có. Không gửi chuỗi đồ họa thô, không tự khóa tài khoản hoặc thay đổi quyết định cấp Link. Công cụ mô phỏng chạy trên máy Admin; kiểm tra kết nối thật gọi máy chủ nhưng không tính vào thống kê thành viên.</p>
  <details class="fraud-alert-technical"><summary>Công cụ kiểm thử trình duyệt</summary><div class="btn-row"><button class="btn alt" type="button" data-action="fraud-browser-test">Kiểm tra trình duyệt hiện tại</button><button class="btn alt" type="button" data-action="fraud-browser-demo">Chạy kiểm thử mô phỏng</button></div>
- <div id="browser-diagnostic-result" role="status" aria-live="polite"></div></details>
- <div class="separator"></div><h4>Nhật ký giám sát thực tế hôm nay</h4>
+ <div class="btn-row"><button class="btn alt" type="button" data-action="fraud-browser-live">Kiểm tra kết nối máy chủ thật</button></div><div id="browser-diagnostic-result" role="status" aria-live="polite"></div></details>
+ <div class="separator"></div><h4>Giám sát thực tế hôm nay</h4>
+ ${live?.checks?`<div class="fraud-member-stats"><div><strong>${fmt(live.checks.total)}</strong><span>Lượt kiểm tra đã ghi</span></div><div><strong>${fmt(live.checks.no_signal)}</strong><span>Chưa phát hiện dấu hiệu</span></div><div><strong>${fmt(live.checks.signal)}</strong><span>Có dấu hiệu</span></div><div><strong>${fmt(live.checks.unknown)}</strong><span>Thiếu dữ liệu</span></div></div><p class="note">${live.checks.last_at?`🟢 Máy chủ đã ghi nhận kiểm tra thực tế. Gần nhất: ${esc(new Date(live.checks.last_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))}`:'Chưa có lượt kiểm tra được ghi hôm nay.'} </p><p class="small muted">Tính từ khi bản nâng cấp hoạt động, đặt lại 00:00 giờ Việt Nam. Đếm mỗi lần đi qua bước giám sát trước cấp Link, kể cả kiểm tra lặp lại; không phải số người hay lượt vượt thành công. Không tính thử nghiệm Admin. Không có dấu hiệu không chứng minh thiết bị an toàn.</p>`:'<p class="note">Chưa đọc được bộ đếm từ máy chủ. Không thể xác nhận giám sát đang ghi nhận.</p>'}
+ <h4>Nhật ký dấu hiệu cần đối chiếu</h4>
  ${live? `<div class="fraud-member-stats"><div><strong>${fmt(live.count||0)}</strong><span>Ghi nhận cần đối chiếu</span></div><div><strong>${fmt(live.accounts||0)}</strong><span>Tài khoản có ghi nhận</span></div></div>
  <p class="note">Chỉ đếm dấu hiệu đã lưu, gộp các bản ghi trùng trong ngày Việt Nam. Không có ghi nhận không chứng minh an toàn; dữ liệu trình duyệt có thể bị sửa hoặc thiếu.</p>
  ${liveEvents.length?'<div class="fraud-alert-list">'+liveEvents.map(r=>`<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div><div class="small muted">${esc(r.email||'')}</div><p><strong>${esc(r.task_title||'Nhiệm vụ Link')}</strong></p><p>${esc(describeObservation(r.detail))}</p><details class="fraud-alert-technical"><summary>IP và mã trình duyệt</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div><div class="small">${esc(r.device_code||'—')}</div></details><button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản</button></article>`).join('')+'</div>':'<p class="small muted">Chưa ghi nhận dấu hiệu cần đối chiếu hôm nay.</p>'}`:'<p class="note">Máy chủ chưa trả dữ liệu giám sát; không thể xác nhận trạng thái.</p>'}
@@ -2368,6 +2370,18 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
   if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
   if(act==='use-manual-ipv4'){showPastedIPv4();return;}
+  if(act==='fraud-browser-live'){
+   if(state.me?.user?.role!=='admin'||el.disabled)return;
+   const target=document.getElementById('browser-diagnostic-result');if(!target)return;
+   el.disabled=true;target.textContent='Đang kiểm tra kết nối máy chủ thật…';
+   try{
+    const signals=inspectBrowserSignals();const flags=[signals.automation,signals.emulator,signals.virtualGraphics].map(v=>v===true?'1':v===false?'0':'?').join('');
+    const r=await api('/api/admin/preflight-test','POST',{},flags);
+    if(!r.ok||!r.test_only)throw Error('Phản hồi không hợp lệ');
+    const label={signal:'Có dấu hiệu cần đối chiếu',no_signal:'Chưa phát hiện dấu hiệu',unknown:'Thiếu dữ liệu'}[r.observation?.result]||'Chưa xác định';
+    target.innerHTML=`<div class="fraud-alert-card"><strong>✅ Máy chủ thật đã phản hồi</strong><p>${esc(label)}</p><p class="small">${esc(new Date(r.server_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}))}</p><p class="note">Đã gửi tín hiệu trình duyệt hiện tại đến hàm nhận diện phía máy chủ. Không kiểm tra Hosting trong phép thử này; không ghi bộ đếm, không tạo nhiệm vụ hoặc cộng Lúa. Chưa chứng minh khả năng phát hiện mọi giả lập.</p></div>`;
+   }catch(e){target.textContent='Chưa xác nhận được kết nối: '+e.message;}finally{el.disabled=false;}return;
+  }
   if(act==='fraud-browser-test'||act==='fraud-browser-demo'){
    if(state.me?.user?.role!=='admin')return;
    const target=document.getElementById('browser-diagnostic-result');
