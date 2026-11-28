@@ -1941,3 +1941,22 @@ body.task-result-open{overflow:hidden}
 .fraud-group-body{padding-top:12px;border-top:1px solid #e2ebe5;margin-top:10px;overflow-wrap:anywhere}
 .fraud-group-body h4{margin:12px 0 8px}
 @media(max-width:600px){.fraud-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.fraud-member-grid{grid-template-columns:1fr}.fraud-today .btn{margin-left:0}}
+
+
+.fraud-alert-list{display:grid;gap:10px;margin-top:10px}
+.fraud-alert-card{min-width:0;padding:12px;border:1px solid #dce8df;border-radius:11px;overflow-wrap:anywhere}
+.fraud-alert-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.fraud-alert-head small{font-size:11px;color:#61756e;flex-shrink:0}
+.fraud-alert-stage{font-size:13px;font-weight:650;padding:8px;border-radius:7px;margin-top:9px}
+.fraud-alert-stage.passive{background:#f1f4f2;color:#456257}.fraud-alert-stage.action{background:#fff3df;color:#815600}
+.fraud-alert-reason{font-size:13px;line-height:1.5;margin:10px 0}
+.fraud-alert-proof{padding:9px;background:#f3f8f5;border-radius:8px;font-size:13px;line-height:1.5}
+.fraud-alert-proof p{margin:5px 0}
+.fraud-alert-technical{margin:10px 0;font-size:13px}
+.fraud-alert-technical summary{cursor:pointer;padding:8px 0}
+.fraud-alert-ip{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+.fraud-alert-ip code{overflow-wrap:anywhere;word-break:break-word;max-width:100%}
+.fraud-alert-ip button{white-space:nowrap;word-break:normal;flex-shrink:0;min-height:36px}
+.fraud-alert-actions{display:flex;gap:7px;flex-wrap:wrap}.fraud-alert-actions .btn{min-height:40px;flex:1 1 auto}
+.fraud-link-summary{font-size:13px;color:#526c60}
+@media(max-width:600px){.fraud-group .table-wrap{overflow-x:auto}.fraud-group .table-wrap table{min-width:480px}.fraud-group .table-wrap button{white-space:nowrap;word-break:normal}}

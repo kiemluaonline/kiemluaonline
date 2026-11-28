@@ -1083,7 +1083,7 @@ console.log('PASS: shared IP ownership per task in both directions; remaining pe
 const passive=await call('/api/tasks','GET',undefined,firstPhone.cookie,sharedIP,phone1);
 assert.equal(passive.data.link_quota.blocked,null);
 assert.equal(passive.data.tasks.find(t=>t.id===ten[0]).link_blocked,'link_owner');
-const countPassive=()=>sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND detail=?").get(firstUserId,'link_owner:'+ten[0]).n;
+const countPassive=()=>sqlite.prepare("SELECT COUNT(*) n FROM risk_events WHERE user_id=? AND detail=?").get(firstUserId,'link_owner:'+ten[0]+'|list').n;
 const beforePassive=countPassive();assert.ok(beforePassive>=1);
 await call('/api/tasks','GET',undefined,firstPhone.cookie,sharedIP,phone1);
 assert.equal(countPassive(),beforePassive,'Refresh does not duplicate daily shared-IP warning');
