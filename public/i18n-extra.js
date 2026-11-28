@@ -1,5 +1,6 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Đã nhận": "Twb tau txais lawm",
   "Cộng đồng Trạm Có Lúa": "Trạm Có Lúa lub zej zog",
   "Trao đổi, nhận thông báo và hỗ trợ từ Admin.": "Sib tham, txais xov xwm thiab kev pab ntawm Admin.",
   "Tham gia nhóm Telegram": "Koom pab pawg Telegram",
