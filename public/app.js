@@ -1664,6 +1664,52 @@ async function showFraudAccount(userId){
  </section></div>`;
 }
 
+// Anti-Fraud 3.0: voluntary, local Admin diagnostic only. No fingerprint is stored or transmitted.
+function classifyBrowserSignals(signals={}){
+ const automation=signals.automation===true?true:signals.automation===false?false:null;
+ const emulator=signals.emulator===true?true:signals.emulator===false?false:null;
+ const virtualGraphics=signals.virtualGraphics===true?true:signals.virtualGraphics===false?false:null;
+ const reasons=[];
+ if(automation===true)reasons.push('Trình duyệt báo đang được điều khiển tự động');
+ if(emulator===true)reasons.push('Chuỗi nhận diện trình duyệt có dấu hiệu môi trường giả lập');
+ if(virtualGraphics===true)reasons.push('Đồ họa ảo hoặc kết xuất phần mềm — có thể xuất hiện trên máy thật');
+ const status=automation===true||emulator===true?'review':virtualGraphics===true?'weak':([automation,emulator,virtualGraphics].some(v=>v===null)?'unknown':'no_signal');
+ return {status,reasons,automation,emulator,virtualGraphics};
+}
+function inspectAdminBrowserSignals(){
+ const signals={automation:null,emulator:null,virtualGraphics:null};
+ try{if(typeof navigator.webdriver==='boolean')signals.automation=navigator.webdriver;}catch{}
+ try{
+  const ua=navigator.userAgent;
+  if(typeof ua==='string'&&ua.trim())signals.emulator=/\b(?:bluestacks|noxplayer|ldplayer|mumuplayer|genymotion|android sdk built for x86|sdk_gphone|goldfish|ranchu)\b/i.test(ua);
+ }catch{}
+ // Read only a coarse flag. Never save or transmit raw GPU/UA; no fingerprint.
+ let gl;
+ try{
+  const canvas=document.createElement('canvas');
+  gl=canvas.getContext('webgl');
+  const ext=gl?.getExtension('WEBGL_debug_renderer_info');
+  const renderer=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):null;
+  if(typeof renderer==='string'&&renderer.trim())signals.virtualGraphics=/swiftshader|llvmpipe|softpipe|virtualbox|vmware|virgl|gfxstream/i.test(renderer);
+ }catch{}finally{try{gl?.getExtension('WEBGL_lose_context')?.loseContext();}catch{}}
+ return classifyBrowserSignals(signals);
+}
+function browserDiagnosticMarkup(result){
+ const label={review:'Có dấu hiệu cần đối chiếu',weak:'Tín hiệu yếu — không kết luận giả lập',unknown:'Chưa đủ dữ liệu',no_signal:'Chưa phát hiện dấu hiệu'}[result.status];
+ const flag=v=>v===true?'Có dấu hiệu':v===false?'Chưa phát hiện':'Không có dữ liệu';
+ return '<div class="fraud-alert-card"><strong>'+esc(label)+'</strong><p>Điều khiển tự động: '+esc(flag(result.automation))+'</p><p>Chuỗi nhận diện giả lập: '+esc(flag(result.emulator))+'</p><p>Đồ họa ảo/phần mềm: '+esc(flag(result.virtualGraphics))+'</p>'+result.reasons.map(r=>'<p class="small">'+esc(r)+'</p>').join('')+'<p class="note">Không xác minh được phần cứng thật; không tự chặn, chấm điểm hay khóa tài khoản.</p></div>';
+}
+function browserDiagnosticFixtures(){
+ return [
+  ['Mẫu không có tín hiệu', {automation:false,emulator:false,virtualGraphics:false},'no_signal'],
+  ['Mẫu điều khiển tự động', {automation:true,emulator:false,virtualGraphics:false},'review'],
+  ['Mẫu chuỗi nhận diện giả lập', {automation:false,emulator:true,virtualGraphics:null},'review'],
+  ['Mẫu máy thật dùng đồ họa phần mềm', {automation:false,emulator:false,virtualGraphics:true},'weak'],
+  ['Mẫu trình duyệt hạn chế dữ liệu', {automation:false,emulator:false,virtualGraphics:null},'unknown'],
+  ['Mẫu thiếu toàn bộ dữ liệu', {},'unknown'],
+  ['Mẫu dữ liệu không hợp lệ', {automation:'true',emulator:1,virtualGraphics:'false'},'unknown']
+ ];
+}
 async function adminSecurity(){
  const [d,anti]=await Promise.all([api('/api/admin/risk-events'),api('/api/admin/fraud-scores')]);
  const proxy=d.proxy_guard||{},proxyCounts=proxy.counts||[],proxyEvents=proxy.events||[];
@@ -1689,6 +1735,11 @@ async function adminSecurity(){
  <div class="fraud-member-stats"><div><strong>${fmt(proxyN('vpn'))}</strong><span>VPN bị chặn</span></div><div><strong>${fmt(proxyN('proxy'))}</strong><span>Proxy bị chặn</span></div><div><strong>${fmt(proxyN('tor'))}</strong><span>Tor bị chặn</span></div><div><strong>${fmt(unavailableN)}</strong><span>Không kiểm tra được</span></div></div>
  <p class="note">Số yêu cầu hôm nay, không phải số người gian lận. Khi bật, không đạt kiểm tra hoặc API lỗi đều không cấp Link mới. Không tự khóa tài khoản.</p>
  ${proxyEvents.length?`<details class="fraud-alert-technical"><summary>Xem nhật ký kiểm tra hôm nay (tối đa 100)</summary><div class="fraud-alert-list">${proxyEvents.map(r=>`<article class="fraud-alert-card"><div class="fraud-alert-head"><strong>${esc(r.name||r.email||'Thành viên')}</strong><small>${dt(r.created_at)}</small></div><div class="small muted">${esc(r.email||'')}</div><div class="fraud-alert-stage action">${r.event_type==='link_proxy_blocked'?'Bị chặn trước khi cấp Link':'Tạm dừng vì không kiểm tra được'}</div><p class="fraud-alert-reason">${esc(proxyReason[String(r.detail||'').split(':')[0]]||'Chưa rõ')} · ${esc(r.task_title||'Link')}</p><details class="fraud-alert-technical"><summary>IP kết nối</summary><div class="fraud-alert-ip">${adminIP(r.ip)}</div></details><button class="btn alt sm" type="button" data-action="view-fraud-account" data-id="${esc(r.user_id)}">Xem tài khoản</button></article>`).join('')}</div></details>`:''}
+ </section>
+ <section class="card section"><h3>🛡️ Anti-Fraud 3.0 · Nghi vấn giả lập / tự động hóa</h3>
+ <p class="note">Chế độ kiểm thử: chỉ kiểm tra trên trình duyệt Admin khi bấm nút. Không thu thập dữ liệu thành viên, không gửi dữ liệu đồ họa lên máy chủ và không thay đổi quyết định cấp Link.</p>
+ <div class="btn-row"><button class="btn alt" type="button" data-action="fraud-browser-test">Kiểm tra trình duyệt hiện tại</button><button class="btn alt" type="button" data-action="fraud-browser-demo">Chạy kiểm thử mô phỏng</button></div>
+ <div id="browser-diagnostic-result" role="status" aria-live="polite"></div>
  </section>
  <section class="card section fraud-account-list"><h3>🛡️ Rủi ro từng tài khoản</h3>
  <p class="note">Ưu tiên điểm cao. Mức nghiêm trọng cần Admin đối chiếu trước khi duyệt tiền; không tự kết luận gian lận.</p>
@@ -2242,6 +2293,18 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='copy-ip'){await navigator.clipboard.writeText(el.dataset.value||'');toast('Đã sao chép địa chỉ IP.');return;}
   if(act==='check-ipv4'){await detectPublicIPv4(el,false);return;}
   if(act==='use-manual-ipv4'){showPastedIPv4();return;}
+  if(act==='fraud-browser-test'||act==='fraud-browser-demo'){
+   if(state.me?.user?.role!=='admin')return;
+   const target=document.getElementById('browser-diagnostic-result');
+   if(!target)return;
+   if(act==='fraud-browser-test'){
+    target.innerHTML='<p class="small muted">Kết quả trên trình duyệt Admin hiện tại (chỉ tại máy này).</p>'+browserDiagnosticMarkup(inspectAdminBrowserSignals());
+   }else{
+    const results=browserDiagnosticFixtures().map(([name,signals,expected])=>({name,expected,actual:classifyBrowserSignals(signals).status}));
+    target.innerHTML='<div class="fraud-alert-card"><strong>Kiểm thử mô phỏng: '+results.filter(r=>r.actual===r.expected).length+'/'+results.length+' đạt</strong>'+results.map(r=>'<p>'+esc(r.name)+' — '+(r.actual===r.expected?'Đạt':'Không đạt')+'</p>').join('')+'<p class="note">Không gọi API, không ghi dữ liệu hoặc nhật ký thành viên.</p></div>';
+   }
+   return;
+  }
   if(act==='fraud-hosting-demo'){
    const target=document.getElementById('hosting-demo-result');
    if(target)target.innerHTML='<div class="fraud-alert-card"><strong>Dữ liệu minh họa — không gọi API, không ghi nhật ký thành viên</strong><p>203.0.113.10 · Mẫu IP thường: chưa phát hiện hosting.</p><p>203.0.113.20 · Mẫu IP hosting: cần kiểm tra, không tự chặn.</p><p>203.0.113.30 · Thiếu dữ liệu: chưa xác minh.</p></div>';
