@@ -14,30 +14,33 @@ export function classifyProxy(data){
  if(data.is_proxy)return {status:'blocked',reason:'proxy'};
  return {status:'clear',reason:'clear'};
 }
-export async function checkLinkProxy(key,ip,fetcher=fetch,clock=Date.now){
+export async function checkLinkProxy(key,ip,fetcher=fetch,clock=Date.now,{fresh=false}={}){
  if(!String(key||'').trim())return {status:'unavailable',reason:'missing_key'};
  if(!ip||!(/^[0-9a-f:.]+$/i.test(ip))||!/[.:]/.test(ip))return {status:'unavailable',reason:'missing_ip'};
  const address=ip.toLowerCase(),now=clock();
  const hit=cache.get(address);
- if(hit&&hit.until>now)return {...hit.result,cached:true};
- if(pending.has(address))return pending.get(address);
- if(pending.size>=MAX)return {status:'unavailable',reason:'busy'};
- const job=(async()=>{
+ if(!fresh&&hit&&hit.until>now)return {...hit.result,cached:true};
+ if(!fresh&&pending.has(address))return pending.get(address);
+ if(!fresh&&pending.size>=MAX)return {status:'unavailable',reason:'busy'};
+ const lookup=async()=>{
   let timer;
   try{
    const controller=new AbortController();
    timer=setTimeout(()=>controller.abort(),5000);
    const response=await fetcher('https://api.ipapi.is/',{method:'POST',body:JSON.stringify({q:address,key}),signal:controller.signal,redirect:'error',headers:{Accept:'application/json','Content-Type':'application/json'}});
-   if(!response.ok)return {status:'unavailable',reason:'service_error'};
+   if(!response.ok)return {status:'unavailable',reason:'service_error',http_status:response.status};
    const result=classifyProxy(await response.json());
-   if(result.status!=='unavailable'){
+   if(!fresh&&result.status!=='unavailable'){
     if(cache.size>=MAX)cache.delete(cache.keys().next().value);
     cache.set(address,{until:clock()+TTL,result});
    }
-   return result;
+   return {...result,http_status:response.status};
   }catch{return {status:'unavailable',reason:'service_error'};}
   finally{clearTimeout(timer);}
- })();
+ };
+ // Diagnostic checks deliberately bypass cached and in-flight results.
+ if(fresh)return lookup();
+ const job=lookup();
  pending.set(address,job);
  try{return await job;}finally{pending.delete(address);}
 }
