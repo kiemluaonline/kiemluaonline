@@ -983,22 +983,21 @@ async function linkIPQuota(env,req,userId,task,settings,stage='unknown',reserved
  // Only a server-owned returned attempt can supply reservedIP; never trust request body.
  const ip=reservedIP??clientIP(req);
  if(ip==='unknown'||ip==='local')fail(429,'Không xác minh được IP mạng cho nhiệm vụ link. Vui lòng thử lại.',{quota_scope:'link_missing_ip'});
- const limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
+ // Aggregate IP cap was retired; preserve the legacy result shape for claim SQL.
  const exclusive=settings.quota_link_ip_exclusive!=='0';
- const used=await linkIPUsage(env,ip,userId,task.id);
+ const used=exclusive?await linkIPUsage(env,ip,userId,task.id):{other:0};
  const perTaskLimit=await linkTaskPerAccountLimit(env,task);
- const own=await env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND task_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours')")
-   .bind(userId,task.id).first();
- const denied=exclusive&&used.other>0?'link_owner':limit>0&&used.total>=limit?'link_limit':perTaskLimit>1&&Number(own.n)>=perTaskLimit?'link_task_limit':null;
+ const own=perTaskLimit>1?await env.DB.prepare("SELECT COUNT(*) AS n FROM task_completions WHERE user_id=? AND task_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours')")
+   .bind(userId,task.id).first():{n:0};
+ const denied=exclusive&&used.other>0?'link_owner':perTaskLimit>1&&Number(own.n)>=perTaskLimit?'link_task_limit':null;
  if(denied){
   await event(env,req,'link_ip_quota_denied',userId,denied+':'+task.id+'|'+stage);
   fail(429,denied==='link_owner'
    ?'IP này đã được tài khoản khác sử dụng cho nhiệm vụ này hôm nay. Bạn vẫn có thể làm các nhiệm vụ khác đủ điều kiện. Lượt mới mở lúc 00:00 (giờ Việt Nam).'
-   :denied==='link_limit'?'IP này đã đủ lượt nhiệm vụ link trong ngày hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
    :'Bạn đã hết lượt nhiệm vụ này hôm nay. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).',
    {quota_scope:denied});
  }
- return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,ip:linkNetworkPattern(ip),perTask:perTaskLimit>1?perTaskLimit:0};
+ return {enabled:0,owner:exclusive?1:0,limit:0,ip:linkNetworkPattern(ip),perTask:perTaskLimit>1?perTaskLimit:0};
 }
 
 /* Lượt link theo mã trình duyệt giả danh; không đổi quota khi chỉ thay IP/VPN/4G.
@@ -1020,18 +1019,15 @@ async function linkBrowserQuota(env,req,userId,task,settings,stage='unknown'){
   fail(429,'Chưa nhận diện được trình duyệt để làm nhiệm vụ link. Hãy tải lại trang bằng trình duyệt thông thường.',{quota_scope:'link_browser_missing'});
  }
  const code=await deviceCode(req,env);
- const used=await linkBrowserUsage(env,code,userId);
- const limit=quotaNumber(settings,'quota_link_tasks_device_24h');
  const exclusive=settings.quota_link_device_exclusive!=='0';
- const denied=exclusive&&used.other>0?'link_browser_owner':limit>0&&used.total>=limit?'link_browser_limit':null;
+ const used=exclusive?await linkBrowserUsage(env,code,userId):{other:0};
+ const denied=exclusive&&used.other>0?'link_browser_owner':null;
  if(denied){
   await event(env,req,'link_browser_quota_denied',userId,denied+':'+task.id+'|'+stage);
-  fail(429,denied==='link_browser_owner'
-   ?'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt này đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).'
-   :'Trình duyệt này đã hết lượt nhiệm vụ link trong ngày hôm nay. Đổi Wi-Fi, VPN hay 4G không đặt lại lượt.',
+  fail(429,'Bạn đã làm hết nhiệm vụ hôm nay. Mã trình duyệt này đã được tài khoản khác sử dụng. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).',
    {quota_scope:denied});
  }
- return {enabled:limit>0?1:0,owner:exclusive?1:0,limit,code};
+ return {enabled:0,owner:exclusive?1:0,limit:0,code};
 }
 // D1 hiện hỗ trợ 3 loại ban đầu. Nhiệm vụ App lưu dạng 'other' kèm
 // settings app_referral_code:<taskId> để không phải thay schema cũ.
@@ -1377,14 +1373,13 @@ async function handler(req, env) {
       AND c.period_key=CASE WHEN t.repeat_policy='daily' THEN ? ELSE '*' END
       WHERE t.is_active=1 AND (t.category='link' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings s WHERE s.key='app_referral_code:'||t.id AND s.value<>''))) ORDER BY t.created_at DESC LIMIT 100`).bind(me.id, vnDay()).all();
     const settings=await getSettings(env),ip=clientIP(req);
-    const used=await linkIPUsage(env,ip,me.id),limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
+    const used=await linkIPUsage(env,ip,me.id),limit=0;
     const browserCode=browserDeviceId(req)?await deviceCode(req,env):'';
     const browserUsed=await linkBrowserUsage(env,browserCode,me.id);
-    const browserLimit=quotaNumber(settings,'quota_link_tasks_device_24h');
+    const browserLimit=0;
     const browserDenied=!browserCode?'link_browser_missing':
-      settings.quota_link_device_exclusive!=='0'&&browserUsed.other>0?'link_browser_owner':
-      browserLimit>0&&browserUsed.total>=browserLimit?'link_browser_limit':null;
-    const denied=limit>0&&used.total>=limit?'link_limit':null;
+      settings.quota_link_device_exclusive!=='0'&&browserUsed.other>0?'link_browser_owner':null;
+    const denied=null;
     const ipOwners=settings.quota_link_ip_exclusive!=='0'&&ip!=='unknown'&&ip!=='local'
       ?await env.DB.prepare(`SELECT DISTINCT c.task_id FROM task_completions c JOIN tasks t ON t.id=c.task_id
         WHERE t.category='link' AND t.is_active=1 AND c.ip LIKE ? AND c.user_id<>?
@@ -1406,7 +1401,7 @@ async function handler(req, env) {
       if(!seen)await event(env,req,'link_browser_quota_denied',me.id,'link_browser_owner:list|list');
     }
     const [overrides,counts,linkReturnCounts,unfinishedReturns]=await Promise.all([
-      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%' OR key LIKE 'link_source_task:%'").all(),
+      env.DB.prepare("SELECT key,value FROM settings WHERE key LIKE 'link_task_limit:%' OR key LIKE 'app_referral_code:%' OR key LIKE 'app_logo:%'").all(),
       env.DB.prepare("SELECT task_id,COUNT(*) AS n,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM task_completions WHERE user_id=? AND status IN ('pending','approved') AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY task_id").bind(me.id).all(),
       // Một lượt đến link đích được tính ngay khi quay về, kể cả chưa giải phép tính;
       // lượt đã gửi (kể cả bị từ chối) tính một lần, không đếm lại phiên đã tiêu thụ.
