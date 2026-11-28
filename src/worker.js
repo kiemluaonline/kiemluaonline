@@ -797,12 +797,12 @@ const LINK_START_CONFLICT=`SELECT CASE
  WHEN ?=1 AND EXISTS(
   SELECT 1 FROM task_attempts a JOIN tasks t ON t.id=a.task_id
   WHERE t.category='link' AND a.user_id<>? AND a.task_id=? AND lower(a.ip) LIKE ?
-    AND a.consumed_by IS NULL AND a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+    AND a.consumed_by IS NULL AND ((a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')) OR (a.available_at<0 AND date(datetime(-a.available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')))
  ) THEN 'link_reserved_ip'
  WHEN ?=1 AND EXISTS(
   SELECT 1 FROM task_attempts a JOIN tasks t ON t.id=a.task_id
   WHERE t.category='link' AND a.user_id<>? AND a.device_code=?
-    AND a.consumed_by IS NULL AND a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+    AND a.consumed_by IS NULL AND ((a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')) OR (a.available_at<0 AND date(datetime(-a.available_at/1000,'unixepoch'),'+7 hours')=date('now','+7 hours')))
  ) THEN 'link_reserved_browser'
  WHEN ?=1 AND EXISTS(
   SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
@@ -1456,13 +1456,18 @@ async function handler(req, env) {
         .bind(-arrivedAt,LINK_CONFIRM_OPEN,returnIP,attempt.id,me.id,me.id,task.id,attempt.id).run();
       if(!mark.meta?.changes){
         const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND ip=? AND device_code=?').bind(attempt.id,me.id,returnIP,attempt.device_code).first();
-        if(same)return json({ok:true,challenge:true,a:same.captcha_a,b:same.captcha_b,attempt_id:same.id,expires_at:LINK_CONFIRM_OPEN});
-        fail(409,'Bạn còn phiên xác minh khác hoặc phiên đã thay đổi. Hãy giữ Link và liên hệ Admin nếu chưa thấy kết quả.');
+        if(!same){
+          const receipt=await savedReturn();
+          if(receipt)return json(receipt);
+          fail(409,'Bạn còn phiên xác minh khác hoặc phiên đã thay đổi. Hãy giữ Link và liên hệ Admin nếu chưa thấy kết quả.');
+        }
+        attempt=same;
+      }else{
+        if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
+        attempt.ip=returnIP;
+        attempt.available_at=-arrivedAt;
+        attempt.expires_at=LINK_CONFIRM_OPEN;
       }
-      if(attempt.ip!==returnIP)await event(env,req,'link_return_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
-      attempt.ip=returnIP;
-      attempt.available_at=-arrivedAt;
-      attempt.expires_at=LINK_CONFIRM_OPEN;
     }
     // Lượt quay về sớm bất thường cần được Admin xem xét. Người dùng có thể
     // mở trực tiếp link đích sau khi Bắt đầu; thời gian không chứng minh đã vượt link.
