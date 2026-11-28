@@ -28,9 +28,9 @@ async function decryptCard(secret,encrypted){
  const decoded=await crypto.subtle.decrypt({name:'AES-GCM',iv:hexToBytes(a)},key,hexToBytes(b));
  return JSON.parse(new TextDecoder().decode(decoded));
 }
-async function setting(db,key){
+async function setting(db,key,fallback='0'){
  const row=await db.prepare('SELECT value FROM settings WHERE key=?').bind(key).first();
- return String(row?.value||'0');
+ return String(row?.value??fallback);
 }
 export async function cardRedemptionsAPI(req,env,H){
  const {auth,readBody,fail,json,id,str}=H;
@@ -40,10 +40,11 @@ export async function cardRedemptionsAPI(req,env,H){
    ||/^\/api\/admin\/card-redemptions\/[0-9a-f-]{36}$/i.test(p)))return null;
  const isAdmin=p.startsWith('/api/admin/');
  const me=await auth(req,env,isAdmin?'admin':undefined);
- const [switchValue,rateValue,feeValue]=await Promise.all([
-   setting(db,'card_redemption_enabled'),setting(db,'lua_per_vnd'),setting(db,'card_fee_lua')
+ const [switchValue,rateValue,feeValue,freeValue]=await Promise.all([
+   setting(db,'card_redemption_enabled'),setting(db,'lua_per_vnd'),setting(db,'card_fee_lua'),setting(db,'payout_free_from_vnd',String(CARD_FREE_FROM_VND))
  ]);
  const rate=intValue(rateValue),configuredFee=intValue(feeValue),secretReady=validSecret(env.CARD_VOUCHER_SECRET);
+ const freeFrom=intValue(freeValue);
  const safeFee=Number.isSafeInteger(configuredFee)&&configuredFee>=0&&configuredFee<=10000000;
  const enabled=switchValue==='1'&&secretReady&&Number.isSafeInteger(rate)&&rate>0;
  // A code deploy may precede migration. Keep the old catalog usable until the D1 constraints are ready.
@@ -73,7 +74,7 @@ export async function cardRedemptionsAPI(req,env,H){
      }
      items.push(safe);
    }
-   return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?configuredFee:0,free_from_vnd:CARD_FREE_FROM_VND,
+   return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?configuredFee:0,free_from_vnd:freeFrom,
      denominations,carriers,catalog_expanded:expanded,
      balance:Number(balance?.balance||0),redemptions:items});
  }
@@ -83,7 +84,7 @@ export async function cardRedemptionsAPI(req,env,H){
    const carrier=str(b.carrier,30),denomination=intValue(b.denomination_vnd);
    if(!carriers.includes(carrier)||!denominations.includes(denomination))
      fail(400,'Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.');
-   const fee=denomination>=CARD_FREE_FROM_VND?0:configuredFee;
+   const fee=denomination>=freeFrom?0:configuredFee;
    // Khách phải nhìn thấy đúng số phí trước khi máy chủ giữ Lúa.
    if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
      fail(409,'Phí đổi thẻ đã thay đổi. Vui lòng tải lại để xem phí mới trước khi xác nhận.');
@@ -128,7 +129,7 @@ export async function cardRedemptionsAPI(req,env,H){
       ORDER BY CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
       r.created_at DESC LIMIT 200`).all();
    return json({enabled:switchValue==='1',secret_ready:secretReady,
-     rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?configuredFee:0,free_from_vnd:CARD_FREE_FROM_VND,redemptions:rows.results,
+     rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?configuredFee:0,free_from_vnd:freeFrom,redemptions:rows.results,
      denominations,carriers,catalog_expanded:expanded});
  }
  if(p==='/api/admin/card-redemptions/settings'&&m==='POST'){
