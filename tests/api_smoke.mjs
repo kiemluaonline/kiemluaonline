@@ -1043,13 +1043,21 @@ for(let i=0;i<10;i++){
  const t=await call('/api/admin/tasks','POST',{title:'Shared network task '+i,category:'link',url:'https://example.com/'+i,reward:1,review_mode:'auto',repeat_policy:'daily',link_24h_limit:i===0?2:1,is_active:true},admCookie);
  assert.equal(t.status,201);ten.push(t.data.id);
 }
-// Both can open before anyone submits; the claim must recheck ownership.
-const preopened=await call('/api/tasks/'+ten[0]+'/start','POST',{},secondPhone.cookie,sharedIP,phone2);
-assert.equal(preopened.status,200);
-assert.equal((await claimFor(firstPhone.cookie,ten[0],sharedIP,phone1)).status,200);
-const staleClaim=await call('/api/tasks/'+ten[0]+'/submit','POST',{attempt_id:preopened.data.attempt_id,answer:preopened.data.a+preopened.data.b},secondPhone.cookie,sharedIP,phone2);
-assert.equal(staleClaim.status,429);
-assert.equal(staleClaim.data.quota_scope,'link_owner');
+// Reserve before any provider URL is returned: the other account cannot start.
+const preopened=await call('/api/tasks/'+ten[0]+'/start','POST',{},firstPhone.cookie,sharedIP,phone1);
+assert.equal(preopened.status,200,JSON.stringify(preopened));
+const earlyBlocked=await call('/api/tasks/'+ten[0]+'/start','POST',{},secondPhone.cookie,sharedIP,phone2);
+assert.equal(earlyBlocked.status,429,JSON.stringify(earlyBlocked));
+assert.equal(earlyBlocked.data.quota_scope,'link_reserved_ip');
+assert.equal(earlyBlocked.data.task_url,undefined);
+assert.equal((await call('/api/tasks','GET',undefined,secondPhone.cookie,sharedIP,phone2)).data.tasks.find(t=>t.id===ten[0]).url,'','Member listing must not expose provider URL before start');
+const earlyDeviceBlocked=await call('/api/tasks/'+ten[1]+'/start','POST',{},secondPhone.cookie,'203.0.113.241',phone1);
+assert.equal(earlyDeviceBlocked.status,429,JSON.stringify(earlyDeviceBlocked));
+assert.equal(earlyDeviceBlocked.data.quota_scope,'link_reserved_browser');
+assert.equal(earlyDeviceBlocked.data.task_url,undefined);
+const earlyAlerts=await call('/api/admin/risk-events','GET',undefined,admCookie);
+assert.ok(earlyAlerts.data.link_alerts.some(r=>r.stage==='start'&&r.reason==='link_reserved_ip'&&r.reserved_email==='phoneone@example.com'&&r.related_attempt_id===preopened.data.attempt_id));
+assert.equal((await call('/api/tasks/'+ten[0]+'/submit','POST',{attempt_id:preopened.data.attempt_id,answer:preopened.data.a+preopened.data.b},firstPhone.cookie,sharedIP,phone1)).status,200);
 assert.equal((await call('/api/me','GET',undefined,secondPhone.cookie,sharedIP,phone2)).data.balance,0);
 const blocked=await call('/api/tasks/'+ten[0]+'/start','POST',{},secondPhone.cookie,sharedIP,phone2);
 assert.equal(blocked.status,429);assert.equal(blocked.data.quota_scope,'link_owner');

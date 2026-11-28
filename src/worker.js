@@ -788,6 +788,45 @@ async function linkIPUsage(env,ip,userId,taskId=null){
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
 
+// The guard runs in the same D1 write as the attempt reservation, BEFORE any provider API call.
+// Only other accounts are considered. Keep the current per-task IP / all-Link browser scopes.
+// Active reservations are not proof of a completed or paid visit.
+const LINK_START_CONFLICT=`SELECT CASE
+ WHEN ?=1 AND EXISTS(
+  SELECT 1 FROM task_attempts a JOIN tasks t ON t.id=a.task_id
+  WHERE t.category='link' AND a.user_id<>? AND a.task_id=? AND lower(a.ip) LIKE ?
+    AND a.consumed_by IS NULL AND a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+ ) THEN 'link_reserved_ip'
+ WHEN ?=1 AND EXISTS(
+  SELECT 1 FROM task_attempts a JOIN tasks t ON t.id=a.task_id
+  WHERE t.category='link' AND a.user_id<>? AND a.device_code=?
+    AND a.consumed_by IS NULL AND a.expires_at>? AND date(a.created_at,'+7 hours')=date('now','+7 hours')
+ ) THEN 'link_reserved_browser'
+ WHEN ?=1 AND EXISTS(
+  SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
+  WHERE t.category='link' AND c.user_id<>? AND c.task_id=? AND lower(c.ip) LIKE ?
+    AND c.status IN ('pending','approved') AND date(c.created_at,'+7 hours')=date('now','+7 hours')
+ ) THEN 'link_owner'
+ WHEN ?=1 AND EXISTS(
+  SELECT 1 FROM task_completions c JOIN tasks t ON t.id=c.task_id
+  WHERE t.category='link' AND c.user_id<>? AND c.device_code=?
+    AND c.status IN ('pending','approved') AND date(c.created_at,'+7 hours')=date('now','+7 hours')
+ ) THEN 'link_browser_owner'
+ ELSE NULL END`;
+function linkStartConflictArgs(settings,userId,taskId,ip,code,at){
+ const ipOn=settings.quota_link_ip_exclusive!=='0'?1:0,deviceOn=settings.quota_link_device_exclusive!=='0'?1:0;
+ const network=linkNetworkPattern(ip);
+ return [ipOn,userId,taskId,network,at,deviceOn,userId,code,at,ipOn,userId,taskId,network,deviceOn,userId,code];
+}
+async function denyLinkStartConflict(env,req,userId,taskId,args){
+ const row=await env.DB.prepare(LINK_START_CONFLICT+' AS reason').bind(...args).first();
+ const reason=row?.reason;
+ if(!reason)return;
+ const browser=reason==='link_reserved_browser'||reason==='link_browser_owner';
+ await event(env,req,browser?'link_browser_quota_denied':'link_ip_quota_denied',userId,reason+':'+taskId+'|start');
+ fail(429,browser?'Mã trình duyệt này đang được tài khoản khác sử dụng cho nhiệm vụ Link. Chưa cấp Link.':'Mạng này đã có tài khoản khác giữ lượt nhiệm vụ này. Chưa cấp Link.',{quota_scope:reason});
+}
+
 function normalizeLinkTaskLimit(value){return Math.max(1,Math.min(20,int(value,1)));}
 async function linkTaskPerAccountLimit(env,task){
  if(task.category!=='link')return 1;
@@ -1276,7 +1315,7 @@ async function handler(req, env) {
       const entry=done.get(t.id)||{n:0,pending:0};
       const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
       const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||(ipBlockedTasks.has(t.id)?'link_owner':denied))):null;
-      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,link_needs_confirmation:t.category==='link'&&unfinished.has(t.id),
+      return {...t,url:t.category==='link'?'':t.url,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,link_needs_confirmation:t.category==='link'&&unfinished.has(t.id),
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,scope:'task',
@@ -1547,33 +1586,37 @@ async function handler(req, env) {
     // Khách có thể tìm mã trên Google lâu: Link được phép quay về trong 24 giờ.
     // Video và các nhiệm vụ khác giữ nguyên thời hạn 20 phút.
     const attemptSeconds=task.category==='app'?7*86400:task.category==='link'?86400:1200;
-    const insertAttempt=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
-       SELECT ?,?,?,?,?,?,?,?,? ${task.category==='link'?'WHERE NOT EXISTS (SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND -available_at+?>?)':''}`).bind(attempt, me.id, task.id, a, b, available, startedNow + attemptSeconds * 1000,
-      clientIP(req), await deviceCode(req, env),...(task.category==='link'?[me.id,task.id,LINK_CONFIRM_WINDOW_MS,startedNow]:[]));
-    if(source){
-      // Only the observed, fully issued, unreturned attempt can be replaced.
-      // Reserving the replacement and expiring the old attempt is atomic.
-      const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
+    const startIP=clientIP(req),startCode=await deviceCode(req,env);
+    const baseArgs=[attempt,me.id,task.id,a,b,available,startedNow+attemptSeconds*1000,startIP,startCode];
+    if(task.category==='link'){
+      const conflictArgs=linkStartConflictArgs(settings,me.id,task.id,startIP,startCode,startedNow);
+      // Early rejection is for clarity; the INSERT below is the actual atomic gate.
+      await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
+      const ownGuard=source?`NOT EXISTS (
           SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
-          AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))
-        )`).bind(attempt,me.id,task.id,a,b,available,startedNow+attemptSeconds*1000,
-        clientIP(req),await deviceCode(req,env),me.id,task.id,startedNow,LINK_CONFIRM_WINDOW_MS,startedNow);
-      const writes=replaceAttempt?await env.DB.batch([
-        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?')
-          .bind(startedNow,replaceAttempt,me.id,task.id,startedNow),
-        reserve
-      ]):[await reserve.run()];
-      if(!writes[writes.length-1].meta?.changes)fail(409,'Đang có yêu cầu cấp link hoặc lượt chờ xác minh. Không tạo thêm link.');
-    }else if(task.category==='link'){
-      // Manual links have no provider creation API.
-      const started=await env.DB.batch([
-        env.DB.prepare('UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?')
-          .bind(startedNow,me.id,task.id,startedNow),
-        insertAttempt
-      ]);
-      if(!started[1].meta?.changes)fail(409,'Bạn còn lượt chưa xác minh. Hãy tiếp tục phiên cũ, không tạo lượt mới.');
-    }else await insertAttempt.run();
+          AND id<>? AND ((available_at>=0 AND expires_at>?) OR (available_at<0 AND -available_at+?>?))
+        )`:`NOT EXISTS (
+          SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL
+          AND available_at<0 AND -available_at+?>?
+        )`;
+      const ownArgs=source?[me.id,task.id,replaceAttempt||'',startedNow,LINK_CONFIRM_WINDOW_MS,startedNow]:[me.id,task.id,LINK_CONFIRM_WINDOW_MS,startedNow];
+      const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE ${ownGuard} AND (${LINK_START_CONFLICT}) IS NULL`)
+        .bind(...baseArgs,...ownArgs,...conflictArgs);
+      // Only expire a previous unreturned attempt after the replacement actually won the gate.
+      const expire=env.DB.prepare(`UPDATE task_attempts SET expires_at=? WHERE user_id=? AND task_id=?
+         AND id<>? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?
+         AND (?=0 OR id=?) AND EXISTS (SELECT 1 FROM task_attempts WHERE id=?)`)
+        .bind(startedNow,me.id,task.id,attempt,startedNow,source?1:0,replaceAttempt||'',attempt);
+      const writes=await env.DB.batch([reserve,expire]);
+      if(!writes[0].meta?.changes){
+        await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
+        fail(409,'Đang có yêu cầu cấp link hoặc lượt chờ xác minh. Không tạo thêm link.');
+      }
+    }else{
+      await env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
+        VALUES(?,?,?,?,?,?,?,?,?)`).bind(...baseArgs).run();
+    }
     let assignedUrl=task.url;
     if(source){
       try{
@@ -2256,13 +2299,23 @@ async function handler(req, env) {
             AND date(c.created_at,'+7 hours')=date(a.created_at,'+7 hours') AND c.created_at<=a.created_at
             AND ((a.reason='link_owner' AND lower(c.ip) LIKE a.network_pattern AND c.task_id=a.alert_task_id)
               OR (a.reason='link_browser_owner' AND c.device_code=a.device_code))
-           ORDER BY CASE WHEN c.status IN ('pending','approved') THEN 0 ELSE 1 END,c.created_at,c.id LIMIT 1) AS related_completion_id
+           ORDER BY CASE WHEN c.status IN ('pending','approved') THEN 0 ELSE 1 END,c.created_at,c.id LIMIT 1) AS related_completion_id,
+          (SELECT x.id FROM task_attempts x JOIN tasks xt ON xt.id=x.task_id
+           WHERE xt.category='link' AND x.user_id<>a.user_id AND x.created_at<=a.created_at
+            AND x.expires_at>CAST(strftime('%s',a.created_at) AS INTEGER)*1000
+            AND date(x.created_at,'+7 hours')=date(a.created_at,'+7 hours')
+            AND ((a.reason='link_reserved_ip' AND lower(x.ip) LIKE a.network_pattern AND x.task_id=a.alert_task_id)
+              OR (a.reason='link_reserved_browser' AND x.device_code=a.device_code))
+           ORDER BY x.created_at DESC,x.id LIMIT 1) AS related_attempt_id
         FROM alerts a LEFT JOIN tasks t ON t.id=a.alert_task_id
       )
       SELECT e.*,u2.email AS owner_email,u2.name AS owner_name,c.user_id AS owner_user_id,
-         c.status AS owner_completion_status,c.created_at AS owner_submitted_at,ot.title AS owner_task_title
+         c.status AS owner_completion_status,c.created_at AS owner_submitted_at,ot.title AS owner_task_title,
+         x.user_id AS reserved_user_id,ru.email AS reserved_email,ru.name AS reserved_name,
+         x.created_at AS reserved_at,rt.title AS reserved_task_title
       FROM evidence e LEFT JOIN task_completions c ON c.id=e.related_completion_id
         LEFT JOIN users u2 ON u2.id=c.user_id LEFT JOIN tasks ot ON ot.id=c.task_id
+        LEFT JOIN task_attempts x ON x.id=e.related_attempt_id LEFT JOIN users ru ON ru.id=x.user_id LEFT JOIN tasks rt ON rt.id=x.task_id
       ORDER BY e.created_at DESC`).all();
       const alertCount=await env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts
         FROM risk_events WHERE event_type IN ('link_ip_quota_denied','link_browser_quota_denied')
