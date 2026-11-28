@@ -531,6 +531,35 @@ async function event(env, req, type, userId = null, detail = '') {
 }
 // Audit thiết bị chỉ là mô tả User-Agent để Admin đối chiếu, không phải định danh cứng.
 // Ghi nhật ký vào risk_events đang có: không cần migration, không ảnh hưởng Lúa.
+// Anti-Fraud 3.0: coarse advisory observations, never authorization or reward evidence.
+function linkObservationTags(req,check){
+ const reported=req.headers.get('X-TL-Link-Signals')||'';
+ // Client data is untrusted. Missing or malformed values must remain unknown.
+ const valid=/^[01?]{3}$/.test(reported);
+ const tags=[];
+ if(valid&&reported[0]==='1')tags.push('automation_reported');
+ if(valid&&reported[1]==='1')tags.push('emulator_reported');
+ if(valid&&reported[2]==='1')tags.push('graphics_reported');
+ const ua=req.headers.get('user-agent')||'';
+ if(/\b(?:bluestacks|noxplayer|ldplayer|mumuplayer|genymotion|android sdk built for x86|sdk_gphone|goldfish|ranchu)\b/i.test(ua))tags.push('emulator_ua');
+ if(check?.hosting==='hosting')tags.push('hosting');
+ return {tags,coverage:valid?'reported':'unknown',hosting:check?.hosting==='not_detected'?'not_detected':check?.hosting==='hosting'?'hosting':'unknown'};
+}
+async function recordLinkObservation(env,req,userId,taskId,check){
+ try{
+  const observation=linkObservationTags(req,check);
+  // Log only advisory positive signals; absence of records never proves a device is safe.
+  if(!observation.tags.length)return;
+  const detail=observation.tags.join(',')+':'+taskId+'|start';
+  const ip=clientIP(req),code=await deviceCode(req,env);
+  // Deduplicate the same observation per account/task/network/browser per Vietnam day.
+  await env.DB.prepare(`INSERT INTO risk_events(id,user_id,event_type,detail,ip,device_code)
+   SELECT ?,?,'link_preflight_observation',?,?,? WHERE NOT EXISTS (
+    SELECT 1 FROM risk_events WHERE user_id=? AND event_type='link_preflight_observation' AND detail=? AND ip=? AND device_code=?
+    AND date(created_at,'+7 hours')=date('now','+7 hours'))`)
+   .bind(id(),userId,detail,ip,code,userId,detail,ip,code).run();
+ }catch(error){console.warn('Link advisory observation unavailable:',String(error?.message||error));}
+}
 async function recordTaskDevice(env, req, userId, attemptId, stage) {
   try {
     await event(env, req, 'task_device_' + stage, userId,
@@ -1622,6 +1651,7 @@ async function handler(req, env) {
     // Resume of a previously returned confirmation is deliberately not a new issuance.
     if(task.category==='link'&&settings.link_proxy_enabled==='1'){
       const check=await checkLinkProxy(env.IPAPI_API_KEY,clientIP(req));
+      await recordLinkObservation(env,req,me.id,task.id,check);
       if(check.status!=='clear'){
         const blocked=check.status==='blocked';
         await event(env,req,blocked?'link_proxy_blocked':'link_proxy_unavailable',me.id,check.reason+':'+task.id+'|start');
@@ -1629,6 +1659,7 @@ async function handler(req, env) {
         fail(503,'Chưa kiểm tra được kết nối mạng. Tạm dừng cấp Link để bảo vệ lượt truy cập. Vui lòng thử lại sau.',{network_check:'unavailable'});
       }
     }
+    if(task.category==='link'&&settings.link_proxy_enabled!=='1')await recordLinkObservation(env,req,me.id,task.id,null);
     if(task.category==='link'){
       const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
       if(ongoing){
@@ -2446,7 +2477,16 @@ async function handler(req, env) {
           FROM risk_events WHERE event_type IN ('link_proxy_blocked','link_proxy_unavailable')
           AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY event_type,reason`).all()
       ]);
-      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
+      const [observed,observedCount]=await Promise.all([
+        env.DB.prepare(`SELECT r.*,u.email,u.name,t.title AS task_title
+          FROM risk_events r LEFT JOIN users u ON u.id=r.user_id
+          LEFT JOIN tasks t ON t.id=substr(r.detail,instr(r.detail,':')+1,instr(r.detail,'|')-instr(r.detail,':')-1)
+          WHERE r.event_type='link_preflight_observation' AND date(r.created_at,'+7 hours')=date('now','+7 hours')
+          ORDER BY r.created_at DESC LIMIT 100`).all(),
+        env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts FROM risk_events
+          WHERE event_type='link_preflight_observation' AND date(created_at,'+7 hours')=date('now','+7 hours')`).first()
+      ]);
+      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},link_observations:{events:observed.results,count:observedCount?.n||0,accounts:observedCount?.accounts||0},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
         network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
         ipv4_inventory:ipv4Inventory(networkSeen.results,unverifiedIPv4.results),
