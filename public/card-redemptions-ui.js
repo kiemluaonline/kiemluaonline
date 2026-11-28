@@ -70,7 +70,7 @@ export async function adminCardRedemptionsPage(ctx){
  const ready=data.secret_ready&&data.rate>0;
  return `<div class="cards-page cards-admin">
   ${heading('🎁 Quản lý đổi thẻ cào','Admin bật/tắt nhận yêu cầu, xét duyệt và phát mã thẻ thật cho đúng thành viên.')}
-  <div class="card cards-admin-settings">
+  <details class="card admin-fold"><summary>⚙ Cấu hình dịch vụ đổi thẻ</summary><div class="cards-admin-settings">
     <h3>Cấu hình dịch vụ đổi thẻ</h3>
     <div class="cards-meta"><span>Khóa bảo mật mã thẻ: <b>${data.secret_ready?'Đã thiết lập':'Chưa thiết lập'}</b></span><span>Tỷ giá: <b>${data.rate?money(data.rate)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'}</b></span><span>Phí đổi thẻ: <b>${money(data.fee_lua)} Lúa / thẻ dưới ${money(data.free_from_vnd||25000)}đ; từ mức này miễn phí</b></span></div>
     <p class="cards-note">Để thay đổi phí đổi thẻ, vào <b>Admin → Cài đặt → Phí xử lý rút tiền và đổi thẻ cào</b>. Phí áp dụng cho các yêu cầu mới, không thay đổi yêu cầu cũ.</p>
@@ -90,7 +90,7 @@ export async function adminCardRedemptionsPage(ctx){
      <p>Nhấn tạo khóa để sao chép một giá trị bí mật ngẫu nhiên. Dán vào Cloudflare Workers → Settings → Variables and Secrets với tên <code>CARD_VOUCHER_SECRET</code>. Không gửi khóa cho ai, không đăng công khai và không đổi khóa sau khi đã phát thẻ.</p>
      <button class="btn alt" type="button" data-action="card-generate-key">🔑 Tạo và sao chép khóa bí mật</button>
     </div>
-  </div>
+  </div></details>
   <div class="cards-warning" role="note">⚠️ Kiểm tra Chống gian lận và đối chiếu tài khoản trước khi phát thẻ, vì mã thẻ sau khi phát không thể thu hồi.</div>
   <div class="cards-section-head"><h3>Yêu cầu đổi thẻ từ thành viên</h3><span>${items.length} yêu cầu</span></div>
   ${adminListControls?adminListControls('cards',items,[['pending|approved','Cần xử lý'],['pending','Chờ duyệt'],['approved','Chờ phát thẻ'],['delivered','Đã phát thẻ'],['rejected','Từ chối'],['all','Tất cả']],'Tìm tên, email, nhà mạng…'):''}
