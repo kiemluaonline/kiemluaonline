@@ -9,7 +9,7 @@ const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.Tr
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',adminReviewStatus:'pending',adminReviewPage:1,fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false,payoutMethod:'bank' };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',adminReviewStatus:'pending',adminReviewPage:1,adminListFilters:{},fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false,payoutMethod:'bank' };
 let paidRotationTimer=null,paidRefreshTimer=null;
 function stopPaidRotation(){
  if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
@@ -135,7 +135,7 @@ const languageSwitcher = () => '<div class="language-toggle" role="group" aria-l
  '<button type="button" data-language="vi" aria-pressed="true">Tiếng Việt</button>'+
  '<button type="button" data-language="hmn" aria-pressed="false">Hmoob</button></div>';
 const select = (key,label,options,value) => `<div class="field"><label for="${esc(key)}">${esc(label)}</label><select name="${esc(key)}" id="${esc(key)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></div>`;
-const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM CÓ LÚA • HỆ THỐNG THÀNH VIÊN</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
+const heading = (title,sub,action='') => `<div class="page-head"><div><div class="eyebrow">TRẠM CÓ LÚA • ${state.me?.user?.role==='admin'?'QUẢN TRỊ':'HỆ THỐNG THÀNH VIÊN'}</div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${action}</div>`;
 const empty = (title,body='') => `<div class="empty"><div class="big">☘</div><h3>${esc(title)}</h3><p>${esc(body)}</p></div>`;
 const table = (heads, rows) => rows.length ? `<div class="table-wrap"><table><thead><tr>${heads.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` : empty('Chưa có dữ liệu thực tế', 'Các bản ghi sẽ xuất hiện sau khi người dùng thực hiện thao tác.');
 const formData = form => Object.fromEntries(new FormData(form).entries());
@@ -723,6 +723,10 @@ async function initGlobalPaidCard(userId){
  }
 }
 function renderSidebarNav(nav,user){
+ if(user.role==='admin'){
+  const groups=[['Điều hành',['admin-overview']],['Xử lý yêu cầu',['admin-reviews','admin-withdrawals','admin-shop-orders','admin-cards']],['Quản lý',['admin-tasks','admin-users','admin-shop']],['Hệ thống',['admin-security','admin-settings','profile']]];
+  return groups.map(([label,keys])=>`<div class="admin-nav-group"><div class="admin-nav-label">${esc(label)}</div>${keys.map(key=>{const item=nav.find(n=>n[0]===key);return item?`<button type="button" data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${item[1]}</span>${esc(item[2])}</button>`:'';}).join('')}</div>`).join('');
+ }
  return nav.map(([key,symbol,name])=>{
   if(user.role!=='member'||key!=='tasks')return `<button type="button" data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`;
   const open=state.view==='tasks';
@@ -751,7 +755,7 @@ function renderShell(){
  stopPaidRotation(); // tránh giữ timer của người đăng nhập trước
  const nav=state.me.user.role==='admin'?ADMIN_NAV:NAV;
  const user=state.me.user;
- app.className='';app.innerHTML=`<div class="layout"><aside class="sidebar" id="site-menu" aria-label="Menu điều hướng">
+ app.className='';app.innerHTML=`<div class="layout ${user.role==='admin'?'admin-modern':''}"><aside class="sidebar" id="site-menu" aria-label="Menu điều hướng">
   <div class="side-header"><div class="side-brand"><span class="brand-mark brand-mark-image"><img src="/logo.svg" alt="" width="40" height="40"></span><span>${esc(state.meta.site_name)}</span></div><button type="button" class="sidebar-close" data-action="close-menu" aria-label="Đóng menu">×</button></div>
   <div class="side-kicker">${user.role==='admin'?'BẢNG QUẢN TRỊ':'KHÔNG GIAN THÀNH VIÊN'}</div>
   <div class="sidebar-language">${languageSwitcher()}</div>
@@ -850,6 +854,7 @@ async function navigate(view,{checkedMe=false}={}){
   const balance=document.getElementById('topBalance');if(balance)balance.textContent='🌾 '+fmt(fresh.balance)+' Lúa';
   const html=await page(view);if(!current())return;
   root.innerHTML=html;
+  if(user.role==='admin')root.querySelectorAll('[data-admin-list]').forEach(node=>applyAdminListFilter(node.dataset.adminList,root));
   if(view==='overview'&&user.role==='member'){overviewNoticePending=true;showOverviewNotice();}
  }catch(e){
   if(!current())return;
@@ -881,8 +886,8 @@ async function page(view){
  switch(view){
  case 'overview':return overview();case 'tasks':return tasks();case 'shop':return shopPage({api,esc,dt,heading,state});case 'shop-orders':return shopOrdersPage({api,esc,heading,fmt,dt});case 'referrals':return referrals();
  case 'benefits':return benefits();case 'withdrawals':return memberPayoutPage();case 'history':return history();case 'profile':return profile();
- case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt});case 'admin-users':return adminUsers();
- case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();case 'admin-cards':return adminCardRedemptionsPage({api,esc,heading,dt});
+ case 'admin-overview':return adminOverview();case 'admin-tasks':return adminTasks();case 'admin-shop':return adminShopPage({api,esc,dt,field,select,heading,state});case 'admin-shop-orders':return adminShopOrdersPage({api,esc,heading,fmt,dt,adminListControls});case 'admin-users':return adminUsers();
+ case 'admin-reviews':return adminReviews();case 'admin-withdrawals':return adminWithdrawals();case 'admin-cards':return adminCardRedemptionsPage({api,esc,heading,dt,adminListControls});
  case 'admin-security':return adminSecurity();case 'admin-settings':return adminSettings();
  default:return empty('Trang chưa được cấu hình');
  }
@@ -1339,13 +1344,47 @@ async function profile(){
  ${field('new_password','Mật khẩu mới (≥10 ký tự)','', 'required type="password" minlength="8" autocomplete="new-password"')}
  <button class="btn" type="submit">Lưu mật khẩu mới</button><p class="note">Đổi xong, tất cả phiên đăng nhập sẽ bị đăng xuất.</p></form>${googleProfilePanel()}</div>`;
 }
+// Lists filter only the records returned by the existing Admin API.
+function adminListControls(key,records,options,placeholder='Tìm trong danh sách đã tải…'){
+ const saved=state.adminListFilters[key]||{};
+ const status=options.some(([v])=>v===saved.status)?saved.status:options[0][0];
+ return `<div class="admin-list-controls" data-admin-list="${esc(key)}">
+  <div class="admin-status-tabs" role="group" aria-label="Lọc trạng thái">${options.map(([v,label])=>{const count=records.filter(r=>adminStatusMatches(v,String(r.status))).length;return `<button type="button" class="btn ${status===v?'':'alt'}" aria-pressed="${status===v}" data-action="admin-list-status" data-list="${esc(key)}" data-status="${esc(v)}">${esc(label)} <span>${fmt(count)}</span></button>`;}).join('')}</div>
+  <input type="search" data-admin-list-search="${esc(key)}" aria-label="Tìm kiếm danh sách" placeholder="${esc(placeholder)}" value="${esc(saved.search||'')}">
+  <p class="small muted" data-admin-list-result="${esc(key)}" aria-live="polite"></p></div>`;
+}
+function adminStatusMatches(filter,status){return filter==='all'||filter.split('|').includes(status);}
+function applyAdminListFilter(key,root=document.getElementById('viewContent')){
+ if(!root)return;
+ const controls=root.querySelector('[data-admin-list="'+key+'"]');if(!controls)return;
+ const selected=controls.querySelector('[data-action="admin-list-status"][aria-pressed="true"]');
+ const status=selected?.dataset.status||'all',search=controls.querySelector('[data-admin-list-search]')?.value||'';
+ state.adminListFilters[key]={status,search};
+ const needle=search.trim().toLocaleLowerCase('vi');let shown=0;
+ const rows=root.querySelectorAll('[data-admin-list-item="'+key+'"]');
+ rows.forEach(row=>{row.hidden=!adminStatusMatches(status,row.dataset.adminStatus)||!row.textContent.toLocaleLowerCase('vi').includes(needle);if(!row.hidden)shown++;});
+ const result=controls.querySelector('[data-admin-list-result]');if(result)result.textContent=fmt(shown)+' / '+fmt(rows.length)+' hồ sơ trong danh sách đã tải';
+}
 async function adminOverview(){
  const d=await api('/api/admin/overview');
- return `${heading('Trung tâm điều hành','Số liệu đọc trực tiếp từ cơ sở dữ liệu, không dùng số liệu minh họa.')}
- <section class="grid four">${[['Thành viên',d.members],['Nhiệm vụ đang mở',d.tasks],['Bằng chứng chờ duyệt',d.pending_evidence],['Rút tiền chờ xử lý',d.pending_withdrawals]].map(([label,val])=>`<article class="card"><div class="metric-label">${esc(label)}</div><div class="metric">${fmt(val)}</div></article>`).join('')}</section>
- <section class="grid two section"><article class="card"><h3>🌾 Tổng Lúa phát hành</h3><div class="metric">${fmt(d.total_issued_lua)}</div><p>Giá trị cộng Lúa từ mọi loại thưởng đã ghi nhận. Đây không phải số tiền thật đã thanh toán.</p></article>
- <article class="card"><h3>🛡️ Hoạt động chống gian lận</h3><div class="metric">${fmt(d.risk_events_today)}</div><p>Sự kiện được ghi nhận hôm nay, giờ Việt Nam.</p><button data-go="admin-security" class="btn alt">Kiểm tra sự kiện →</button></article></section>
- <div class="callout section">Để có dữ liệu thật, hãy tạo nhiệm vụ, cấu hình chính sách thưởng và quy đổi. Trạng thái chi trả chỉ được cập nhật sau khi đã chuyển khoản thật.</div>`;
+ const n=v=>v===null||v===undefined?'—':fmt(v);
+ const queue=(icon,label,value,go,tone,sub='')=>`<button type="button" class="admin-queue-card ${tone}" data-go="${go}"><span class="admin-tile-icon" aria-hidden="true">${icon}</span><strong>${n(value)}</strong><span>${esc(label)}</span>${sub?`<small>${esc(sub)}</small>`:''}</button>`;
+ const quick=(icon,label,go,action='')=>`<button type="button" class="admin-quick-card" ${action?`data-action="${action}"`:`data-go="${go}"`}><span aria-hidden="true">${icon}</span><strong>${esc(label)}</strong><i aria-hidden="true">›</i></button>`;
+ const withdrawalTotal=d.approved_withdrawals==null?d.pending_withdrawals:Number(d.pending_withdrawals)+Number(d.approved_withdrawals);
+ return `<section class="admin-dashboard">
+ <div class="admin-welcome"><div><span>🌾 TRẠM CÓ LÚA</span><h2>Trung tâm quản trị</h2><p>Tổng quan hoạt động và yêu cầu cần xử lý</p></div><button type="button" class="btn alt" data-go="admin-overview">↻ Tải lại</button></div>
+ <article class="admin-lua-hero"><span>Tổng Lúa đã phát hành</span><strong>${n(d.total_issued_lua)} Lúa</strong><small>Tổng cộng Lúa đã ghi nhận, không phải tiền đã thanh toán.</small><div class="admin-hero-stats"><button type="button" data-go="admin-users"><b>${n(d.members)}</b><span>Thành viên</span></button><button type="button" data-go="admin-tasks"><b>${n(d.tasks)}</b><span>Nhiệm vụ đang mở</span></button></div></article>
+ <h3 class="admin-section-title">Cần xử lý</h3><div class="admin-queue-grid">
+ ${queue('✓','Chờ duyệt nhiệm vụ',d.pending_evidence,'admin-reviews','amber','Link '+n(d.pending_link_reviews)+' · App '+n(d.pending_app_reviews))}
+ ${queue('↗','Yêu cầu rút tiền',withdrawalTotal,'admin-withdrawals','green','Chờ duyệt '+n(d.pending_withdrawals)+' · Chờ trả '+n(d.approved_withdrawals))}
+ ${queue('▣','Đơn TikTok',d.pending_shop_orders,'admin-shop-orders','blue','Chờ xác minh / giải quyết')}
+ ${queue('🎁','Đổi thẻ cào',d.pending_cards,'admin-cards','purple','Chờ duyệt / phát thẻ')}
+ </div>
+ <button type="button" class="admin-security-link" data-go="admin-security"><span class="admin-tile-icon">🛡️</span><span><strong>Chống gian lận</strong><small>${n(d.risk_events_today)} sự kiện hôm nay · không đồng nghĩa vi phạm</small></span><b>›</b></button>
+ <h3 class="admin-section-title">Quản lý nhanh</h3><div class="admin-quick-grid">
+ ${quick('☻','Thành viên','admin-users')}${quick('▤','Nhiệm vụ','admin-tasks')}${quick('🔗','Nguồn Link','','admin-jump-sources')}
+ ${quick('🛍️','Mua sắm','admin-shop')}${quick('✓','Lịch sử duyệt','','admin-jump-history')}${quick('⚙','Cài đặt','admin-settings')}
+ </div><p class="small muted">Số liệu đọc từ máy chủ khi mở hoặc tải lại. Dấu —: chưa tải được số liệu.</p></section>`;
 }
 async function shrinkAppLogo(file){
  if(!file || !file.type.startsWith('image/'))throw new Error('Vui lòng chọn ảnh logo.');
@@ -1454,7 +1493,7 @@ async function adminTasks(){
  const rows=selected.map(t=>{
   const max=Math.max(1,Math.min(20,Number(t.link_24h_limit)||1));
   const quota=t.category==='link'?(max>1||t.repeat_policy==='daily'?max+' lượt/ngày':'1 lượt/tài khoản'):(t.repeat_policy==='daily'?'1 lượt/ngày':'1 lượt/tài khoản');
-  return `<tr>
+  return `<tr data-admin-list-item="tasks" data-admin-status="${t.is_active?'active':'inactive'}">
    <td><strong>${esc(t.title)}</strong><div class="small muted">${esc(t.category)} • ${esc(t.repeat_policy)}</div><div class="btn-row"><button class="btn alt sm" data-action="edit-task" data-id="${esc(t.id)}">Sửa</button><button class="btn danger sm" data-action="delete-task" data-id="${esc(t.id)}" data-title="${esc(t.title)}">Xóa</button></div>
     ${t.category==='link'?`<div class="small muted">Trang đích cuối (dán vào bên rút gọn link):</div><button type="button" class="btn alt sm" data-action="copy" data-value="${esc(location.origin+'/verify-link?link_return='+encodeURIComponent(t.id))}">📋 Sao chép trang đích</button>`:''}
    </td>
@@ -1470,17 +1509,17 @@ async function adminTasks(){
  return `${heading('Quản lý nhiệm vụ','Cấu hình phần thưởng, số lượt và trạng thái hiển thị đúng trên thẻ nhiệm vụ thành viên.')}
  <div class="task-filter-row">${[['link','🔗 Link rút gọn'],['app','📱 App']].map(([value,label])=>`<button type="button" class="btn ${category===value?'':'alt'}" data-action="admin-task-filter" data-filter="${value}">${label}</button>`).join('')}</div>
  <div class="btn-row section"><button type="button" class="btn alt" data-action="admin-open-reviews">Duyệt nhiệm vụ ${category==='link'?'Link':'App'}</button></div>
- ${taskForm(edit||{},sources)}
- ${category==='link'?` <section class="card section" id="link-source-manager"><h3>🔗 Quản lý nguồn rút gọn</h3><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
+ <details class="card section admin-fold" ${edit?'open':''}><summary>${edit?'✏️ Chỉnh sửa nhiệm vụ':'＋ Tạo nhiệm vụ mới'}</summary>${taskForm(edit||{},sources)}</details>
+ ${category==='link'?` <details class="card section admin-fold" id="link-source-manager"><summary>🔗 Quản lý nguồn rút gọn (${sources.length})</summary><p class="note">Thêm hoặc sửa nguồn GET/JSON theo tài liệu nhà cung cấp. Không cần sửa mã nguồn cho API tương thích. Nguồn khác định dạng hoặc không cung cấp API có thể dùng link thủ công.</p>
  ${sources.length?sources.map(sourceSettingsForm).join(''):'<p class="note">Chưa thêm nguồn nào. Link thủ công vẫn hoạt động bình thường.</p>'}${sourceSettingsForm()}
 
- </section>`:''}
- <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${selected.length})</h3><p class="note">Admin kiểm tra bằng chứng theo từng loại nhiệm vụ. Số lượt hôm nay tính theo giờ Việt Nam.</p>${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>
+ </details>`:''}
+ <section class="section admin-tasks-panel"><h3>Nhiệm vụ đã tạo (${selected.length})</h3><p class="note">Admin kiểm tra bằng chứng theo từng loại nhiệm vụ. Số lượt hôm nay tính theo giờ Việt Nam.</p>${adminListControls('tasks',selected.map(t=>({status:t.is_active?'active':'inactive'})),[['all','Tất cả'],['active','Đang mở'],['inactive','Tạm ẩn']],'Tìm tên nhiệm vụ, nguồn…')}${table(['Tên / trang đích','Lúa','Hạn mức / hôm nay','Duyệt','Trạng thái','Thao tác'],rows)}</section>
  ${retired.length?`<details class="card section"><summary>Lưu trữ nhiệm vụ cũ (${retired.length})</summary><p class="note">Không hiển thị cho thành viên. Giữ lịch sử và dữ liệu cũ.</p>${retired.map(t=>`<p>${esc(t.title)} · ${esc(t.category)}</p>`).join('')}</details>`:''}`;
 }
 async function adminUsers(){
  const d=await api('/api/admin/users');
- return `${heading('Quản lý thành viên','Tra cứu tài khoản, số Lúa và tình trạng sử dụng.')}<section class="card">${table(['Thành viên','Tài khoản','Số dư','IP đăng ký','Trạng thái','Thao tác'],d.users.map(u=>`<tr>
+ return `${heading('Quản lý thành viên','Tra cứu tài khoản, số Lúa và tình trạng sử dụng.')}<section class="card admin-mobile-records">${adminListControls('users',d.users,[['all','Tất cả'],['active','Hoạt động'],['suspended','Đã khóa']],'Tìm tên, email, IP…')}${table(['Thành viên','Tài khoản','Số dư','IP đăng ký','Trạng thái','Thao tác'],d.users.map(u=>`<tr data-admin-list-item="users" data-admin-status="${esc(u.status)}">
  <td>${esc(u.name)}<div class="small muted">${dt(u.created_at)}</div></td><td>${esc(u.email)}</td><td class="num">${fmt(u.balance)}</td><td>${adminIP(u.joined_ip,u.ipv4_observation)}</td><td>${chip(u.status)}</td>
  <td>${u.role==='admin'?'Admin':`<div class="btn-row">
   ${u.status==='active'?`
@@ -1543,7 +1582,7 @@ async function adminWithdrawals(){
  const risks=new Map((riskData.profiles||[]).map(x=>[x.user_id,x]));
  return `${heading('Yêu cầu rút tiền','Bước 1: Duyệt yêu cầu. Bước 2: Chuyển tiền thật. Bước 3: Đánh dấu đã thanh toán.')}
  <div class="callout">Website chỉ ghi nhận yêu cầu và trạng thái. Bạn chuyển tiền theo thông tin nhận của từng yêu cầu, đối chiếu giao dịch thực tế rồi mới bấm “Đã thanh toán”.</div>
- <section class="card section">${table(['Thành viên','Số tiền','Kênh nhận','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr>
+ <section class="card section admin-mobile-records">${adminListControls('withdrawals',d.withdrawals,[['pending|approved','Cần xử lý'],['pending','Chờ duyệt'],['approved','Chờ trả'],['paid','Đã trả'],['rejected|invalid_account','Từ chối / sai STK'],['all','Tất cả']],'Tìm tên, email, STK, mã lệnh…')}${table(['Thành viên','Số tiền','Kênh nhận','Trạng thái','Thao tác'],d.withdrawals.map(w=>`<tr data-admin-list-item="withdrawals" data-admin-status="${esc(w.status)}">
  <td>${esc(w.name)}<div class="small muted">${esc(w.email)}</div><div class="small muted">${dt(w.created_at)}</div>${risks.get(w.user_id)?.level==='serious'?`<div class="small red">⚠ Cần đối chiếu trước khi thanh toán • ${fmt(risks.get(w.user_id).score)}/100</div>`:''}</td>
  <td class="num">${fmt(w.amount)} Lúa<div class="small muted">Phí: ${fmt(w.fee_lua)} Lúa</div><div class="small muted">Tổng giữ: ${fmt(Number(w.amount)+Number(w.fee_lua||0))} Lúa</div><div class="green">${fmt(w.vnd_amount)} ₫</div></td>
  <td><strong>${esc(w.payment_method==='zalopay'?'Ví ZaloPay':w.bank_name)}</strong><br><code>${esc(w.bank_account)}</code><div class="small">${esc(w.bank_owner)}</div><div class="small green">Mã lệnh: <strong>${esc(withdrawalCode(w.id))}</strong></div></td>
@@ -2010,6 +2049,7 @@ function updateCardPreview(form){
  }
 }
 app.addEventListener('input',e=>{
+ if(e.target.matches('[data-admin-list-search]'))applyAdminListFilter(e.target.dataset.adminListSearch);
  if(e.target.matches('form[data-form="withdraw"] [name="amount"]'))updateWithdrawalPreview(e.target.closest('form'));
  if(e.target.matches('#admin-review-search')){
   const needle=e.target.value.trim().toLocaleLowerCase('vi');
@@ -2066,7 +2106,7 @@ app.addEventListener('click',async e=>{
  if(e.target.classList?.contains('task-result-cover')){closeTaskResultModal();return;}
  const el=e.target.closest('button[data-go],button[data-auth],button[data-action]');if(!el)return;
  if(el.dataset.auth){state.authMode=el.dataset.auth;renderAuth();return;}
- if(el.dataset.go){if(!state.me)return;if(state.me.user.role==='member'&&el.dataset.go==='tasks'&&['app','link'].includes(el.dataset.filter))state.taskFilter=el.dataset.filter;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
+ if(el.dataset.go){if(!state.me)return;if(state.me.user.role==='admin'&&el.closest('.admin-dashboard')){if(el.dataset.go==='admin-reviews'){state.adminReviewStatus='pending';state.adminReviewPage=1;state.adminReviewFilter='link';}const listKey=({'admin-withdrawals':'withdrawals','admin-shop-orders':'orders','admin-cards':'cards'})[el.dataset.go];if(listKey)delete state.adminListFilters[listKey];}if(state.me.user.role==='member'&&el.dataset.go==='tasks'&&['app','link'].includes(el.dataset.filter))state.taskFilter=el.dataset.filter;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
   if(act==='payout-method'){
@@ -2202,6 +2242,14 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='checkin'){await api('/api/checkin','POST',{});toast('Điểm danh thành công.');await afterAction('benefits');return;}
   if(act==='delete-link-source'){if(!localizedConfirm('Xóa nguồn '+el.dataset.name+'? Chỉ xóa được nguồn chưa gắn với nhiệm vụ hoặc phiên đã tạo.'))return;await api('/api/admin/link-sources/remove','POST',{id:el.dataset.id});toast('Đã xóa nguồn.');await navigate('admin-tasks');return;}
   if(act==='add-link-source'){const panel=document.getElementById('new-link-source');if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});}return;}
+  if(act==='admin-list-status'){
+   if(state.me?.user?.role!=='admin')return;
+   const group=el.closest('[data-admin-list]');if(!group)return;
+   group.querySelectorAll('[data-action="admin-list-status"]').forEach(btn=>{const on=btn===el;btn.setAttribute('aria-pressed',String(on));btn.classList.toggle('alt',!on);});
+   applyAdminListFilter(group.dataset.adminList);return;
+  }
+  if(act==='admin-jump-sources'){if(state.me?.user?.role!=='admin')return;state.adminTaskFilter='link';state.taskEdit=null;await navigate('admin-tasks');const panel=document.getElementById('link-source-manager');if(panel){panel.open=true;panel.scrollIntoView({block:'start'});}return;}
+  if(act==='admin-jump-history'){if(state.me?.user?.role!=='admin')return;state.adminReviewFilter='link';state.adminReviewStatus='approved';state.adminReviewPage=1;await navigate('admin-reviews');return;}
   if(act==='admin-task-filter'){state.adminTaskFilter=el.dataset.filter==='app'?'app':'link';state.taskEdit=null;await navigate('admin-tasks');return;}
   if(act==='admin-open-reviews'){state.adminReviewFilter=state.adminTaskFilter;state.adminReviewStatus='pending';state.adminReviewPage=1;await navigate('admin-reviews');return;}
   if(act==='admin-review-filter'){state.adminReviewFilter=['app','link','archive'].includes(el.dataset.filter)?el.dataset.filter:'link';state.adminReviewPage=1;await navigate('admin-reviews');return;}
