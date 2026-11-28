@@ -2333,3 +2333,34 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(hint({...views,auto_reward_ready:true},'api'),/đúng 1 View/);
  console.log('PASS: Admin source capability choices, old settings preserved, helpful guidance.');
 }
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const code=client.slice(client.indexOf('function showReturnGate('),client.indexOf('async function processLinkReturn('));
+ const app={className:'',innerHTML:''};
+ const state={returnChallenge:{a:4,b:2,expiresAt:Date.now()+60000}};
+ const render=new Function('app','state','esc',code+'\nreturn renderLinkReturnModal;')(app,state,v=>String(v));
+ render();
+ assert.match(app.innerHTML,/return-gate-icon/);
+ assert.match(app.innerHTML,/Trạm Có Lúa/);
+ assert.match(app.innerHTML,/4 \+ 2 = \?/);
+ assert.doesNotMatch(app.innerHTML,/Hạn xác minh:|60 phút|return-gate-deadline/);
+ assert.match(app.innerHTML,/data-action="leave-link-return"/);
+ assert.match(app.innerHTML,/Quay lại nhiệm vụ/);
+ assert.match(app.innerHTML,/data-form="link-return-captcha"/);
+ assert.match(app.innerHTML,/name="answer"/);
+ assert.doesNotMatch(app.innerHTML,/data-action="close-modal"|href="\/"/);
+ const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+ assert.match(html,/width:min\(100%,400px\)/);
+ assert.match(html,/min-height:48px/);
+ const actions=[];
+ const liveState={me:{user:{role:'member'}},returnChallenge:{expiresAt:12345}};
+ let confirmChoice=false,busy=false;
+ const leave=new Function('state','app','localizedConfirm','rememberReturn','clearLinkReturnQuery','renderShell','navigate',code+'\nreturn leaveLinkReturn;')(
+  liveState,{querySelector:()=>({disabled:busy})},msg=>{assert.match(msg,/quá hạn/);return confirmChoice;},
+  expiry=>actions.push(['save',expiry]),()=>actions.push('clear'),()=>actions.push('shell'),async v=>actions.push(v));
+ await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
+ confirmChoice=true;busy=true;await leave();assert.deepEqual(actions,[]);assert.ok(liveState.returnChallenge);
+ busy=false;await leave();assert.deepEqual(actions,[['save',12345],'clear','shell','tasks']);assert.equal(liveState.returnChallenge,null);
+ console.log('PASS: branded verification gate hides deadline, explicit warning before leaving, saved recovery, no departure during submission.');
+}
