@@ -9,7 +9,7 @@ const localizedPrompt=(message,defaultValue='')=>window.prompt((typeof window.Tr
 const app = document.getElementById('app');
 // Trang chủ được viết sẵn trong HTML để cả khách và công cụ tìm kiếm đọc được.
 const publicHomeHTML = app.innerHTML;
-const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',adminReviewStatus:'pending',adminReviewPage:1,fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false,payoutMethod:'bank' };
+const state = { meta: {}, me: null, googlePending: null, accountHold: null, view: 'overview', authMode: 'login', adminTasks: [], taskEdit: null, attempt: null, returnChallenge: null, pendingTaskRules: null, memberTasks: [], taskFilter:'link',adminTaskFilter:'link',adminReviewFilter:'link',adminReviewStatus:'pending',adminReviewPage:1,adminReviewRetryOnly:false,fraudFilter:'all',fraudSearch:'',shopCategory:'all',shopEdit:null,savedPayoutAccounts:[],savedManagerOpen:false,payoutMethod:'bank' };
 let paidRotationTimer=null,paidRefreshTimer=null;
 function stopPaidRotation(){
  if(paidRotationTimer!==null){clearInterval(paidRotationTimer);paidRotationTimer=null;}
@@ -1567,7 +1567,9 @@ function renderReviewCheckView(c){
 async function adminReviews(){
  const category=state.adminReviewFilter;
  const status=state.adminReviewStatus;
- const d=await api('/api/admin/reviews?category='+encodeURIComponent(category)+'&status='+encodeURIComponent(status)+'&page='+state.adminReviewPage);
+ const retryOnly=category==='app'&&status==='rejected'&&state.adminReviewRetryOnly;
+ const d=await api('/api/admin/reviews?category='+encodeURIComponent(category)+'&status='+encodeURIComponent(status)+'&page='+state.adminReviewPage+(retryOnly?'&retry_only=1':''));
+ const scopeLabel=({link:'Link',app:'App',archive:'Lưu trữ'})[category];
  const filtered=d.reviews.filter(c=>c.status===status&&(category==='archive'?!['link','app'].includes(c.category):c.category===category));
  const page=Number(d.page)||1,pageSize=Number(d.page_size)||150,total=Number(d.total)||0,pages=Math.max(1,Math.ceil(total/pageSize));
  const statusLabels={pending:'Chờ duyệt',approved:'Đã duyệt',rejected:'Từ chối'};
@@ -1579,8 +1581,9 @@ async function adminReviews(){
  ${category==='link'&&status==='pending'?`
  <div class="callout section">🔗 <strong>${fmt(pendingReturns)} lượt quay về đang chờ đối soát</strong> trong danh sách đang tải. <strong>${fmt(fastReturns)} lượt bị đánh dấu quay về quá nhanh.</strong> Đây là tín hiệu cần kiểm tra, không phải bằng chứng gian lận. Khách chưa được cộng Lúa; chỉ duyệt khi có đối soát nguồn thu hợp lệ.</div>
  <div class="callout section"><strong>Đối chiếu với Lentopone / nhà cung cấp khác:</strong> so cùng nhiệm vụ, IP và mốc giờ Việt Nam; tham khảo loại máy và trình duyệt. Có thể sao chép từng IP. Loại thiết bị lấy từ User-Agent (có thể giả), còn IP chung mạng không chứng minh cùng một người. <strong>Không tự duyệt</strong> chỉ dựa trên các dấu hiệu này hoặc việc quay về trang đích.</div>
- <div class="callout section"><strong>Link tự quay về:</strong> “Đã truy cập trang đích” chỉ là tín hiệu kỹ thuật. Không đọc được mã đã nhập trên dịch vụ rút gọn và không có xác nhận doanh thu. Phải kiểm tra nguồn tiền hợp lệ trước khi duyệt Lúa.</div>`:''}<div class="callout section"><strong>Quản lý dung lượng bằng chứng:</strong> Sau khi Duyệt hoặc Từ chối, Admin có thể xóa ảnh và nội dung bằng chứng, nhưng giữ nguyên hồ sơ nhiệm vụ, kết quả xét duyệt và số Lúa. Bằng chứng đang chờ duyệt được bảo vệ, không thể xóa.
- <div class="section">${d.processed_evidence_count>0?`<p class="note"><strong>Có ${fmt(d.processed_evidence_count)} hồ sơ đã xử lý còn bằng chứng.</strong> Thao tác hàng loạt sẽ xóa bằng chứng của TẤT CẢ những hồ sơ đó, kể cả hồ sơ không hiển thị bên dưới.</p><button type="button" class="btn danger sm proof-delete-all" data-action="erase-all-processed-evidence" data-count="${Number(d.processed_evidence_count)}">🗑 Xóa tất cả bằng chứng đã xử lý</button>`:'<p class="note">Hiện không có bằng chứng đã xử lý cần dọn.</p>'}</div></div>
+ <div class="callout section"><strong>Link tự quay về:</strong> “Đã truy cập trang đích” chỉ là tín hiệu kỹ thuật. Không đọc được mã đã nhập trên dịch vụ rút gọn và không có xác nhận doanh thu. Phải kiểm tra nguồn tiền hợp lệ trước khi duyệt Lúa.</div>`:''}${status==='pending'?'<div class="callout section">🔒 Hồ sơ chờ duyệt được bảo vệ, không thể xóa.</div>':retryOnly?'<div class="callout section">Chỉ hiển thị bản ghi tối thiểu để cho phép làm lại App. Ảnh và nội dung bằng chứng đã bị xóa vĩnh viễn.</div>':`<div class="callout section"><strong>Dọn hồ sơ ${statusLabels[status]} · ${scopeLabel}</strong><p class="small">Xóa vĩnh viễn ảnh và nội dung bằng chứng, bỏ hồ sơ khỏi danh sách này. Giữ dữ liệu tối thiểu phục vụ số Lúa, lịch sử và chống trùng lượt. Không xóa mục khác.</p>
+ ${total>0?`<button type="button" class="btn danger sm proof-delete-all" data-action="erase-all-processed-evidence" data-status="${status}" data-category="${category}" data-count="${total}">🗑 Xóa tất cả ${statusLabels[status]} (${fmt(total)})</button>`:'<p class="note">Không có hồ sơ cần dọn trong mục này.</p>'}</div>`}
+ ${category==='app'&&status==='rejected'?`<div class="section"><button class="btn alt sm" data-action="admin-review-retry-only">${retryOnly?'‹ Trở lại danh sách Từ chối':'Quản lý lượt App đã khóa sau khi dọn'}</button></div>`:''}
  <section class="card section admin-reviews-panel"><div class="admin-review-search-wrap"><label for="admin-review-search">🔎 Tìm nhanh trong danh sách đã tải</label><input id="admin-review-search" type="search" placeholder="Tên, email, nhiệm vụ, IP, loại thiết bị…" autocomplete="off"><p class="small muted">${statusLabels[status]}: ${fmt(total)} hồ sơ • Trang ${fmt(page)}/${fmt(pages)} • Tìm trong trang hiện tại.</p></div>
  ${filtered.length?table(['Thành viên / Nhiệm vụ','Bằng chứng','Thưởng','Đối chiếu IP / thiết bị','Duyệt'],filtered.map(c=>`<tr><td><strong>${esc(c.name)}</strong><div class="small">${esc(c.email)}</div><div class="muted small">${esc(c.title)} • ${dt(c.created_at)}</div></td>
  <td style="max-width:270px;white-space:pre-wrap">${c.evidence_removed?'<span class="muted">🗑 Bằng chứng đã được xóa</span>':c.has_photo?`<div class="app-proof-cell"><strong>📷 Đã gửi ảnh</strong><p class="small muted">${esc(c.evidence||'Không ghi chú')}</p><button class="btn alt sm" data-action="view-photo" data-id="${esc(c.id)}" data-note="${esc(c.evidence||'')}">Xem ảnh bằng chứng</button></div>`:String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?`<strong class="green">🔗 Đã quay về và giải phép tính</strong>${String(c.evidence).includes('[LINK_RETURN_FAST_V1]')?'<p class="admin-link-risk-warning">⚠️ Cảnh báo: quay về quá nhanh (dưới 20 giây). Có thể do mở thẳng link đích. Cần đối soát độc lập trước khi duyệt.</p>':''}<div class="small muted">Chưa có xác nhận doanh thu từ đối tác.</div>${renderReviewCheckView(c)}<details><summary class="small">Xem ghi nhận phiên</summary><div class="small">${esc(c.evidence)}</div></details>`:esc(c.evidence||'(không có)')}</td><td><strong>${fmt(c.reward)} Lúa</strong></td><td>${category==='link'?`<div class="admin-task-audit">
@@ -1597,7 +1600,7 @@ async function adminReviews(){
     <p class="small muted">Mã trình duyệt không phải IMEI hay bằng chứng thiết bị vật lý.</p>
   </details>
  </div>`:dt(c.created_at)}</td>
- <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:c.has_evidence||c.status==='rejected'&&c.category==='app'?`<div class="btn-row section">${c.status==='rejected'&&c.category==='app'&&!String(c.period_key||'').startsWith('app_retry_rejected:')?`<button class="btn alt sm" data-action="allow-app-retry" data-id="${esc(c.id)}">↻ Cho làm lại</button>`:''}${c.has_evidence?`<button class="btn danger sm" data-action="erase-evidence" data-id="${esc(c.id)}">🗑 Xóa bằng chứng</button>`:''}</div>`:''}</td></tr>`)):empty('Không có nhiệm vụ '+statusLabels[status].toLowerCase(),'Chọn trạng thái khác hoặc tải lại danh sách.')}
+ <td>${chip(c.status)}${c.status==='pending'?`<div class="btn-row section"><button class="btn sm" data-action="review" data-colorsort="${c.evidence==='COLOR_SORT_NO_PHOTO_V1'?'1':'0'}" data-id="${esc(c.id)}" data-status="approved" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-fast-return="${String(c.evidence||'').includes('[LINK_RETURN_FAST_V1]')?'1':'0'}">${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'Duyệt sau đối soát':'Duyệt'}</button><button class="btn danger sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-return-signal="${String(c.evidence||'').startsWith('[LINK_RETURN_V1]')?'1':'0'}" data-app="${c.category==='app'?'1':'0'}">${c.category==='app'?'Từ chối · Khóa lượt':'Từ chối'}</button>${c.category==='app'?`<button class="btn alt sm" data-action="review" data-id="${esc(c.id)}" data-status="rejected" data-app="1" data-retry="1">Từ chối · Cho làm lại</button>`:''}</div>`:`<div class="btn-row section">${c.status==='rejected'&&c.category==='app'&&!String(c.period_key||'').startsWith('app_retry_rejected:')?`<button class="btn alt sm" data-action="allow-app-retry" data-id="${esc(c.id)}">↻ Cho làm lại</button>`:''}${!retryOnly?`<button class="btn danger sm" data-action="erase-review-record" data-id="${esc(c.id)}" data-status="${status}" data-category="${category}">🗑 Xóa hồ sơ</button>`:''}</div>`}</td></tr>`)):empty('Không có nhiệm vụ '+statusLabels[status].toLowerCase(),'Chọn trạng thái khác hoặc tải lại danh sách.')}
  <div class="btn-row section"><button type="button" class="btn alt" data-action="admin-review-page" data-page="${page-1}" ${page<=1?'disabled':''}>‹ Trang trước</button><button type="button" class="btn alt" data-action="admin-review-page" data-page="${page+1}" ${page>=pages?'disabled':''}>Trang sau ›</button><button type="button" class="btn alt" data-action="admin-review-page" data-page="${page}">↻ Tải lại</button></div></section>`;
 }
 async function adminWithdrawals(){
@@ -2268,15 +2271,16 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
   if(act==='admin-queue'&&state.me?.user?.role==='admin'){
    const view=el.dataset.view;if(!['admin-reviews','admin-withdrawals','admin-shop-orders','admin-cards'].includes(view))return;
    state.adminLocalFilters??={};state.adminLocalFilters[view]='work';
-   if(view==='admin-reviews'){state.adminReviewStatus='pending';state.adminReviewPage=1;}
+   if(view==='admin-reviews'){state.adminReviewStatus='pending';state.adminReviewPage=1;state.adminReviewRetryOnly=false;}
    await navigate(view);return;
   }
   if(act==='admin-open-sources'&&state.me?.user?.role==='admin'){
    state.adminTaskFilter='link';state.taskEdit=null;await navigate('admin-tasks');const panel=document.getElementById('link-source-manager');if(panel){panel.open=true;panel.scrollIntoView({block:'start'});}return;
   }
-  if(act==='admin-open-reviews'){state.adminReviewFilter=state.adminTaskFilter;state.adminReviewStatus='pending';state.adminReviewPage=1;await navigate('admin-reviews');return;}
-  if(act==='admin-review-filter'){state.adminReviewFilter=['app','link','archive'].includes(el.dataset.filter)?el.dataset.filter:'link';state.adminReviewPage=1;await navigate('admin-reviews');return;}
-  if(act==='admin-review-status'){state.adminReviewStatus=['pending','approved','rejected'].includes(el.dataset.status)?el.dataset.status:'pending';state.adminReviewPage=1;await navigate('admin-reviews');return;}
+  if(act==='admin-open-reviews'){state.adminReviewFilter=state.adminTaskFilter;state.adminReviewStatus='pending';state.adminReviewPage=1;state.adminReviewRetryOnly=false;await navigate('admin-reviews');return;}
+  if(act==='admin-review-filter'){state.adminReviewFilter=['app','link','archive'].includes(el.dataset.filter)?el.dataset.filter:'link';state.adminReviewPage=1;state.adminReviewRetryOnly=false;await navigate('admin-reviews');return;}
+  if(act==='admin-review-status'){state.adminReviewStatus=['pending','approved','rejected'].includes(el.dataset.status)?el.dataset.status:'pending';state.adminReviewPage=1;state.adminReviewRetryOnly=false;await navigate('admin-reviews');return;}
+  if(act==='admin-review-retry-only'){state.adminReviewRetryOnly=!state.adminReviewRetryOnly;state.adminReviewPage=1;await navigate('admin-reviews');return;}
   if(act==='admin-review-page'){if(el.disabled)return;state.adminReviewPage=Math.max(1,Math.min(1000000,Number(el.dataset.page)||1));await navigate('admin-reviews');return;}
   if(act==='edit-task'){state.taskEdit=el.dataset.id;await navigate('admin-tasks');document.querySelector('#task-form')?.scrollIntoView({behavior:'smooth'});return;}
   if(act==='reset-task'){state.taskEdit=null;await navigate('admin-tasks');return;}
@@ -2349,20 +2353,18 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
     await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id)+'/allow-retry','POST',{});
     toast('Đã cho phép làm lại nhiệm vụ App.');await afterAction('admin-reviews');return;
   }
-  if(act==='erase-evidence'){
-    if(!localizedConfirm('Bạn muốn XÓA VĨNH VIỄN ảnh/nội dung bằng chứng đã duyệt hoặc từ chối này? Không thể khôi phục bằng chứng. Lịch sử nhiệm vụ và Lúa của khách vẫn được giữ nguyên.'))return;
-    await api('/api/admin/reviews/'+encodeURIComponent(el.dataset.id)+'/erase-evidence','POST',{confirm:'DELETE_EVIDENCE'});
-    toast('Đã xóa bằng chứng. Vẫn giữ kết quả duyệt và Lúa của thành viên.');
-    await afterAction('admin-reviews');return;
-  }
-  if(act==='erase-all-processed-evidence'){
-    const count=Number(el.dataset.count);
-    if(!Number.isSafeInteger(count)||count<1){toast('Không có bằng chứng cần xóa. Hãy tải lại danh sách.',true);return;}
-    if(!localizedConfirm('CẢNH BÁO: Bạn sắp XÓA VĨNH VIỄN bằng chứng của '+count+' hồ sơ đã duyệt hoặc từ chối (kể cả hồ sơ cũ không hiển thị). Số Lúa và lịch sử nhiệm vụ không bị xóa. Bạn muốn tiếp tục?'))return;
-    const required='XOA '+count;
-    const answer=localizedPrompt('Để xác nhận xóa bằng chứng của đúng '+count+' hồ sơ, nhập '+required+':','');
-    if(answer!==required){toast('Đã hủy vì chưa nhập đúng '+required+'.',true);return;}
-    const result=await api('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE',expected_count:count});
+  if(act==='erase-review-record'||act==='erase-all-processed-evidence'){
+    const status=el.dataset.status,category=el.dataset.category,single=act==='erase-review-record';
+    const count=single?1:Number(el.dataset.count);
+    if(!['approved','rejected'].includes(status)||!['link','app','archive'].includes(category)||!Number.isSafeInteger(count)||count<1){toast('Mục xóa không hợp lệ. Hãy tải lại danh sách.',true);return;}
+    const label=(status==='approved'?'Đã duyệt':'Từ chối')+' · '+({link:'Link',app:'App',archive:'Lưu trữ'})[category];
+    if(!localizedConfirm('XÓA VĨNH VIỄN ảnh/nội dung bằng chứng và dọn '+count+' hồ sơ trong mục '+label+'? Không thể khôi phục bằng chứng. Không ảnh hưởng mục khác, số Lúa hoặc giới hạn lượt.'))return;
+    if(!single){
+      const required='XOA '+count;
+      const answer=localizedPrompt('Để xác nhận xóa đúng '+count+' hồ sơ trong mục '+label+', nhập '+required+':','');
+      if(answer!==required){toast('Đã hủy thao tác xóa.',true);return;}
+    }
+    const result=await api('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE',expected_count:count,status,category,...(single?{id:el.dataset.id}:{})});
     toast(result.message);await afterAction('admin-reviews');return;
   }
   if(act==='withdraw-admin'){
