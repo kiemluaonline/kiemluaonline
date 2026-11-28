@@ -205,7 +205,7 @@ export async function shopPage(ctx){
 }
 
 export async function adminShopPage(ctx){
-  const {api,esc,field,select,heading,state}=ctx;
+  const {api,esc,field,select,heading,state,adminListControls}=ctx;
   const d=await api('/api/admin/shop');
   const edit=d.products.find(p=>p.id===state.shopEdit)||{};
   const categories=shopCategories().filter(x=>x[0]!=='all');
@@ -213,7 +213,7 @@ export async function adminShopPage(ctx){
   const opts=d.products.filter(p=>p.is_active).map(p=>`<option value="${esc(p.id)}">${esc(p.title)}</option>`).join('');
   return `${heading('Quản lý mua sắm','Đăng sản phẩm TikTok Shop, nhận yêu cầu và gửi thông báo ngay trên Trạm Có Lúa.')}
    <div class="shop-admin-head"><span>🛍️ TikTok Shop</span><strong>${d.products.filter(p=>p.is_active).length} sản phẩm đang hiển thị</strong><strong>${pending.length} yêu cầu đang chờ</strong></div>
-   <div class="shop-admin-layout">
+   <details class="card section admin-fold" ${edit.id?'open':''}><summary>${edit.id?'✏️ Sửa sản phẩm':'＋ Thêm sản phẩm / kênh liên hệ'}</summary><div class="shop-admin-layout">
     <form class="card" data-form="shop-product" id="shop-product-form"><h3>${edit.id?'✏️ Chỉnh sửa sản phẩm':'✨ Thêm sản phẩm mới'}</h3><p class="note">Chỉ dán link sản phẩm hợp lệ. Không nhập thông tin nội bộ vào mô tả cho khách.</p>
      <input type="hidden" name="id" value="${esc(edit.id||'')}">
      ${field('shop-title','Tên sản phẩm',edit.title||'','required minlength="3" maxlength="110" placeholder="Tên sản phẩm TikTok Shop"')}
@@ -238,8 +238,8 @@ export async function adminShopPage(ctx){
       <button class="btn" type="submit">Lưu kênh liên hệ</button>
       <div class="shop-admin-tip">Thông tin này được dùng cho nút liên hệ ở trang mua sắm, không xuất hiện trên trang Admin khác.</div>
     </form>
-   </div>
-   <form class="card shop-showcase-admin" data-form="shop-showcase">
+   </div></details>
+   <details class="card section admin-fold"><summary>🛍️ Trang trưng bày & ảnh hướng dẫn</summary><form class="card shop-showcase-admin" data-form="shop-showcase">
      <h3>🛍️ Trang trưng bày TikTok Shop của Admin</h3>
      <p class="note">Dán link trang trưng bày mà bạn đã sao chép từ TikTok Shop. Khách sẽ thấy nút vào gian hàng ngay đầu mục “Mua sắm nhận Lúa”.</p>
      ${field('shop-showcase-url','Link trang trưng bày TikTok Shop',d.showcase_url||'','type="url" maxlength="900" placeholder="https://www.tiktok.com/... hoặc https://vt.tiktok.com/..."')}
@@ -270,12 +270,14 @@ export async function adminShopPage(ctx){
        </div>
      </form>`).join('')}</div>
      <p class="note">Ảnh được tự nén dưới 160 KB trước khi lưu vào D1, không làm ảnh hưởng sản phẩm, Lúa hoặc đơn hàng.</p>
-   </section>
+   </section></details>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Danh sách sản phẩm</h2><p>Bật/tắt hoặc sửa sản phẩm mà không ảnh hưởng nhiệm vụ cũ.</p></div></div>
-   ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product"><div class="shop-admin-product-icon">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
+   ${adminListControls?adminListControls('products',d.products.map(p=>({status:p.is_active?'active':'inactive'})),[['all','Tất cả'],['active','Đang hiển thị'],['inactive','Đang ẩn']],'Tìm sản phẩm…'):''}
+   ${d.products.length?`<div class="shop-admin-list">${d.products.map(p=>`<div class="shop-admin-product" data-admin-list-item="products" data-admin-status="${p.is_active?'active':'inactive'}"><div class="shop-admin-product-icon">${p.image_url?`<img src="${esc(p.image_url)}" alt="" loading="lazy">`:(categories.find(x=>x[0]===p.category)||categories.at(-1))[2]}</div><div><strong>${esc(p.title)}</strong><p>${p.is_active?'Đang hiển thị':'Đang ẩn'} · ${esc((categories.find(c=>c[0]===p.category)||[])[1]||p.category)}</p></div><button type="button" class="btn alt sm" data-action="shop-edit-product" data-id="${esc(p.id)}">Sửa</button></div>`).join('')}</div>`:'<p class="shop-admin-empty">Chưa có sản phẩm. Thêm sản phẩm đầu tiên ở biểu mẫu phía trên.</p>'}
    </section>
    <section class="shop-admin-section"><div class="shop-section-top"><div><h2>Yêu cầu sản phẩm từ khách</h2><p>Đối chiếu mã SP ở đầu thẻ với mã khách gửi trên Zalo/Telegram. Bạn có thể chọn sản phẩm có sẵn hoặc nhập link sản phẩm mới ngay tại yêu cầu để tự báo khách.</p></div><span class="shop-count">${pending.length} đang chờ</span></div>
-   ${d.requests.length?`<div class="shop-admin-requests">${d.requests.map(r=>`<article class="shop-admin-request"><div class="shop-request-top"><strong>${esc(r.code)}</strong><span class="shop-state shop-state-${esc(r.status)}">${r.status==='pending'?'Chờ xử lý':r.status==='ready'?'Đã có sản phẩm':'Từ chối'}</span></div>
+   ${adminListControls?adminListControls('requests',d.requests,[['pending','Chờ xử lý'],['ready','Đã có sản phẩm'],['rejected','Từ chối'],['all','Tất cả']],'Tìm mã SP, thành viên…'):''}
+   ${d.requests.length?`<div class="shop-admin-requests">${d.requests.map(r=>`<article class="shop-admin-request" data-admin-list-item="requests" data-admin-status="${esc(r.status)}"><div class="shop-request-top"><strong>${esc(r.code)}</strong><span class="shop-state shop-state-${esc(r.status)}">${r.status==='pending'?'Chờ xử lý':r.status==='ready'?'Đã có sản phẩm':'Từ chối'}</span></div>
     <p><strong>${esc(r.name)}</strong> · ${esc(r.email)}</p><p>${esc(r.note)} · ${r.channel==='zalo'?'Zalo':'Telegram'}</p>
     ${r.status==='pending'?`<div class="shop-admin-resolution"><label for="shop-resolve-${esc(r.id)}">Chọn sản phẩm đã thêm</label><select id="shop-resolve-${esc(r.id)}" data-shop-product-for="${esc(r.id)}"><option value="">-- Chọn sản phẩm --</option>${opts}</select>
      <div class="shop-admin-buttons"><button type="button" class="btn sm" data-action="shop-request-ready" data-id="${esc(r.id)}" ${opts?'':'disabled'}>✓ Đã có sản phẩm</button><button type="button" class="btn danger sm" data-action="shop-request-reject" data-id="${esc(r.id)}">Không tìm thấy</button></div>
