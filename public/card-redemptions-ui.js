@@ -11,6 +11,7 @@ export async function cardRedemptionsPage(ctx){
     <div class="cards-warning" role="status">⚠️ Chưa tải được chức năng đổi thẻ cào. Tính năng có thể đang chờ thiết lập hoặc kết nối máy chủ gặp sự cố. Vui lòng thử lại sau; ví Lúa của bạn không bị thay đổi bởi việc mở trang.</div></div>`;
  }
  const rate=Number(data.rate||0),fee=Number(data.fee_lua||0),items=data.redemptions||[];
+ const freeFrom=Number(data.free_from_vnd)||Infinity,initialFee=Number(data.denominations?.[0]||0)>=freeFrom?0:fee;
  const choices=(name,values,label)=>values.map((v,i)=>`<label class="cards-choice"><input type="radio" name="${name}" value="${esc(v)}" required ${i===0?'checked':''} ${data.enabled?'':'disabled'}><span>${esc(label(v))}</span></label>`).join('');
  return `<div class="cards-page">
   ${heading('🎁 Đổi Lúa lấy thẻ cào','Đổi Lúa thành thẻ cào điện thoại. Mã thẻ chỉ hiện cho tài khoản đã được phát thẻ.')}
@@ -19,20 +20,20 @@ export async function cardRedemptionsPage(ctx){
     <div class="cards-hero-icon" aria-hidden="true">🎁</div></div>
   ${!data.enabled?`<div class="cards-warning" role="status">⚠️ Chức năng đổi thẻ cào chưa được Admin mở. Bạn vẫn có thể xem lịch sử thẻ đã đổi ở phía dưới.</div>`:''}
   <div class="cards-columns">
-   <form class="card cards-exchange-form" data-form="card-redeem" data-fee="${fee}" data-rate="${rate}"><input type="hidden" name="expected_fee_lua" value="${fee}">
+   <form class="card cards-exchange-form" data-form="card-redeem" data-fee="${fee}" data-free-from="${freeFrom}" data-rate="${rate}"><input type="hidden" name="expected_fee_lua" value="${initialFee}">
      <h3>Chọn thẻ cào muốn đổi</h3>
      <fieldset class="cards-picker"><legend>Nhà mạng</legend><div class="cards-choice-grid">${choices('carrier',data.carriers||[],v=>v)}</div></fieldset>
      <fieldset class="cards-picker"><legend>Mệnh giá thẻ cào</legend><div class="cards-choice-grid">${choices('denomination_vnd',data.denominations||[],v=>money(v)+'đ')}</div></fieldset>
      <label for="card-quantity">Số lượng</label><div class="cards-quantity"><button type="button" data-action="card-quantity" data-delta="-1" aria-label="Giảm số lượng" disabled>−</button><input id="card-quantity" name="quantity" type="number" min="1" max="5" step="1" value="1" readonly aria-label="Số lượng" ${data.enabled?'':'disabled'}><button type="button" data-action="card-quantity" data-delta="1" aria-label="Tăng số lượng" ${data.enabled?'':'disabled'}>+</button></div>
-     <p class="cards-note cards-quantity-note">Tối đa 5 thẻ mỗi lần. Mỗi thẻ là một yêu cầu riêng và có phí riêng.</p>
+     <p class="cards-note cards-quantity-note">Tối đa 5 thẻ mỗi lần. Mỗi thẻ là một yêu cầu riêng.</p>
      <div class="cards-balance"><span>🌾 Số dư Lúa hiện có</span><strong>${money(data.balance)} Lúa</strong></div>
       <div class="cards-fee-preview" role="status">
        <strong>Chi tiết phí đổi thẻ</strong>
        <div><span>Tổng mệnh giá:</span><b id="card-face">${money((data.denominations||[])[0]||0)}đ</b></div>
        <div><span>Lúa đổi theo mệnh giá:</span><b id="card-base">${money(((data.denominations||[])[0]||0)*rate)} Lúa</b></div>
-       <div><span>Phí xử lý:</span><b id="card-fee">${money(fee)} Lúa</b></div>
-       <div class="cards-fee-total"><span>Tổng Lúa sẽ giữ:</span><b id="card-total">${money(((data.denominations||[])[0]||0)*rate+fee)} Lúa</b></div>
-       <p class="cards-note">Phí tính theo từng thẻ, được cộng thêm vào số Lúa đổi thẻ. Nếu Admin từ chối, toàn bộ số Lúa gồm cả phí được hoàn về ví.</p>
+       <div><span>Phí xử lý:</span><b id="card-fee">${initialFee?money(initialFee)+' Lúa':'Miễn phí'}</b></div>
+       <div class="cards-fee-total"><span>Tổng Lúa sẽ giữ:</span><b id="card-total">${money(((data.denominations||[])[0]||0)*rate+initialFee)} Lúa</b></div>
+       <p class="cards-note">${Number.isFinite(freeFrom)?'Miễn phí cho mỗi thẻ từ '+money(freeFrom)+'đ; thẻ dưới mức này tính '+money(fee)+' Lúa/thẻ.':'Phí tính theo từng thẻ.'} Nếu Admin từ chối, toàn bộ số Lúa gồm cả phí được hoàn về ví.</p>
       </div>
      <p class="cards-note">Tỷ giá đổi hiện tại: ${rate?money(rate)+' Lúa = 1 VNĐ':'Chưa thiết lập'}. Số Lúa cần đổi được tính theo mệnh giá và tỷ giá hiện hành. Khi gửi yêu cầu, Lúa được giữ tạm để tránh đổi trùng.</p>
      <button class="btn cards-primary" type="submit" ${data.enabled?'':'disabled'}>🎁 Gửi yêu cầu đổi thẻ</button>
@@ -71,7 +72,7 @@ export async function adminCardRedemptionsPage(ctx){
   ${heading('🎁 Quản lý đổi thẻ cào','Admin bật/tắt nhận yêu cầu, xét duyệt và phát mã thẻ thật cho đúng thành viên.')}
   <div class="card cards-admin-settings">
     <h3>Cấu hình dịch vụ đổi thẻ</h3>
-    <div class="cards-meta"><span>Khóa bảo mật mã thẻ: <b>${data.secret_ready?'Đã thiết lập':'Chưa thiết lập'}</b></span><span>Tỷ giá: <b>${data.rate?money(data.rate)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'}</b></span><span>Phí đổi thẻ: <b>${money(data.fee_lua)} Lúa / lần</b></span></div>
+    <div class="cards-meta"><span>Khóa bảo mật mã thẻ: <b>${data.secret_ready?'Đã thiết lập':'Chưa thiết lập'}</b></span><span>Tỷ giá: <b>${data.rate?money(data.rate)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'}</b></span><span>Phí đổi thẻ: <b>${money(data.fee_lua)} Lúa / thẻ dưới ${money(data.free_from_vnd||25000)}đ; từ mức này miễn phí</b></span></div>
     <p class="cards-note">Để thay đổi phí đổi thẻ, vào <b>Admin → Cài đặt → Phí xử lý rút tiền và đổi thẻ cào</b>. Phí áp dụng cho các yêu cầu mới, không thay đổi yêu cầu cũ.</p>
     <button type="button" class="btn alt sm" data-go="admin-settings">⚙️ Cài đặt phí đổi thẻ</button>
     ${!ready?`<div class="cards-warning">⚠️ Cần đặt CARD_VOUCHER_SECRET an toàn trong Cloudflare và tỷ giá Lúa/VNĐ trong Cài đặt trước khi bật. Không phát thẻ nếu chưa có mã thật.</div>`:''}
