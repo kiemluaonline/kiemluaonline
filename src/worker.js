@@ -1315,7 +1315,7 @@ async function handler(req, env) {
       const entry=done.get(t.id)||{n:0,pending:0};
       const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
       const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||(ipBlockedTasks.has(t.id)?'link_owner':denied))):null;
-      return {...t,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,link_needs_confirmation:t.category==='link'&&unfinished.has(t.id),
+      return {...t,url:t.category==='link'?'':t.url,category:displayCategory,app_referral_code:displayCategory==='app'?appCode:'',app_logo:displayCategory==='app'?(overrides.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||''):'',link_24h_limit:max,link_24h_count:used,link_blocked:blocked,link_needs_confirmation:t.category==='link'&&unfinished.has(t.id),
         my_status:t.category==='link'&&max>1?(used>=max?(entry.pending>0?'pending':'approved'):null):t.my_status};
     });
     return json({tasks,link_quota:{limit,used:used.total,blocked:denied,scope:'task',
@@ -2302,6 +2302,7 @@ async function handler(req, env) {
            ORDER BY CASE WHEN c.status IN ('pending','approved') THEN 0 ELSE 1 END,c.created_at,c.id LIMIT 1) AS related_completion_id,
           (SELECT x.id FROM task_attempts x JOIN tasks xt ON xt.id=x.task_id
            WHERE xt.category='link' AND x.user_id<>a.user_id AND x.created_at<=a.created_at
+            AND x.expires_at>CAST(strftime('%s',a.created_at) AS INTEGER)*1000
             AND date(x.created_at,'+7 hours')=date(a.created_at,'+7 hours')
             AND ((a.reason='link_reserved_ip' AND lower(x.ip) LIKE a.network_pattern AND x.task_id=a.alert_task_id)
               OR (a.reason='link_reserved_browser' AND x.device_code=a.device_code))
