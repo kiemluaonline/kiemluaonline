@@ -1267,7 +1267,7 @@ async function withdrawals(){
  const savedSelection=preferred?.id||'';
  const t=`${heading('Yêu cầu rút tiền','Đang chờ → Đã duyệt → Đã thanh toán. Admin kiểm tra trước khi chuyển khoản ngân hàng.')}`;
  const info=!meta.withdrawals_enabled?`<div class="callout">⚠ Admin chưa mở chi trả hoặc chưa thiết lập tỷ giá Lúa/VNĐ. Bạn chưa thể tạo yêu cầu rút tiền.</div>`:'';
- const form=`<form class="card" data-form="withdraw" data-balance="${Number(state.me.balance)||0}" data-fee-vnd="${Number(meta.withdrawal_fee_vnd)||2000}" data-free-from-vnd="${Number(meta.withdrawal_free_from_vnd)||25000}" data-min-vnd="${Number(meta.withdrawal_min_vnd)||5000}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="0">
+ const form=`<form class="card" data-form="withdraw" data-balance="${Number(state.me.balance)||0}" data-fee-vnd="${Number(meta.withdrawal_fee_vnd??2000)}" data-free-from-vnd="${Number(meta.withdrawal_free_from_vnd)||25000}" data-min-vnd="${Number(meta.withdrawal_min_vnd)||5000}" data-rate="${Number(meta.lua_per_vnd)||0}"><h3>Tạo yêu cầu rút</h3><input type="hidden" name="expected_fee_lua" value="0">
  <div class="withdraw-amount-wrap">
    ${field('amount','Số Lúa muốn rút','',`type="number" min="${meta.min_withdraw_lua}" step="1" required ${!meta.withdrawals_enabled?'disabled':''}`)}
    <button type="button" class="btn alt withdraw-max-btn" data-action="withdraw-max" ${!meta.withdrawals_enabled?'disabled':''}>Tối đa số dư</button>
@@ -1275,7 +1275,7 @@ async function withdrawals(){
  <div class="note">Rút tối thiểu 5.000đ • ${meta.lua_per_vnd?fmt(meta.lua_per_vnd)+' Lúa = 1 VNĐ':'Chưa có tỷ giá'} • Số dư: ${fmt(state.me.balance)} Lúa</div>
  <div class="withdraw-fee-preview" role="status">
    <strong>Phí rút tiền theo mệnh giá</strong>
-   <p class="note">5.000đ – 24.999đ: phí 2.000đ • Từ 25.000đ: miễn phí.</p>
+   <p class="note">Dưới ${fmt(meta.withdrawal_free_from_vnd??25000)}đ: phí ${fmt(meta.withdrawal_fee_vnd??2000)}đ • Từ ${fmt(meta.withdrawal_free_from_vnd??25000)}đ: miễn phí.</p>
    <div><span>Lúa dùng để rút:</span><b id="withdraw-base">—</b></div>
    <div><span>Phí rút:</span><b id="withdraw-fee">—</b></div>
    <div class="withdraw-fee-total"><span>Tổng Lúa sẽ giữ:</span><b id="withdraw-total">—</b></div>
@@ -1666,8 +1666,10 @@ async function adminSettings(){
  <p class="note">Mức rút tối thiểu đã cố định là 5.000đ theo tỷ giá Lúa/VNĐ bên dưới. Không cần đặt ngưỡng Lúa riêng.</p>
  ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}
  <h3>💸 Phí rút tiền và đổi thẻ cào</h3>
- <p class="note">Rút 5.000đ – 24.999đ: thu thêm 2.000đ bằng Lúa. Rút từ 25.000đ: miễn phí. Khách nhận đủ số tiền muốn rút. Mức phí rút tự động theo số tiền, Admin không cần cài đặt. Nếu yêu cầu bị từ chối, hoàn toàn bộ Lúa đã giữ gồm phí. Yêu cầu cũ vẫn giữ nguyên phí lúc gửi.</p>
- ${field('card_fee_lua','Phí mỗi thẻ dưới 25.000đ (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
+ <p class="note">Áp dụng ngưỡng miễn phí chung cho rút tiền và đổi thẻ cào. Dưới ngưỡng này, hệ thống thu theo phí tương ứng bên dưới. Đổi thẻ tính theo từng thẻ. Nhập phí 0 để miễn phí toàn bộ phương thức đó. Yêu cầu cũ giữ nguyên phí lúc gửi; khi từ chối, hoàn đủ Lúa và phí đã giữ.</p>
+ ${field('payout_free_from_vnd','Miễn phí từ (VNĐ) – áp dụng cả hai',s.payout_free_from_vnd,'type="number" min="5000" max="10000000" step="1" required')}
+ ${field('withdrawal_fee_vnd','Phí rút tiền dưới ngưỡng (VNĐ)',s.withdrawal_fee_vnd,'type="number" min="0" max="10000000" step="1" required')}
+ ${field('card_fee_lua','Phí mỗi thẻ dưới ngưỡng (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
  <h3>🛡️ Quota chống lạm dụng</h3>
  <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
  <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
