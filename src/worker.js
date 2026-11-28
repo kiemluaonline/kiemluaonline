@@ -1884,8 +1884,18 @@ async function handler(req, env) {
         "SELECT COUNT(*) n FROM risk_events WHERE date(created_at,'+7 hours')=date('now','+7 hours')"
       ];
       const r = await Promise.all(queries.map(q => env.DB.prepare(q).first()));
+      // Optional modules may not have been migrated yet. Null means unavailable, not zero.
+      const optionalCount=async sql=>{try{return Number((await env.DB.prepare(sql).first()).n);}catch{return null;}};
+      const [orders,cards,withdrawApproved,linkPending,appPending]=await Promise.all([
+        optionalCount("SELECT COUNT(*) n FROM shop_orders WHERE status IN ('pending','provisional')"),
+        optionalCount("SELECT COUNT(*) n FROM card_redemptions WHERE status IN ('pending','approved')"),
+        optionalCount("SELECT COUNT(*) n FROM withdrawals WHERE status='approved' OR (status='pending' AND admin_note LIKE '[TL_WITHDRAWAL_APPROVED] %')"),
+        optionalCount("SELECT COUNT(*) n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.status='pending' AND t.category='link'"),
+        optionalCount("SELECT COUNT(*) n FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.status='pending' AND (t.category='app' OR (t.category='other' AND EXISTS(SELECT 1 FROM settings s WHERE s.key='app_referral_code:'||t.id AND s.value<>'')))")
+      ]);
       return json({ members: r[0].n, tasks: r[1].n, pending_evidence: r[2].n,
-        pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n });
+        pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n,
+        pending_shop_orders:orders,pending_cards:cards,approved_withdrawals:withdrawApproved,pending_link_reviews:linkPending,pending_app_reviews:appPending });
     }
     if(m==='GET'&&p==='/api/admin/link-sources'){
       const rows=await env.DB.prepare("SELECT value FROM settings WHERE key LIKE 'link_source_config:%' ORDER BY key LIMIT 100").all();
