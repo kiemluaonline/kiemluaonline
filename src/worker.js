@@ -2269,12 +2269,73 @@ async function handler(req, env) {
   }
   fail(404, 'Không tìm thấy đường dẫn API.');
 }
+// Read-only provider reconciliation of previously submitted, eligible link attempts.
+// Never create a link, reopen a rejected completion, or infer a paid view from an error.
+async function retryPendingLinkViews(env){
+ const rows=await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.evidence,a.id AS attempt_id, snap.value AS snapshot,
+    ts.value AS task_config, retry.value AS retry_state
+  FROM task_completions c JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id AND a.task_id=c.task_id
+  JOIN tasks t ON t.id=c.task_id AND t.category='link' AND t.is_active=1
+  JOIN users u ON u.id=c.user_id AND u.status='active'
+  JOIN settings snap ON snap.key='link_source_attempt:'||a.id
+  JOIN settings ts ON ts.key='link_source_task:'||c.task_id
+  JOIN settings src ON src.key='link_source_config:'||json_extract(snap.value,'$.id')
+  JOIN settings alias ON alias.key='link_source_alias:'||json_extract(snap.value,'$.id')||':'||json_extract(snap.value,'$.alias') AND alias.value=a.id
+  LEFT JOIN settings retry ON retry.key='link_view_retry:'||c.id
+  WHERE c.status='pending' AND c.created_at>=datetime('now','-72 hours')
+    AND c.evidence LIKE '[LINK_RETURN_V1]%' AND instr(c.evidence,'[LINK_RETURN_FAST_V1]')=0
+    AND (instr(c.evidence,'; View API: 0 (chờ đối soát doanh thu)')>0 OR instr(c.evidence,'; View API: Chưa xác nhận (chờ đối soát doanh thu)')>0)
+    AND json_extract(snap.value,'$.verification')='api_auto' AND json_extract(snap.value,'$.baseline')=0
+    AND json_extract(ts.value,'$.verification')='api_auto' AND json_extract(ts.value,'$.id')=json_extract(snap.value,'$.id')
+    AND src.value=json_extract(snap.value,'$.config')
+    AND COALESCE(json_extract(retry.value,'$.stopped'),0)=0
+    AND COALESCE(json_extract(retry.value,'$.last'),0)<=?
+    AND NOT EXISTS(SELECT 1 FROM risk_events e WHERE e.user_id=c.user_id AND e.event_type='link_return_too_fast' AND e.detail='attempt:'||a.id)
+  ORDER BY COALESCE(json_extract(retry.value,'$.last'),0),c.created_at,c.id LIMIT 5`).bind(now()-14*60*1000).all();
+ for(const row of rows.results){
+  try{
+   const snap=JSON.parse(row.snapshot),source=await getSource(env,snap.id);
+   // Reserve this check; concurrent cron executions cannot claim the same old state.
+   const key='link_view_retry:'+row.id, stamp=JSON.stringify({last:now(),views:null,stopped:false});
+   const lease=row.retry_state===null||row.retry_state===undefined
+    ?await env.DB.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)').bind(key,stamp).run()
+    :await env.DB.prepare('UPDATE settings SET value=? WHERE key=? AND value=?').bind(stamp,key,row.retry_state).run();
+   if(!lease.meta?.changes)continue;
+   // Rotate unavailable sources too, so one disabled provider cannot starve the queue.
+   if(!autoRewardEnabled(env,source)||JSON.stringify(source)!==snap.config)continue;
+   let views=null;
+   try{views=await checkSourceView(source,snap.alias,sourceToken(env,source));}catch{}
+   await env.DB.prepare('UPDATE settings SET value=? WHERE key=? AND value=?').bind(JSON.stringify({last:now(),views,stopped:views!==null&&views>1}),key,stamp).run();
+   if(!autoRewardEligible({views,baseline:snap.baseline,fastReturn:false,confirmed:autoRewardEnabled(env,source),unchanged:true}))continue;
+   const approved=await env.DB.batch([
+    env.DB.prepare(`UPDATE task_completions SET status='approved',reviewed_at=CURRENT_TIMESTAMP,
+      evidence=evidence||' [API_AUTO_V1] Đã xét tự động sau đối soát lại.'
+      WHERE id=? AND status='pending' AND evidence=? AND created_at>=datetime('now','-72 hours')
+      AND EXISTS(SELECT 1 FROM users WHERE id=? AND status='active')
+      AND EXISTS(SELECT 1 FROM tasks WHERE id=? AND is_active=1 AND category='link')
+      AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)
+      AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)
+      AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)
+      AND EXISTS(SELECT 1 FROM settings WHERE key=? AND value=?)
+      AND EXISTS(SELECT 1 FROM task_attempts WHERE id=? AND consumed_by=? AND user_id=? AND task_id=?)
+      AND NOT EXISTS(SELECT 1 FROM risk_events WHERE user_id=? AND event_type='link_return_too_fast' AND detail=?)`)
+      .bind(row.id,row.evidence,row.user_id,row.task_id,TASK_SOURCE_PREFIX+row.task_id,row.task_config,SOURCE_PREFIX+snap.id,snap.config,ATTEMPT_SOURCE_PREFIX+row.attempt_id,row.snapshot,'link_source_alias:'+snap.id+':'+snap.alias,row.attempt_id,row.attempt_id,row.id,row.user_id,row.task_id,row.user_id,'attempt:'+row.attempt_id),
+    env.DB.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
+      SELECT ?,user_id,reward,'Tự động xác minh nguồn link','task',id FROM task_completions WHERE id=? AND status='approved' AND instr(evidence,'[API_AUTO_V1]')>0
+      ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`).bind(id(),row.id)
+   ]);
+   if(approved[0].meta?.changes)await giveReferral(env,row.user_id,await getSettings(env));
+  }catch(error){console.error('Link reconciliation failed:',error?.name||'Error');}
+ }
+}
 export default {
   async scheduled(event, env) {
+    if(event.cron==='*/15 * * * *'){await retryPendingLinkViews(env);return;}
     // Chỉ dọn dữ liệu tạm, không xóa lịch sử Lúa hay giao dịch ngân hàng.
     await env.DB.batch([
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now()),
       env.DB.prepare("DELETE FROM login_attempts WHERE created_at<datetime('now','-30 days')"),
+      env.DB.prepare("DELETE FROM settings WHERE key LIKE 'link_view_retry:%' AND NOT EXISTS(SELECT 1 FROM task_completions c WHERE c.id=substr(settings.key,17) AND c.status='pending' AND c.created_at>=datetime('now','-72 hours'))"),
       env.DB.prepare("DELETE FROM task_attempts WHERE created_at<datetime('now','-7 days')"),
       env.DB.prepare("DELETE FROM risk_events WHERE created_at<datetime('now','-90 days')"),
       env.DB.prepare("DELETE FROM settings WHERE key LIKE 'google_oauth_flow:%' AND json_extract(value,'$.expires')<?").bind(now()),

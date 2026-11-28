@@ -3,7 +3,7 @@
   "name": "tram-lua",
   "main": "src/worker.js",
   "keep_vars": true,
-  "triggers": { "crons": ["0 2 * * *"] },
+  "triggers": { "crons": ["0 2 * * *", "*/15 * * * *"] },
   "compatibility_date": "2026-11-12",
   "assets": {
     "directory": "./public",
