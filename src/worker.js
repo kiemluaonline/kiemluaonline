@@ -2299,13 +2299,22 @@ async function handler(req, env) {
             AND date(c.created_at,'+7 hours')=date(a.created_at,'+7 hours') AND c.created_at<=a.created_at
             AND ((a.reason='link_owner' AND lower(c.ip) LIKE a.network_pattern AND c.task_id=a.alert_task_id)
               OR (a.reason='link_browser_owner' AND c.device_code=a.device_code))
-           ORDER BY CASE WHEN c.status IN ('pending','approved') THEN 0 ELSE 1 END,c.created_at,c.id LIMIT 1) AS related_completion_id
+           ORDER BY CASE WHEN c.status IN ('pending','approved') THEN 0 ELSE 1 END,c.created_at,c.id LIMIT 1) AS related_completion_id,
+          (SELECT x.id FROM task_attempts x JOIN tasks xt ON xt.id=x.task_id
+           WHERE xt.category='link' AND x.user_id<>a.user_id AND x.created_at<=a.created_at
+            AND date(x.created_at,'+7 hours')=date(a.created_at,'+7 hours')
+            AND ((a.reason='link_reserved_ip' AND lower(x.ip) LIKE a.network_pattern AND x.task_id=a.alert_task_id)
+              OR (a.reason='link_reserved_browser' AND x.device_code=a.device_code))
+           ORDER BY x.created_at DESC,x.id LIMIT 1) AS related_attempt_id
         FROM alerts a LEFT JOIN tasks t ON t.id=a.alert_task_id
       )
       SELECT e.*,u2.email AS owner_email,u2.name AS owner_name,c.user_id AS owner_user_id,
-         c.status AS owner_completion_status,c.created_at AS owner_submitted_at,ot.title AS owner_task_title
+         c.status AS owner_completion_status,c.created_at AS owner_submitted_at,ot.title AS owner_task_title,
+         x.user_id AS reserved_user_id,ru.email AS reserved_email,ru.name AS reserved_name,
+         x.created_at AS reserved_at,rt.title AS reserved_task_title
       FROM evidence e LEFT JOIN task_completions c ON c.id=e.related_completion_id
         LEFT JOIN users u2 ON u2.id=c.user_id LEFT JOIN tasks ot ON ot.id=c.task_id
+        LEFT JOIN task_attempts x ON x.id=e.related_attempt_id LEFT JOIN users ru ON ru.id=x.user_id LEFT JOIN tasks rt ON rt.id=x.task_id
       ORDER BY e.created_at DESC`).all();
       const alertCount=await env.DB.prepare(`SELECT COUNT(*) AS n,COUNT(DISTINCT user_id) AS accounts
         FROM risk_events WHERE event_type IN ('link_ip_quota_denied','link_browser_quota_denied')
