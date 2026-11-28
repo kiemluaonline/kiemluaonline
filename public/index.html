@@ -4,22 +4,22 @@
   <script src="/return-entry.js"></script>
   <style>
     .link-return-entry #app > .welcome-site { display:none }
-    .return-gate { box-sizing:border-box; min-height:100vh; min-height:100dvh; display:grid; place-items:center; padding:24px 16px; background:radial-gradient(ellipse at 15% 15%,#e2f6e9 0,transparent 52%),radial-gradient(ellipse at 95% 85%,#fff1bf 0,transparent 45%),#f5f8f4; color:#14352a }
-    .return-gate .return-gate-card { box-sizing:border-box; width:min(100%,460px); background:#fff; border:1px solid #d6e5da; border-radius:26px; padding:clamp(20px,5vw,32px); box-shadow:0 18px 48px rgba(17,75,48,.12); }
-    .return-gate .return-gate-head { display:flex; align-items:center; gap:14px; margin:0 0 22px; }
-    .return-gate-icon { width:64px; height:64px; flex:0 0 64px; display:grid; place-items:center; border-radius:20px; background:linear-gradient(145deg,#dcf5e5,#fff1bc); border:1px solid #dcead8 }
-    .return-gate h1 { margin:0; font-size:clamp(21px,5.4vw,28px); font-weight:800; line-height:1.2; letter-spacing:-.025em; color:#123e2e }
+    .return-gate { box-sizing:border-box; min-height:100vh; min-height:100dvh; display:grid; place-items:center; padding:20px 18px; background:radial-gradient(ellipse at 15% 15%,#e2f6e9 0,transparent 52%),radial-gradient(ellipse at 95% 85%,#fff1bf 0,transparent 45%),#f5f8f4; color:#14352a }
+    .return-gate .return-gate-card { box-sizing:border-box; width:min(100%,400px); background:#fff; border:1px solid #d6e5da; border-radius:23px; padding:clamp(18px,4.8vw,26px); box-shadow:0 18px 48px rgba(17,75,48,.12); }
+    .return-gate .return-gate-head { display:flex; align-items:center; gap:12px; margin:0 0 16px; }
+    .return-gate-icon { width:58px; height:58px; flex:0 0 58px; display:grid; place-items:center; border-radius:20px; background:linear-gradient(145deg,#dcf5e5,#fff1bc); border:1px solid #dcead8 }
+    .return-gate h1 { margin:0; font-size:clamp(20px,5.1vw,25px); font-weight:800; line-height:1.2; letter-spacing:-.025em; color:#123e2e }
     .return-gate .return-gate-brand { margin:5px 0 0; color:#577263; font-size:15px; font-weight:600 }
-    .return-gate .return-gate-intro { margin:0 0 14px; color:#385347; font-size:16px; line-height:1.55 }
-    .return-gate form { display:grid; grid-template-columns:minmax(0,1fr); gap:12px }
+    .return-gate .return-gate-intro { margin:0 0 12px; color:#385347; font-size:15px; line-height:1.5 }
+    .return-gate form { display:grid; grid-template-columns:minmax(0,1fr); gap:10px }
     .return-gate label { display:flex; align-items:baseline; flex-wrap:wrap; gap:9px; font-size:15px; font-weight:600; color:#456255 }
-    .return-gate label strong { color:#143e2e; font-size:28px; font-weight:800 }
-    .return-gate input { box-sizing:border-box; width:100%; min-height:56px; padding:12px 15px; border:1.5px solid #8ebda6; border-radius:13px; font-size:20px; background:#fafffc; color:#123e2e }
+    .return-gate label strong { color:#143e2e; font-size:26px; font-weight:800 }
+    .return-gate input { box-sizing:border-box; width:100%; min-height:50px; padding:10px 13px; border:1.5px solid #8ebda6; border-radius:13px; font-size:20px; background:#fafffc; color:#123e2e }
     .return-gate input:focus { outline:3px solid #cbeed9; border-color:#16875d }
-    .return-gate button,.return-gate a.btn { box-sizing:border-box; min-height:54px; width:100%; border-radius:13px; font-size:17px; font-weight:750; background:#176c50; color:#fff; border:1px solid #176c50; box-shadow:0 5px 12px rgba(18,91,65,.13) }
-    .return-gate button.return-gate-back { margin-top:12px; background:#fff; color:#176c50; border:1px solid #c6d9cf; box-shadow:none }
+    .return-gate button,.return-gate a.btn { box-sizing:border-box; min-height:48px; width:100%; border-radius:13px; font-size:17px; font-weight:750; background:#176c50; color:#fff; border:1px solid #176c50; box-shadow:0 5px 12px rgba(18,91,65,.13) }
+    .return-gate button.return-gate-back { margin-top:10px; background:#fffdf4; color:#176c50; border:1px solid #e1d194; box-shadow:none }
     .return-gate button:disabled { opacity:.65; cursor:wait }
-    .return-gate .return-gate-foot { margin:15px 0 0; text-align:center; font-size:12px; color:#597266; line-height:1.4 }
+    .return-gate .return-gate-foot { margin:11px 0 0; text-align:center; font-size:12px; color:#597266; line-height:1.4 }
     .return-gate [role="alert"] { color:#9d3227; line-height:1.5; overflow-wrap:anywhere }
     @media(max-width:360px){ .return-gate { padding:12px } .return-gate .return-gate-head { gap:10px } .return-gate-icon { width:54px;height:54px;flex-basis:54px } }
   </style>
@@ -156,6 +156,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="/i18n-extra.js?v=20261117-member-safe-quota-v5" defer></script>
   <script src="/i18n.js?v=20261117-member-safe-quota-v2" defer></script>
-  <script type="module" src="/app.js?v=20261128-verify-back-v13"></script>
+  <script type="module" src="/app.js?v=20261128-verify-compact-v14"></script>
 </body>
 </html>
