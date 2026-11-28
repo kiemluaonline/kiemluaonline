@@ -664,7 +664,9 @@ assert.ok(Array.isArray(riskSummary.data.repeated_devices));
 const defaultQuota=await call('/api/admin/settings','GET',undefined,admCookie);
 assert.equal(defaultQuota.status,200);
 assert.equal(defaultQuota.data.settings.quota_user_tasks_daily,'25');
-assert.equal(defaultQuota.data.settings.quota_device_accounts_daily,'2');
+assert.equal(defaultQuota.data.settings.quota_device_accounts_daily,'1');
+assert.equal((await call('/api/admin/settings','PUT',{quota_device_accounts_daily:'2'},admCookie)).status,200);
+assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.settings.quota_device_accounts_daily,'1');
 assert.equal(defaultQuota.data.settings.quota_ip_accounts_daily,'6');
 assert.equal((await call('/api/admin/settings','PUT',{quota_ip_accounts_daily:'200'},admCookie)).status,400);
 // General quotas apply to non-link categories only.
@@ -717,7 +719,7 @@ assert.equal(blockedAccount.status,429,JSON.stringify(blockedAccount));
 assert.equal(blockedAccount.data.quota_scope,'user');
 // Quay về mặc định, không can thiệp dữ liệu ví.
 assert.equal((await call('/api/admin/settings','PUT',{
- quota_user_tasks_daily:'25',quota_device_accounts_daily:'2',quota_ip_accounts_daily:'6',
+ quota_user_tasks_daily:'25',quota_device_accounts_daily:'1',quota_ip_accounts_daily:'6',
  quota_link_ip_exclusive:'1',quota_link_tasks_ip_24h:'2'
 },admCookie)).status,200);
 const riskQuota=await call('/api/admin/risk-events','GET',undefined,admCookie);
