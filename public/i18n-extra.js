@@ -1,5 +1,12 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Cộng đồng Trạm Có Lúa": "Trạm Có Lúa lub zej zog",
+  "Trao đổi, nhận thông báo và hỗ trợ từ Admin.": "Sib tham, txais xov xwm thiab kev pab ntawm Admin.",
+  "Tham gia nhóm Telegram": "Koom pab pawg Telegram",
+  "Cộng đồng Telegram": "Telegram lub zej zog",
+  "Bật/tắt và quản lý liên kết mời nhóm": "Qhib/kaw thiab tswj qhov link caw koom pab pawg",
+  "Hiển thị nút tham gia Telegram": "Qhia lub pob koom Telegram",
+  "Liên kết mời nhóm Telegram": "Link caw koom pab pawg Telegram",
   "Đang kiểm tra thiết bị…": "Tab tom xyuas lub cuab yeej…",
   "Đang kết nối hệ thống…": "Tab tom txuas rau lub system…",
   "Chưa thể kết nối hệ thống": "Tseem txuas tsis tau rau lub system",
