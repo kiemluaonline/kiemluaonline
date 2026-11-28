@@ -1811,3 +1811,15 @@ body.task-result-open{overflow:hidden}
 .overview-notice-option{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid #d9e5d8;border-radius:12px;background:#f7fbf5;font-size:14px;color:#345744;min-height:45px;box-sizing:border-box}
 .overview-notice-option input{width:21px;height:21px;flex:0 0 21px;accent-color:#176c50;margin:0}
 .overview-notice .overview-notice-action{width:100%;min-height:48px;margin-top:13px;border:0;border-radius:13px;background:linear-gradient(105deg,#176c50,#24865c);color:#fff;font-weight:800;white-space:normal;box-shadow:0 5px 13px #176c502e}
+
+/* Member task navigation: collapsible sub-menu in the sidebar only. */
+.layout .nav .task-nav-parent{min-height:47px}
+.task-nav-chevron{margin-left:auto;flex:none;transition:transform .2s ease}
+.task-nav-parent[aria-expanded="true"] .task-nav-chevron{transform:rotate(180deg)}
+.layout .nav .task-nav-children{margin:5px 0 7px 24px;padding-left:12px;border-left:1px solid #61917a;display:grid;gap:5px}
+.layout .nav .task-nav-children[hidden]{display:none}
+.layout .nav .task-nav-children button{min-height:44px;border:1px solid transparent;padding:9px 10px;gap:8px;border-radius:10px;font-size:13px;white-space:normal;line-height:1.35}
+.layout .nav .task-nav-children button.active{background:#244f3d;border-color:#87af82;color:#fff;box-shadow:none}
+.task-nav-branch{flex:none;color:#99bfa1;font-weight:700}
+.layout .nav .task-nav-children button.active .task-nav-branch{color:#e8ca76}
+@media(prefers-reduced-motion:reduce){.task-nav-chevron{transition:none}}

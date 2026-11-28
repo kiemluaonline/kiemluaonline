@@ -676,6 +676,30 @@ async function initGlobalPaidCard(userId){
   }
  }
 }
+function renderSidebarNav(nav,user){
+ return nav.map(([key,symbol,name])=>{
+  if(user.role!=='member'||key!=='tasks')return `<button type="button" data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`;
+  const open=state.view==='tasks';
+  return `<div class="task-nav-group"><button type="button" id="task-nav-toggle" class="task-nav-parent ${open?'active':''}" data-action="toggle-task-nav" aria-expanded="${open}" aria-controls="task-nav-children"><span class="symbol">${symbol}</span><span>${esc(name)}</span><svg class="task-nav-chevron" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button>
+   <div id="task-nav-children" class="task-nav-children" ${open?'':'hidden'}>${[['link','🔗 Link'],['app','📱 Nhiệm vụ App']].map(([filter,label])=>`<button type="button" data-go="tasks" data-filter="${filter}" class="${open&&state.taskFilter===filter?'active':''}" ${open&&state.taskFilter===filter?'aria-current="page"':''}><span aria-hidden="true" class="task-nav-branch">–</span><span>${esc(label)}</span></button>`).join('')}</div></div>`;
+ }).join('');
+}
+function setTaskNavOpen(open){
+ const parent=document.getElementById('task-nav-toggle'),children=document.getElementById('task-nav-children');
+ if(!parent||!children)return;
+ parent.setAttribute('aria-expanded',String(Boolean(open)));
+ children.hidden=!open;
+}
+function syncSidebarSelection(view){
+ document.querySelectorAll('[data-go]').forEach(btn=>{
+  const sub=btn.closest('.task-nav-children');
+  const active=btn.dataset.go===view&&(!sub||btn.dataset.filter===state.taskFilter);
+  btn.classList.toggle('active',active);
+  if(sub){if(active)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');}
+ });
+ const parent=document.getElementById('task-nav-toggle');
+ if(parent){parent.classList.toggle('active',view==='tasks');setTaskNavOpen(view==='tasks');}
+}
 function renderShell(){
  document.body.classList.remove('task-result-open');
  stopPaidRotation(); // tránh giữ timer của người đăng nhập trước
@@ -685,7 +709,7 @@ function renderShell(){
   <div class="side-header"><div class="side-brand"><span class="brand-mark brand-mark-image"><img src="/logo.svg" alt="" width="40" height="40"></span><span>${esc(state.meta.site_name)}</span></div><button type="button" class="sidebar-close" data-action="close-menu" aria-label="Đóng menu">×</button></div>
   <div class="side-kicker">${user.role==='admin'?'BẢNG QUẢN TRỊ':'KHÔNG GIAN THÀNH VIÊN'}</div>
   <div class="sidebar-language">${languageSwitcher()}</div>
-  <nav class="nav">${nav.map(([key,symbol,name])=>`<button data-go="${key}" class="${state.view===key?'active':''}"><span class="symbol">${symbol}</span>${esc(name)}</button>`).join('')}</nav>
+  <nav class="nav">${renderSidebarNav(nav,user)}</nav>
   <div class="sidebar-bottom"><strong>${esc(user.name)}</strong>${esc(user.email)}<button data-action="logout">Đăng xuất ↗</button></div>
  </aside><button type="button" class="menu-backdrop" tabindex="-1" data-action="close-menu" aria-label="Đóng menu"></button><section class="main-area"><header class="topbar"><div class="topbar-leading"><button type="button" class="menu-toggle" id="menu-toggle" data-action="toggle-menu" aria-controls="site-menu" aria-expanded="false" aria-label="Mở menu"><span aria-hidden="true">☰</span></button><div class="topbar-title"><h1 id="topTitle">Bảng điều khiển</h1><p>Quản lý minh bạch • Cập nhật theo dữ liệu thật</p></div></div>
  <div class="top-right">${languageSwitcher()}<span class="balance-pill" id="topBalance">🌾 ${fmt(state.me.balance)} Lúa</span>
@@ -763,7 +787,7 @@ async function navigate(view){
  rememberMenu(view);
  const nav=state.me?.user.role==='admin'?ADMIN_NAV:NAV;
  const found=nav.find(n=>n[0]===view);
- document.querySelectorAll('[data-go]').forEach(btn=>btn.classList.toggle('active',btn.dataset.go===view));
+ syncSidebarSelection(view);
  const top=document.getElementById('topTitle');if(top)top.textContent=found?.[2]||'Tổng quan';
  const root=document.getElementById('viewContent');if(!root)return;
  root.innerHTML='<div class="app-loading" style="min-height:180px"><span class="spinner"></span></div>';
@@ -1153,7 +1177,6 @@ async function tasks(){
  return `${heading('Nhiệm vụ','Thông tin thanh toán, Lúa và an toàn lấy trực tiếp từ hệ thống.')}
  ${state.taskFilter==='link'?taskDashboardCard(stats,data):''}
  <div class="task-card-modern-section-head"><h3>Khám phá nhiệm vụ</h3><span>🌾 Tích Lúa mỗi ngày</span></div>
- <div class="task-filter-row">${[['app','📱 Nhiệm vụ App'],['link','🔗 Link']].map(([value,label])=>`<button type="button" class="btn ${state.taskFilter===value?'':'alt'} sm" data-action="filter-tasks" data-filter="${value}">${label}</button>`).join('')}</div>
  ${shownTasks.length?`<div class="grid task-card-modern-grid">${shownTasks.map(renderMemberTaskCard).join('')}</div>`:empty('Hiện chưa có nhiệm vụ','Admin cần tạo và bật nhiệm vụ thật. Website không tự thêm nhiệm vụ hoặc số Lúa giả.')}`;
 }
 async function referrals(){
@@ -1920,7 +1943,7 @@ app.addEventListener('click',async e=>{
  if(e.target.classList?.contains('task-result-cover')){closeTaskResultModal();return;}
  const el=e.target.closest('button[data-go],button[data-auth],button[data-action]');if(!el)return;
  if(el.dataset.auth){state.authMode=el.dataset.auth;renderAuth();return;}
- if(el.dataset.go){if(!state.me)return;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
+ if(el.dataset.go){if(!state.me)return;if(state.me.user.role==='member'&&el.dataset.go==='tasks'&&['app','link'].includes(el.dataset.filter))state.taskFilter=el.dataset.filter;const wasOpen=!!app.querySelector('.layout.menu-open');setMenuOpen(false);await navigate(el.dataset.go);if(wasOpen){const title=document.getElementById('topTitle');if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}return;}
  const act=el.dataset.action;
  try{
   if(act.startsWith('payout-account-')){
@@ -1982,7 +2005,7 @@ app.addEventListener('click',async e=>{
 if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));return;}
   if(act==='close-menu'){setMenuOpen(false,true);return;}
   if(act==='logout'){setMenuOpen(false);await api('/api/auth/logout','POST',{});state.me=null;state.accountHold=null;state.authMode='login';renderHome();return;}
-  if(act==='filter-tasks'){state.taskFilter=['app','link'].includes(el.dataset.filter)?el.dataset.filter:'link';await navigate('tasks');return;}
+  if(act==='toggle-task-nav'){if(state.me?.user?.role==='member')setTaskNavOpen(el.getAttribute('aria-expanded')!=='true');return;}
   if(act==='resume-link-confirmation'){await startTask(el.dataset.id);return;}
   if(act==='start-task'){const t=state.memberTasks.find(x=>x.id===el.dataset.id);if(t?.category==='app'){await startTask(el.dataset.id);return;}showTaskRules(el.dataset.id);return;}
   if(act==='cancel-task-rules'){

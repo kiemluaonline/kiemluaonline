@@ -1733,8 +1733,12 @@ console.log('PASS: compact member fraud card shows visible IP/device quota polic
 const taskTabsCode=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const taskTabsView=taskTabsCode.slice(taskTabsCode.indexOf('async function tasks(){'),
  taskTabsCode.indexOf('async function referrals(){'));
-assert.match(taskTabsView,/\['app','📱 Nhiệm vụ App'\]/);
-assert.match(taskTabsView,/\['link','🔗 Link'\]/);
+const sidebarTasks=taskTabsCode.slice(taskTabsCode.indexOf('function renderSidebarNav('),taskTabsCode.indexOf('function renderShell(){'));
+assert.match(sidebarTasks,/\['app','📱 Nhiệm vụ App'\]/);
+assert.match(sidebarTasks,/\['link','🔗 Link'\]/);
+assert.doesNotMatch(taskTabsView,/task-filter-row|data-action="filter-tasks"/);
+assert.match(sidebarTasks,/aria-controls="task-nav-children"/);
+assert.match(sidebarTasks,/user.role!=='member'/);
 assert.doesNotMatch(taskTabsView,/\['other','Khác'\]/);
 assert.doesNotMatch(taskTabsView,/\['all','Tất cả'\]|\['video','🎬 Video'\]/,
  'Neither All nor Video filter should be visible to members');
@@ -2451,4 +2455,20 @@ assert.match(latestAdminClient,/data-action="delete-link-source"/);
  assert.match(client,/cache:'no-store'/);
  assert.match(client,/Date\.now\(\)\+12\*60\*60\*1000/);
  console.log('PASS: per-account menu restoration, role validation, fresh GET and overview-only notice.');
+}
+
+{
+ const client=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const helper=client.slice(client.indexOf('function renderSidebarNav('),client.indexOf('function setTaskNavOpen('));
+ const state={view:'tasks',taskFilter:'app'};
+ const render=new Function('state','esc',helper+'\nreturn renderSidebarNav;')(state,String);
+ const nav=[['overview','◈','Tổng quan'],['tasks','▤','Nhiệm vụ']];
+ let html=render(nav,{role:'member'});
+ assert.match(html,/aria-expanded="true"/);
+ assert.match(html,/data-filter="app" class="active" aria-current="page"/);
+ assert.doesNotMatch(html,/data-filter="link" class="active"/);
+ state.view='overview';html=render(nav,{role:'member'});
+ assert.match(html,/aria-expanded="false"/);assert.match(html,/class="task-nav-children" hidden/);
+ assert.doesNotMatch(render(nav,{role:'admin'}),/task-nav-children/);
+ console.log('PASS: member-only collapsible task navigation, correct selected submenu, no page tabs.');
 }
