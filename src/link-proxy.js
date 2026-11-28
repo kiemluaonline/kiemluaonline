@@ -1,14 +1,17 @@
 // IP reputation is checked server-side, before new Link issuance.
-// Only the edge-observed IP is sent to IPQS; no account identifiers.
+// Only the edge-observed IP is sent to ipapi.is; no account identifiers.
 const cache=new Map();
 const pending=new Map();
 const TTL=60000;
 const MAX=512;
 export function classifyProxy(data){
- if(data?.success!==true||!['proxy','vpn','tor'].every(k=>typeof data[k]==='boolean'))return {status:'unavailable',reason:'invalid_response'};
- if(data.tor||data.active_tor===true)return {status:'blocked',reason:'tor'};
- if(data.vpn||data.active_vpn===true)return {status:'blocked',reason:'vpn'};
- if(data.proxy)return {status:'blocked',reason:'proxy'};
+ // ipapi.is documents is_vpn as possibly truthy rather than a literal boolean.
+ // Missing flags (anonymous tier) or API error must never pass as clean.
+ if(!data||data.error||data.error_code||!['is_proxy','is_tor'].every(k=>typeof data[k]==='boolean')||
+    !(typeof data.is_vpn==='boolean'||(typeof data.is_vpn==='number'&&data.is_vpn===1)||(typeof data.is_vpn==='string'&&['true','1'].includes(data.is_vpn))))return {status:'unavailable',reason:'invalid_response'};
+ if(data.is_tor)return {status:'blocked',reason:'tor'};
+ if(data.is_vpn)return {status:'blocked',reason:'vpn'};
+ if(data.is_proxy)return {status:'blocked',reason:'proxy'};
  return {status:'clear',reason:'clear'};
 }
 export async function checkLinkProxy(key,ip,fetcher=fetch,clock=Date.now){
@@ -24,8 +27,7 @@ export async function checkLinkProxy(key,ip,fetcher=fetch,clock=Date.now){
   try{
    const controller=new AbortController();
    timer=setTimeout(()=>controller.abort(),5000);
-   const url='https://www.ipqualityscore.com/api/json/ip/'+encodeURIComponent(key)+'/'+encodeURIComponent(address)+'?strictness=0&allow_public_access_points=true';
-   const response=await fetcher(url,{signal:controller.signal,redirect:'error',headers:{Accept:'application/json'}});
+   const response=await fetcher('https://api.ipapi.is/',{method:'POST',body:JSON.stringify({q:address,key}),signal:controller.signal,redirect:'error',headers:{Accept:'application/json','Content-Type':'application/json'}});
    if(!response.ok)return {status:'unavailable',reason:'service_error'};
    const result=classifyProxy(await response.json());
    if(result.status!=='unavailable'){

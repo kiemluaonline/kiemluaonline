@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { checkLinkProxy, classifyProxy } from '../src/link-proxy.js';
-const clean={success:true,proxy:false,vpn:false,tor:false};
-for(const [value,reason] of [[clean,'clear'],[{...clean,proxy:true},'proxy'],[{...clean,vpn:true},'vpn'],[{...clean,active_vpn:true},'vpn'],[{...clean,tor:true},'tor'],[{...clean,active_tor:true},'tor'],[{success:false},'invalid_response'],[{success:true,proxy:false},'invalid_response']])assert.equal(classifyProxy(value).reason,reason);
-assert.equal(classifyProxy({...clean,fraud_score:99}).status,'clear','Risk score alone is not proof of anonymizer');
+const clean={is_proxy:false,is_vpn:false,is_tor:false};
+for(const [value,reason] of [[clean,'clear'],[{...clean,is_proxy:true},'proxy'],[{...clean,is_vpn:true},'vpn'],[{...clean,is_vpn:1},'vpn'],[{...clean,is_tor:true},'tor'],[{error:'quota'},'invalid_response'],[{is_proxy:false},'invalid_response'],[{...clean,error_code:429},'invalid_response']])assert.equal(classifyProxy(value).reason,reason);
+assert.equal(classifyProxy({...clean,is_abuser:true,is_datacenter:true}).status,'clear','Other signals alone do not establish VPN or proxy');
 let calls=0,now=100000;
-const mock=async(url,options)=>{calls++;assert.ok(url.startsWith('https://www.ipqualityscore.com/api/json/ip/test-key/'));assert.equal(options.redirect,'error');return {ok:true,json:async()=>clean};};
+const mock=async(url,options)=>{calls++;assert.equal(url,'https://api.ipapi.is/');assert.equal(options.method,'POST');assert.deepEqual(JSON.parse(options.body),{q:'2001:db8::1',key:'test-key'});assert.equal(options.redirect,'error');return {ok:true,json:async()=>clean};};
 assert.equal((await checkLinkProxy('test-key','2001:db8::1',mock,()=>now)).status,'clear');
 assert.equal((await checkLinkProxy('test-key','2001:db8::1',mock,()=>now)).cached,true);
 assert.equal(calls,1);now+=60001;
@@ -13,4 +13,4 @@ assert.equal((await checkLinkProxy('','2001:db8::1',mock)).reason,'missing_key')
 assert.equal((await checkLinkProxy('test-key','unknown',mock)).reason,'missing_ip');
 assert.equal((await checkLinkProxy('test-key','192.0.2.1',async()=>({ok:false}))).status,'unavailable');
 assert.equal((await checkLinkProxy('test-key','192.0.2.2',async()=>{throw Error('test');})).status,'unavailable');
-console.log('PASS: network reputation classification, cache expiry, missing key and fail-closed API errors (mock only).');
+console.log('PASS: ipapi.is classification, POST authentication, cache and fail-closed errors (mock only).');
