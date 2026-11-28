@@ -36,7 +36,7 @@ const DEFAULTS = {
   site_name: 'Trạm Có Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
   withdrawals_enabled: '0', withdrawal_fee_lua: '0', withdrawal_fee_vnd: '2000', payout_free_from_vnd: '25000', card_fee_lua: '0', announcement: '',
-  quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6',
+  quota_user_tasks_daily: '25', quota_device_accounts_daily: '1', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
   quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1'
 };
@@ -508,6 +508,8 @@ async function getSettings(env) {
   const settings={...DEFAULTS,...Object.fromEntries(rows.results.map(r=>[r.key,r.value])),quota_link_tasks_ip_24h:'0',quota_link_tasks_device_24h:'0'};
   // Tên cũ trong D1 đang chạy được hiển thị theo thương hiệu mới, không xóa cấu hình khác.
   if(settings.site_name==='Trạm Lúa')settings.site_name='Trạm Có Lúa';
+  // Preserve explicit disabled setting; legacy values >1 now mean one account per browser.
+  settings.quota_device_accounts_daily=settings.quota_device_accounts_daily==='0'?'0':'1';
   return settings;
 }
 async function wallet(env, userId) {
@@ -2269,7 +2271,7 @@ async function handler(req, env) {
       const body = await readBody(req), entries = [];
       for (const key of Object.keys(DEFAULTS)) {
         if (!(key in body)) continue;
-        const value = str(body[key], key === 'announcement' ? 1000 : 100);
+        let value = str(body[key], key === 'announcement' ? 1000 : 100);
         if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua', 'withdrawal_fee_vnd', 'payout_free_from_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
@@ -2278,6 +2280,7 @@ async function handler(req, env) {
         if(key==='quota_link_device_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn trình duyệt.');
         if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h','quota_link_tasks_device_24h'].includes(key)
             && (!/^\d+$/.test(value) || Number(value)>100)) fail(400, `${key}: chỉ số nguyên từ 0 đến 100; 0 để tắt.`);
+        if(key==='quota_device_accounts_daily'&&Number(value)>1)value='1';
         if (key === 'site_name' && value.length < 2) fail(400, 'Tên website quá ngắn.');
         entries.push(env.DB.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key, value));
       }
