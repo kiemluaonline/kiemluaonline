@@ -1874,6 +1874,7 @@ async function handler(req, env) {
       const result=await checkLinkProxy(key,ip,undefined,Date.now,{fresh:true});
       return json({provider:'ipapi.is',enabled:settings.link_proxy_enabled==='1',key_configured:!!key,
         status:result.status,reason:result.reason,http_status:result.http_status||null,
+        hosting:result.hosting||'unknown',
         ip,checked_at:new Date(now()).toISOString(),duration_ms:now()-testedAt});
     }
     if (m === 'GET' && p === '/api/admin/overview') {
