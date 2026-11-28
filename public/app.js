@@ -207,7 +207,7 @@ async function api(path, method='GET', body=null, linkSignals=''){
   if(!r.ok){ const error=new Error(data.error||'Thao tác thất bại.');Object.assign(error,data);error.status=r.status;
     // Member-facing task errors keep recovery information but avoid exposing quota diagnostics.
     if(r.status===429&&/^\/api\/tasks\/[^/]+\/(?:start|return|submit)$/.test(path)&&data.quota_scope){
-      error.message=data.quota_scope==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.';
+      error.message=String(data.quota_scope).startsWith('source_')?'Nguồn nhiệm vụ đã hết hạn mức hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':data.quota_scope==='link_task_limit'?'Đã hết lượt hôm nay. Lượt mới mở lúc 00:00 (giờ Việt Nam).':'Nhiệm vụ hiện không khả dụng. Nếu cần hỗ trợ, hãy liên hệ Admin.';
     }
     throw error; }
   return data;
@@ -1501,6 +1501,13 @@ function sourceSettingsForm(source={}){
  ${field('view_path','Trường JSON chứa tổng view',source.view_path||'','placeholder="views, data.views hoặc data.chart.*.views"')}
  <p class="note">Nếu API trả danh sách view theo ngày, dùng dạng data.chart.*.views để cộng các dòng trong kỳ API trả về. Dùng {destination}, {alias}, {token} theo tài liệu đối tác. Không dán token thật vào đây. Nếu cần token, tạo Secret ${esc(source.secret_name||'LINK_PROVIDER_TOKEN_MÃ_NGUỒN_VIẾT_HOA')} trong Cloudflare Worker. ${source.id?(source.token_configured?'Đã có Secret.':'Chưa có Secret (không cần nếu API công khai).'):''}</p>
  <button class="btn" type="submit">Lưu nguồn</button></form>
+ ${source.id?`<form class="section card" data-form="link-source-quota"><input type="hidden" name="id" value="${esc(source.id)}">
+ <h4>🛡️ Hạn mức riêng của nguồn</h4>
+ <p class="note">Giới hạn số lần cấp phiên Link mới trong ngày Việt Nam (00:00 đặt lại), tính chung các nhiệm vụ gắn nguồn này. Tính cả phiên chưa hoàn thành hoặc cấp Link lỗi để bảo vệ nguồn. Phiên cũ đang làm được tiếp tục. 0 = không giới hạn riêng; các quy tắc chung vẫn áp dụng.</p>
+ ${field('account','Lượt cấp / tài khoản / ngày',source.quota?.account??0,'type="number" min="0" max="1000" step="1" required')}
+ ${field('ip','Lượt cấp / IP hoặc nhóm IPv6 / ngày',source.quota?.ip??0,'type="number" min="0" max="1000" step="1" required')}
+ ${field('browser','Lượt cấp / mã trình duyệt / ngày',source.quota?.browser??0,'type="number" min="0" max="1000" step="1" required')}
+ <button class="btn" type="submit">Lưu hạn mức nguồn</button></form>`:''}
  ${source.id?`<form class="section" data-form="link-source-test"><input type="hidden" name="id" value="${esc(source.id)}">
  ${select('kind','Kiểm tra API',[...(source.view_url&&source.view_path?[['view','Kiểm tra view']]:[]),['create','Tạo link kiểm thử (không thưởng)']],source.view_url&&source.view_path?'view':'create')}
  <p class="note">Tạo link kiểm thử sẽ tạo một link thật bên đối tác, kể cả khi phản hồi không hợp lệ. Chỉ bấm một lần; nếu lỗi, đọc thông báo trước khi thử lại. Không phát thưởng.</p>
@@ -2556,6 +2563,9 @@ app.addEventListener('submit',async e=>{
   if(kind==='settings'){await api('/api/admin/settings','PUT',b);state.meta=await api('/api/meta');toast('Đã lưu cài đặt.');await navigate('admin-settings');}
   if(kind==='link-source-save'){
     await api('/api/admin/link-sources','POST',b);toast('Đã lưu nguồn rút gọn.');await navigate('admin-tasks');return;
+  }
+  if(kind==='link-source-quota'){
+    await api('/api/admin/link-sources/quota','POST',b);toast('Đã lưu hạn mức riêng nguồn.');await navigate('admin-tasks');return;
   }
   if(kind==='link-source-test'){
     const output=form.querySelector('[data-source-result]');
