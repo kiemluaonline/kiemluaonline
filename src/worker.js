@@ -39,6 +39,8 @@ const DEFAULTS = {
   site_name: 'Trạm Có Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
   withdrawals_enabled: '0', withdrawal_fee_lua: '0', withdrawal_fee_vnd: '2000', payout_free_from_vnd: '25000', card_fee_lua: '0', announcement: '',
+  withdrawal_rules: '✅ Yêu cầu hợp lệ và không vi phạm quy định sẽ được thanh toán.\n⚠️ Nếu xác minh có gian lận hoặc vi phạm quy định, yêu cầu sẽ bị từ chối thanh toán.',
+  withdrawal_payment_time: '1–3 ngày làm việc',
   quota_user_tasks_daily: '0', quota_device_accounts_daily: '1', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
   quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1', link_proxy_enabled: '0'
@@ -986,7 +988,8 @@ async function handler(req, env) {
       lua_per_vnd: int(settings.lua_per_vnd),
       withdrawal_fee_lua: 0, // Chỉ để tương thích client cũ; phí thực tế tính theo số tiền rút.
       withdrawal_min_vnd: WITHDRAW_MIN_VND, withdrawal_free_from_vnd: int(settings.payout_free_from_vnd),
-      withdrawal_fee_vnd: int(settings.withdrawal_fee_vnd) });
+      withdrawal_fee_vnd: int(settings.withdrawal_fee_vnd), withdrawal_rules: settings.withdrawal_rules,
+      withdrawal_payment_time: settings.withdrawal_payment_time });
   }
   if (m === 'POST' && p === '/api/setup') {
     const b = await readBody(req), email = normEmail(b.email), password = b.password;
@@ -2440,7 +2443,11 @@ async function handler(req, env) {
       const body = await readBody(req), entries = [];
       for (const key of Object.keys(DEFAULTS)) {
         if (!(key in body)) continue;
-        let value = str(body[key], key === 'announcement' ? 1000 : 100);
+        const maxLength=key==='withdrawal_rules'?2000:key==='withdrawal_payment_time'?120:key==='announcement'?1000:100;
+        if(['withdrawal_rules','withdrawal_payment_time'].includes(key)&&
+          (typeof body[key]!=='string'||!body[key].trim()||body[key].trim().length>maxLength))
+          fail(400,'Nhập nội dung quy định (tối đa 2000 ký tự) và thời gian thanh toán (tối đa 120 ký tự) hợp lệ.');
+        let value = str(body[key], maxLength);
         if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua', 'withdrawal_fee_vnd', 'payout_free_from_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
