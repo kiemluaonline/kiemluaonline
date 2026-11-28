@@ -1525,6 +1525,8 @@ async function handler(req, env) {
       if(candidates.results.length===1)attempt=candidates.results[0];
     }
     if (!attempt) fail(409, 'Chưa tìm được đúng phiên nhiệm vụ. Hãy giữ đường dẫn này và liên hệ Admin để đối soát; không cần làm lại ngay.');
+    if(attempt.available_at>=0&&attempt.expires_at===0)
+      fail(409,'Phiên Link này đã được thay bằng phiên mới. Hãy mở nhiệm vụ đang làm trên Trạm Có Lúa.');
     const sourceLink=await getAttemptSource(env,attempt.id);
     if(sourceConfig.creation==='api'&&!sourceLink)fail(409,'Phiên chưa được cấp link riêng. Hãy bắt đầu lại.');
     if(sourceLink?.returnSession&&body.link_session!==sourceLink.returnSession)fail(409,'Link quay về không thuộc phiên này. Hãy mở lại đúng link nhiệm vụ đã cấp.');
@@ -1582,7 +1584,7 @@ async function handler(req, env) {
           .bind('link_return_recovery:'+attempt.id,'1').run();
       }
       const mark=await env.DB.prepare(`UPDATE task_attempts SET available_at=?,expires_at=?,ip=?
-        WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0
+        WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at<>0
           AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0 AND x.expires_at<>0)`)
         .bind(-arrivedAt,LINK_CONFIRM_OPEN,returnIP,attempt.id,me.id,me.id,task.id,attempt.id).run();
       if(!mark.meta?.changes){
@@ -1744,11 +1746,16 @@ async function handler(req, env) {
       }
     }
     if(task.category==='link'&&settings.link_proxy_enabled!=='1')await recordLinkObservation(env,req,me.id,task.id,null);
+    let replaceAttempt=null;
     if(task.category==='link'){
       const ongoing=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND expires_at>? ORDER BY created_at DESC,id DESC LIMIT 1').bind(me.id,task.id,now()).first();
       if(ongoing){
-        if(ongoing.device_code!==await deviceCode(req,env)||ongoing.ip!==clientIP(req))
-          fail(409,'Bạn còn phiên Link đã mở. Hãy tiếp tục trên mạng và trình duyệt ban đầu; không tạo Link mới làm mất phiên cũ.');
+        if(ongoing.device_code!==await deviceCode(req,env))
+          fail(409,'Bạn còn phiên Link đã mở. Hãy sử dụng trình duyệt ban đầu hoặc liên hệ Admin.');
+        if(ongoing.ip!==clientIP(req)){
+          // Replace an unreturned attempt only if the new reservation succeeds atomically.
+          replaceAttempt=ongoing;
+        }else{
         let url=task.url;
         if(source){
           const existing=await getAttemptSource(env,ongoing.id);
@@ -1758,6 +1765,7 @@ async function handler(req, env) {
         }
         await denyLinkStartConflict(env,req,me.id,task.id,linkStartConflictArgs(settings,me.id,task.id,clientIP(req),ongoing.device_code,now()));
         return json({attempt_id:ongoing.id,a:ongoing.captcha_a,b:ongoing.captcha_b,available_at:ongoing.available_at,expires_in_seconds:Math.max(1,Math.ceil((ongoing.expires_at-now())/1000)),review_mode:task.review_mode,category:'link',task_url:url,resumed:true});
+        }
       }
     }
     const startedNow=now();
@@ -1775,12 +1783,15 @@ async function handler(req, env) {
       await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
       const reserve=env.DB.prepare(`INSERT INTO task_attempts(id,user_id,task_id,captcha_a,captcha_b,available_at,expires_at,ip,device_code)
         SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (
-         SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?)
-        ) AND (${LINK_START_CONFLICT}) IS NULL
+         SELECT 1 FROM task_attempts WHERE user_id=? AND task_id=? AND id<>? AND consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?)
+        ) AND (?='' OR EXISTS(SELECT 1 FROM task_attempts WHERE id=? AND user_id=? AND task_id=? AND device_code=? AND ip<>? AND consumed_by IS NULL AND available_at>=0 AND expires_at>?)) AND (${LINK_START_CONFLICT}) IS NULL
           AND COALESCE((SELECT json_extract(value,'$.id') FROM settings WHERE key=?),'')=?
           AND (${SOURCE_QUOTA_CONFLICT}) IS NULL`)
-        .bind(...baseArgs,me.id,task.id,startedNow,...conflictArgs,TASK_SOURCE_PREFIX+task.id,sourceId,...sourceArgs);
-      const writes=await env.DB.batch([reserve,env.DB.prepare('INSERT INTO settings(key,value) SELECT ?,? WHERE EXISTS(SELECT 1 FROM task_attempts WHERE id=?)').bind(SOURCE_ISSUED_PREFIX+attempt,sourceId,attempt)]);
+        .bind(...baseArgs,me.id,task.id,replaceAttempt?.id||'',startedNow,replaceAttempt?.id||'',replaceAttempt?.id||'',me.id,task.id,startCode,startIP,startedNow,...conflictArgs,TASK_SOURCE_PREFIX+task.id,sourceId,...sourceArgs);
+      // D1 batch is transactional: a rejected replacement never cancels the existing attempt.
+      const writes=await env.DB.batch([reserve,env.DB.prepare('INSERT INTO settings(key,value) SELECT ?,? WHERE EXISTS(SELECT 1 FROM task_attempts WHERE id=?)').bind(SOURCE_ISSUED_PREFIX+attempt,sourceId,attempt),
+        ...(replaceAttempt?[env.DB.prepare('UPDATE task_attempts SET expires_at=0 WHERE id=? AND user_id=? AND task_id=? AND consumed_by IS NULL AND available_at>=0 AND EXISTS(SELECT 1 FROM task_attempts WHERE id=?)').bind(replaceAttempt.id,me.id,task.id,attempt)]:[])]);
+      if(writes[0].meta?.changes&&replaceAttempt)await event(env,req,'link_restart_network_changed',me.id,'attempt:'+replaceAttempt.id+'|new:'+attempt).catch(()=>{});
       if(!writes[0].meta?.changes){
         await denyLinkStartConflict(env,req,me.id,task.id,conflictArgs);
         if(sourceId)await denySourceQuota(env,req,me.id,task.id,sourceArgs);
