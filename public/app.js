@@ -1654,36 +1654,37 @@ async function adminSecurity(){
 }
 async function adminSettings(){
  const d=await api('/api/admin/settings'),s=d.settings;
- return `${heading('Cài đặt hệ thống','Thưởng, đăng ký, quy đổi và thông báo có thể được sửa mà không cần thay mã nguồn.')}
- <div class="info-split"><form class="card" data-form="settings"><h3>Thiết lập chung</h3>
+ const group=(title,subtitle,fields)=>`<details class="card admin-setting-group"><summary><span><strong>${title}</strong><small>${subtitle}</small></span><span class="admin-setting-chevron" aria-hidden="true">⌄</span></summary><form data-form="settings" class="admin-setting-fields">${fields}<button class="btn" type="submit">Lưu cài đặt</button></form></details>`;
+ return `${heading('Cài đặt hệ thống','Chọn mục muốn chỉnh sửa. Mỗi mục được lưu riêng.')}
+ <div class="admin-setting-groups">
+ ${group('⚙️ Thiết lập chung','Tên website, đăng ký, thông báo',`
  ${field('site_name','Tên website',s.site_name,'required')}
  <div class="field"><label for="announcement">Thông báo thành viên</label><textarea name="announcement" id="announcement">${esc(s.announcement)}</textarea></div>
- <div class="form-row">${select('signup_enabled','Cho phép đăng ký',[['1','Bật'],['0','Tắt']],s.signup_enabled)}
- ${select('withdrawals_enabled','Cho phép yêu cầu rút',[['0','Tắt'],['1','Bật']],s.withdrawals_enabled)}</div>
- <div class="form-row">${field('checkin_reward','Lúa thưởng điểm danh',s.checkin_reward,'type="number" min="0" max="10000000" required')}
- ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}</div>
- <p class="note">Mức rút tối thiểu đã cố định là 5.000đ theo tỷ giá Lúa/VNĐ bên dưới. Không cần đặt ngưỡng Lúa riêng.</p>
- ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}
- <h3>💸 Phí rút tiền và đổi thẻ cào</h3>
- <p class="note">Áp dụng ngưỡng miễn phí chung cho rút tiền và đổi thẻ cào. Dưới ngưỡng này, hệ thống thu theo phí tương ứng bên dưới. Đổi thẻ tính theo từng thẻ. Nhập phí 0 để miễn phí toàn bộ phương thức đó. Yêu cầu cũ giữ nguyên phí lúc gửi; khi từ chối, hoàn đủ Lúa và phí đã giữ.</p>
+ ${select('signup_enabled','Cho phép đăng ký',[['1','Bật'],['0','Tắt']],s.signup_enabled)}`)}
+ ${group('🎁 Phần thưởng và tỷ giá','Điểm danh, giới thiệu, quy đổi Lúa',`
+ ${field('checkin_reward','Lúa thưởng điểm danh',s.checkin_reward,'type="number" min="0" max="10000000" required')}
+ ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}
+ ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}`)}
+ ${group('💸 Rút tiền và đổi thẻ cào','Phí xử lý, ngưỡng miễn phí',`
+ ${select('withdrawals_enabled','Cho phép yêu cầu rút',[['0','Tắt'],['1','Bật']],s.withdrawals_enabled)}
+ <p class="note">Rút tối thiểu 5.000đ. Cả hai phương thức dùng chung ngưỡng miễn phí; đổi thẻ tính theo từng thẻ. Nhập phí 0 để miễn phí phương thức đó.</p>
  ${field('payout_free_from_vnd','Miễn phí từ (VNĐ) – áp dụng cả hai',s.payout_free_from_vnd,'type="number" min="5000" max="10000000" step="1" required')}
  ${field('withdrawal_fee_vnd','Phí rút tiền dưới ngưỡng (VNĐ)',s.withdrawal_fee_vnd,'type="number" min="0" max="10000000" step="1" required')}
  ${field('card_fee_lua','Phí mỗi thẻ dưới ngưỡng (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
- <h3>🛡️ Giới hạn nhiệm vụ App</h3>
- <p class="note">Không giới hạn tổng lượt App. Mỗi nhiệm vụ áp dụng quy định lặp lại riêng (mỗi tài khoản một lần hoặc mỗi ngày một lần). Giới hạn tài khoản theo mã trình duyệt và IP vẫn hoạt động, đặt lại lúc 00:00 giờ Việt Nam. Nhập 0 để tắt giới hạn IP.</p>
- <div class="form-row">
- ${select('quota_device_accounts_daily','Một tài khoản/mã trình duyệt/ngày',[['1','Bật – chỉ 1 tài khoản'],['0','Tắt']],s.quota_device_accounts_daily)}</div>
- <div class="form-row">${field('quota_ip_accounts_daily','Tài khoản làm App/IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}</div>
- <h3>🔗 Bảo vệ link rút gọn theo ngày</h3>
- <p class="note">IP được dành cho tài khoản gửi từng nhiệm vụ đầu tiên trong ngày. Tài khoản khác cùng IP chỉ bị chặn nhiệm vụ đó; vẫn có thể làm nhiệm vụ khác đủ điều kiện. Nhiệm vụ chờ duyệt cũng giữ chỗ; bị từ chối sẽ không giữ chỗ. Lượt mới được mở lúc 00:00 ngày mai (giờ Việt Nam).</p>
- ${select('quota_link_ip_exclusive','Chặn trùng IP theo từng nhiệm vụ',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}
- ${select('quota_link_device_exclusive','Chặn đổi tài khoản trên cùng mã trình duyệt',[['1','Bật'],['0','Tắt']],s.quota_link_device_exclusive)}
- <p class="note">Đã bỏ giới hạn tổng 2 lượt. Tài khoản giữ IP được làm các link khác theo số lượt riêng tại Quản lý nhiệm vụ. Các giới hạn chung phía trên áp dụng cho App, Video và Khác.</p>
- <p class="note">Mã trình duyệt không phải IMEI, có thể bị thay đổi. Dùng chung IP là dấu hiệu cần xem xét, không tự khóa tài khoản hoặc xóa Lúa. Xem cảnh báo tại Chống gian lận.</p>
- <button class="btn" type="submit">Lưu cài đặt</button></form>
- <section class="card"><h3>⚠ Cần thiết lập trước khi mở rút</h3><p>Đặt tỷ giá Lúa/VNĐ và chuẩn bị nguồn chi trả thực tế. Mặc định chức năng rút bị tắt để tránh cam kết thanh toán sai.</p>
- <p>Admin duyệt nhiệm vụ có thể cộng Lúa; Admin từ chối yêu cầu rút sẽ tự hoàn Lúa vào ví.</p>
- <p class="note">Mọi thay đổi chính sách thưởng cần được công khai rõ ràng với người dùng.</p></section></div>`;
+ <p class="note">Yêu cầu cũ giữ nguyên phí. Từ chối sẽ hoàn đủ Lúa và phí đã giữ. Cần đặt tỷ giá và chuẩn bị nguồn chi trả trước khi bật rút.</p>`)}
+ ${group('🛡️ Chống gian lận nhiệm vụ App','Kiểm soát tài khoản theo IP và trình duyệt',`
+ <p class="note">Mỗi App chỉ làm một lần/tài khoản. Không giới hạn tổng số App được làm. Hai mục dưới chỉ kiểm soát số tài khoản, không phải số lượt nhiệm vụ.</p>
+ ${select('quota_device_accounts_daily','Một tài khoản trên mỗi mã trình duyệt/ngày',[['1','Bật – chỉ 1 tài khoản'],['0','Tắt']],s.quota_device_accounts_daily)}
+ ${field('quota_ip_accounts_daily','Số tài khoản được làm App trên cùng IP/ngày',s.quota_ip_accounts_daily,'type="number" min="0" max="100" required')}
+ <p class="note">Nhập 0 để tắt giới hạn số tài khoản theo IP. Đặt lại lúc 00:00 giờ Việt Nam. Quy tắc này cũng áp dụng cho nhiệm vụ Video và Khác cũ.</p>`)}
+ ${group('🔗 Chống gian lận nhiệm vụ Link','Chặn trùng IP và đổi tài khoản',`
+ <p class="note"><strong>Không chỉnh số lượt Link tại đây.</strong> Số lượt của từng Link được chỉnh riêng trong Quản lý nhiệm vụ → Link rút gọn → Sửa.</p>
+ ${select('quota_link_ip_exclusive','Chặn tài khoản khác làm cùng một Link trên cùng IP',[['1','Bật'],['0','Tắt']],s.quota_link_ip_exclusive)}
+ <p class="note">Ví dụ: A đã gửi Link X trên IP này, B không làm được Link X trên cùng IP, nhưng có thể làm Link Y nếu đủ điều kiện.</p>
+ ${select('quota_link_device_exclusive','Một tài khoản làm Link trên mỗi mã trình duyệt/ngày',[['1','Bật'],['0','Tắt']],s.quota_link_device_exclusive)}
+ <p class="note">Khi bật, tài khoản khác không thể tiếp tục làm Link trên mã trình duyệt đã được sử dụng. Tài khoản ban đầu vẫn làm các Link theo hạn mức riêng. Đặt lại lúc 00:00 giờ Việt Nam.</p>
+ <p class="note">Mã trình duyệt không phải IMEI. Dùng chung IP không tự khóa tài khoản hay xóa Lúa. Xem cảnh báo tại Chống gian lận.</p>`)}
+ </div>`;
 }
 // Màn hình đọc quy tắc trước khi tạo phiên nhiệm vụ / chuyển sang link.
 // Hủy chỉ đóng thông báo, không tiêu hao lượt và không gọi API start.
