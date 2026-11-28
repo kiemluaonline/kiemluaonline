@@ -1,5 +1,6 @@
 /* Hmoob Dawb (RPA) – ntawv txhais rau tswv cuab, Admin thiab ntawv raws cai. */
 window.TramExtraTranslations = {
+  "Chuyển khoản ngân hàng": "Hloov nyiaj hauv txhab nyiaj",
   "Đang kiểm tra thiết bị…": "Tab tom xyuas lub cuab yeej…",
   "Đang kết nối hệ thống…": "Tab tom txuas rau lub system…",
   "Chưa thể kết nối hệ thống": "Tseem txuas tsis tau rau lub system",
