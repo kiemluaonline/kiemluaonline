@@ -13,6 +13,12 @@ export function classifyProxy(data){
  if(data.is_proxy)return {status:'blocked',reason:'proxy'};
  return {status:'clear',reason:'clear'};
 }
+// Anti-Fraud 3.0 diagnostic: hosting is a network signal, not proof of an emulator.
+// Missing data must remain unknown; do not alter existing VPN/proxy/Tor decisions.
+export function classifyHosting(data){
+ if(!data||data.error||data.error_code||typeof data.is_datacenter!=='boolean')return 'unknown';
+ return data.is_datacenter?'hosting':'not_detected';
+}
 export async function checkLinkProxy(key,ip,fetcher=(...args)=>globalThis.fetch(...args),clock=Date.now,{fresh=false}={}){
  if(!String(key||'').trim())return {status:'unavailable',reason:'missing_key'};
  if(!ip||!(/^[0-9a-f:.]+$/i.test(ip))||!/[.:]/.test(ip))return {status:'unavailable',reason:'missing_ip'};
@@ -32,7 +38,7 @@ export async function checkLinkProxy(key,ip,fetcher=(...args)=>globalThis.fetch(
    }
    let data;
    try{data=await response.json();}catch{return {status:'unavailable',reason:'invalid_response',http_status:response.status};}
-   const result=classifyProxy(data);
+   const result={...classifyProxy(data),hosting:classifyHosting(data)};
    if(!fresh&&result.status!=='unavailable'){
     if(cache.size>=MAX)cache.delete(cache.keys().next().value);
     cache.set(address,{until:clock()+TTL,result});
