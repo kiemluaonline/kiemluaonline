@@ -1,3 +1,4 @@
+import { checkLinkProxy } from './link-proxy.js';
 import { shopAPI } from './shop.js';
 import { shopOrdersAPI } from './shop-orders.js';
 import { cardRedemptionsAPI } from './card-redemptions.js';
@@ -38,7 +39,7 @@ const DEFAULTS = {
   withdrawals_enabled: '0', withdrawal_fee_lua: '0', withdrawal_fee_vnd: '2000', payout_free_from_vnd: '25000', card_fee_lua: '0', announcement: '',
   quota_user_tasks_daily: '0', quota_device_accounts_daily: '1', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
-  quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1'
+  quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1', link_proxy_enabled: '0'
 };
 const HEADERS = {
   'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
@@ -1581,6 +1582,17 @@ async function handler(req, env) {
     }
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND created_at>=datetime('now','-15 minutes')").bind(me.id).first();
     if (count.n >= 30) { await event(env, req, 'too_many_task_starts', me.id); fail(429, 'Bạn mở nhiệm vụ quá nhiều lần. Vui lòng thử lại sau.'); }
+    // No new external URL or provider API call until the network check passes.
+    // Resume of a previously returned confirmation is deliberately not a new issuance.
+    if(task.category==='link'&&settings.link_proxy_enabled==='1'){
+      const check=await checkLinkProxy(env.IPQS_API_KEY,clientIP(req));
+      if(check.status!=='clear'){
+        const blocked=check.status==='blocked';
+        await event(env,req,blocked?'link_proxy_blocked':'link_proxy_unavailable',me.id,check.reason+':'+task.id+'|start');
+        if(blocked)fail(403,'Kết nối bị nhận diện là VPN, Proxy hoặc Tor. Vui lòng tắt công cụ đổi IP rồi thử lại.',{network_check:'blocked'});
+        fail(503,'Chưa kiểm tra được kết nối mạng. Tạm dừng cấp Link để bảo vệ lượt truy cập. Vui lòng thử lại sau.',{network_check:'unavailable'});
+      }
+    }
     const startedNow=now();
     const a = rand(), b = rand(), attempt = id(), available = startedNow + (task.category === 'video' ? task.min_seconds * 1000 : 0);
     // Khách có thể tìm mã trên Google lâu: Link được phép quay về trong 24 giờ.
@@ -2336,13 +2348,25 @@ async function handler(req, env) {
           AND created_at>=datetime('now','-30 days')
           ORDER BY created_at DESC LIMIT 2000`).all()
       ]);
-      return json({ events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
+      const proxySettings=await getSettings(env);
+      const [proxyEvents,proxyCounts]=await Promise.all([
+        env.DB.prepare(`SELECT r.*,u.email,u.name,t.title AS task_title
+          FROM risk_events r LEFT JOIN users u ON u.id=r.user_id
+          LEFT JOIN tasks t ON t.id=substr(r.detail,instr(r.detail,':')+1,instr(r.detail,'|')-instr(r.detail,':')-1)
+          WHERE r.event_type IN ('link_proxy_blocked','link_proxy_unavailable')
+          AND date(r.created_at,'+7 hours')=date('now','+7 hours')
+          ORDER BY r.created_at DESC LIMIT 100`).all(),
+        env.DB.prepare(`SELECT event_type,substr(detail,1,instr(detail,':')-1) AS reason,COUNT(*) AS n
+          FROM risk_events WHERE event_type IN ('link_proxy_blocked','link_proxy_unavailable')
+          AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY event_type,reason`).all()
+      ]);
+      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPQS_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
         network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
         ipv4_inventory:ipv4Inventory(networkSeen.results,unverifiedIPv4.results),
         link_alerts:linkAlerts.results,link_alert_count:alertCount.n,link_alert_accounts:alertCount.accounts });
     }
-    if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env) });
+    if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env),proxy_key_configured:!!String(env.IPQS_API_KEY||'').trim() });
     if (m === 'PUT' && p === '/api/admin/settings') {
       const body = await readBody(req), entries = [];
       for (const key of Object.keys(DEFAULTS)) {
@@ -2352,6 +2376,8 @@ async function handler(req, env) {
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua', 'withdrawal_fee_vnd', 'payout_free_from_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
         if(key==='payout_free_from_vnd'&&Number(value)<5000)fail(400,'Ngưỡng miễn phí phải từ 5.000đ trở lên.');
+        if(key==='link_proxy_enabled'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt kiểm tra VPN/Proxy.');
+        if(key==='link_proxy_enabled'&&value==='1'&&!String(env.IPQS_API_KEY||'').trim())fail(400,'Chưa có Secret IPQS_API_KEY trên Cloudflare.');
         if(key==='quota_link_ip_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn IP.');
         if(key==='quota_link_device_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn trình duyệt.');
         if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h','quota_link_tasks_device_24h'].includes(key)
