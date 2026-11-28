@@ -1585,7 +1585,7 @@ async function handler(req, env) {
     // No new external URL or provider API call until the network check passes.
     // Resume of a previously returned confirmation is deliberately not a new issuance.
     if(task.category==='link'&&settings.link_proxy_enabled==='1'){
-      const check=await checkLinkProxy(env.IPQS_API_KEY,clientIP(req));
+      const check=await checkLinkProxy(env.IPAPI_API_KEY,clientIP(req));
       if(check.status!=='clear'){
         const blocked=check.status==='blocked';
         await event(env,req,blocked?'link_proxy_blocked':'link_proxy_unavailable',me.id,check.reason+':'+task.id+'|start');
@@ -2360,13 +2360,13 @@ async function handler(req, env) {
           FROM risk_events WHERE event_type IN ('link_proxy_blocked','link_proxy_unavailable')
           AND date(created_at,'+7 hours')=date('now','+7 hours') GROUP BY event_type,reason`).all()
       ]);
-      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPQS_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
+      return json({ proxy_guard:{enabled:proxySettings.link_proxy_enabled==='1',key_configured:!!String(env.IPAPI_API_KEY||'').trim(),counts:proxyCounts.results,events:proxyEvents.results},events: risks.results, repeated_ips: recentIP.results, repeated_devices:sharedDevice.results,
         ipv4_observations:ipv4Observations.results,
         network_alerts:networkAlerts(networkSeen.results,unverifiedIPv4.results),
         ipv4_inventory:ipv4Inventory(networkSeen.results,unverifiedIPv4.results),
         link_alerts:linkAlerts.results,link_alert_count:alertCount.n,link_alert_accounts:alertCount.accounts });
     }
-    if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env),proxy_key_configured:!!String(env.IPQS_API_KEY||'').trim() });
+    if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env),proxy_key_configured:!!String(env.IPAPI_API_KEY||'').trim() });
     if (m === 'PUT' && p === '/api/admin/settings') {
       const body = await readBody(req), entries = [];
       for (const key of Object.keys(DEFAULTS)) {
@@ -2377,7 +2377,7 @@ async function handler(req, env) {
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
         if(key==='payout_free_from_vnd'&&Number(value)<5000)fail(400,'Ngưỡng miễn phí phải từ 5.000đ trở lên.');
         if(key==='link_proxy_enabled'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt kiểm tra VPN/Proxy.');
-        if(key==='link_proxy_enabled'&&value==='1'&&!String(env.IPQS_API_KEY||'').trim())fail(400,'Chưa có Secret IPQS_API_KEY trên Cloudflare.');
+        if(key==='link_proxy_enabled'&&value==='1'&&!String(env.IPAPI_API_KEY||'').trim())fail(400,'Chưa có Secret IPAPI_API_KEY trên Cloudflare.');
         if(key==='quota_link_ip_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn IP.');
         if(key==='quota_link_device_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn trình duyệt.');
         if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h','quota_link_tasks_device_24h'].includes(key)
