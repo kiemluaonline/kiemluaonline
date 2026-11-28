@@ -285,12 +285,22 @@ async function leaveLinkReturn(){
  if(!c||state.me?.user?.role!=='member')return;
  // Do not navigate away while a reward receipt may be arriving.
  if(app.querySelector('form[data-form="link-return-captcha"] button[type="submit"]')?.disabled)return;
- if(!localizedConfirm('Bạn chưa xác minh nhiệm vụ. Lượt đã được ghi nhận, nhưng bạn chưa nhận được Lúa. Bạn vẫn muốn quay lại nhiệm vụ?'))return;
- rememberReturn(c.expiresAt);
- state.returnChallenge=null;
- clearLinkReturnQuery();
- renderShell();
- await navigate('tasks');
+ if(!localizedConfirm('Nếu thoát bây giờ, bạn sẽ không nhận được Lúa và lượt nhiệm vụ đã sử dụng không được hoàn lại. Bạn có chắc muốn thoát?'))return;
+ const button=app.querySelector('[data-action="leave-link-return"]');
+ const submit=app.querySelector('form[data-form="link-return-captcha"] button[type="submit"]');
+ if(button?.disabled)return;
+ if(button)button.disabled=true;if(submit)submit.disabled=true;
+ try{
+  const result=await api('/api/tasks/'+encodeURIComponent(c.taskId)+'/return','POST',{attempt_id:c.attemptId,...(c.linkSession?{link_session:c.linkSession}:{}),abandon:true});
+  if(result.ok&&['approved','pending','rejected'].includes(result.status)){await finishLinkReturn(result);return;}
+  if(!result.ok||result.status!=='abandoned')throw new Error('Chưa xác nhận bỏ lượt. Vui lòng thử lại.');
+  try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
+  state.returnChallenge=null;
+  clearLinkReturnQuery();
+  renderShell();
+  await navigate('tasks');
+  toast('Đã bỏ xác minh. Lượt nhiệm vụ không được hoàn lại.');
+ }finally{if(button)button.disabled=false;if(submit)submit.disabled=false;}
 }
 async function processLinkReturn(){
  const params=new URLSearchParams(location.search);
@@ -309,7 +319,11 @@ async function processLinkReturn(){
   state.returnChallenge={taskId,linkSession,attemptId:result.attempt_id,a:result.a,b:result.b,expiresAt:result.expires_at};
   renderLinkReturnModal();
  }catch(error){
-  if(error.confirmation_expired){
+  if(error.confirmation_abandoned){
+   try{const key=returnStorageKey();if(key)localStorage.removeItem(key);}catch{}
+   state.returnChallenge=null;
+   showReturnGate(`<p role="alert">${esc(error.message)}</p><a class="btn" href="/">Về trang chủ</a>`);
+  }else if(error.confirmation_expired){
    showReturnGate(`<p role="alert">${esc(error.message)}</p><p class="note">Giữ đường dẫn xác minh để Admin đối soát nếu cần.</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
   }else showReturnGate(`<p role="alert">${esc(error.message)}</p><button type="button" class="btn" data-action="retry-link-return">Thử lại</button>`);
  }
