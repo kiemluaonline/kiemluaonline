@@ -1275,7 +1275,7 @@ async function benefits(){
  const c=await api('/api/checkin');
  return `${heading('Phúc lợi thành viên','Quà điểm danh hằng ngày theo cấu hình thực tế của Admin.')}
  <div class="grid two"><section class="card"><span class="eyebrow">QUÀ MỖI NGÀY</span><h3>☀ Điểm danh hôm nay</h3><div class="metric">+${fmt(state.meta.checkin_reward)} Lúa</div><p>Ngày Việt Nam: ${esc(c.today)}. Mỗi tài khoản chỉ được điểm danh một lần trong ngày.</p>
- ${c.checked_today?chip('approved'):`<button class="btn" data-action="checkin">Điểm danh ngay</button>`}</section>
+ ${c.checked_today?'<span class="chip approved">Đã nhận</span>':`<button class="btn" data-action="checkin">Điểm danh ngay</button>`}</section>
  <section class="card"><h3>Điều kiện nhận thưởng</h3><p>Hệ thống tự kiểm tra lượt đã nhận để ngăn ghi Lúa trùng lặp. Admin có thể điều chỉnh mức quà.</p><div class="callout">Nếu mức thưởng đang bằng 0, thao tác điểm danh vẫn được lưu nhưng không phát sinh Lúa.</div></section></div>`;
 }
 async function memberPayoutPage(){
