@@ -150,7 +150,7 @@ sqlite.prepare("INSERT INTO settings(key,value) VALUES('card_fee_lua','7000') ON
 const beforeFee=balance();
 const infoWithFee=await call('/api/card-redemptions');
 assert.equal(infoWithFee.data.fee_lua,7000);
-const deniedFeeBalance=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000,expected_fee_lua:7000});
+const deniedFeeBalance=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:20000,quantity:2,expected_fee_lua:7000});
 assert.equal(deniedFeeBalance.status,400,'Need to afford card AND fee rather than just denomination: '+JSON.stringify(deniedFeeBalance));
 assert.equal(balance(),beforeFee);
 const unconfirmedFee=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:10000});
@@ -210,3 +210,18 @@ assert.match(memberHTML,/type="radio" name="carrier"/);
 assert.match(memberHTML,/type="radio" name="denomination_vnd"/);
 assert.match(memberHTML,/name="quantity"/);
 console.log('PASS: multi-card atomic balance gate, per-card fees/refunds and compact picker.');
+
+assert.equal((await call('/api/card-redemptions')).data.free_from_vnd,25000);
+sqlite.prepare("INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id) VALUES(?,?,?,?,?,?)").run(randomUUID(),'user1',100000,'Test credit','test','fee-threshold');
+const beforeFree=balance();
+assert.equal((await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000,expected_fee_lua:2000})).status,409);
+const freeCard=await call('/api/card-redemptions','POST',{carrier:'Viettel',denomination_vnd:50000,quantity:2,expected_fee_lua:0});
+assert.equal(freeCard.status,201,JSON.stringify(freeCard));
+assert.equal(freeCard.data.fee_lua,0);
+assert.equal(freeCard.data.total_lua,100000);
+assert.equal(balance(),beforeFree-100000);
+for(const rid of freeCard.data.ids){
+ assert.equal((await call('/api/admin/card-redemptions/'+rid,'POST',{action:'rejected',note:'Fixture refund'},'admin')).status,200);
+}
+assert.equal(balance(),beforeFree);
+console.log('PASS: free threshold, stale fee rejection and fee-free multi-card refund.');

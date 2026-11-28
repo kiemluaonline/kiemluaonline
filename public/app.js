@@ -1,6 +1,6 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit, previewShopPhoto } from './shop-ui.js?v=20261115-three-visual-guide-uploads-v1';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261115-copy-order-id-guide-v1';
-import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261128-catalog-v5';
+import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261128-free-fee-v6';
 import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-withdraw-max-v1';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
@@ -1667,7 +1667,7 @@ async function adminSettings(){
  ${field('lua_per_vnd','Bao nhiêu Lúa = 1 VNĐ',s.lua_per_vnd,'type="number" min="0" max="10000000" required')}
  <h3>💸 Phí rút tiền và đổi thẻ cào</h3>
  <p class="note">Rút 5.000đ – 24.999đ: thu thêm 2.000đ bằng Lúa. Rút từ 25.000đ: miễn phí. Khách nhận đủ số tiền muốn rút. Mức phí rút tự động theo số tiền, Admin không cần cài đặt. Nếu yêu cầu bị từ chối, hoàn toàn bộ Lúa đã giữ gồm phí. Yêu cầu cũ vẫn giữ nguyên phí lúc gửi.</p>
- ${field('card_fee_lua','Phí mỗi lần đổi thẻ cào (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
+ ${field('card_fee_lua','Phí mỗi thẻ dưới 25.000đ (Lúa)',s.card_fee_lua,'type="number" min="0" max="10000000" step="1" required')}
  <h3>🛡️ Quota chống lạm dụng</h3>
  <p class="note">Chặn lượt gửi nhiệm vụ khi vượt giới hạn theo ngày Việt Nam; đặt lại lúc 00:00. Tính cả nhiệm vụ đang chờ và đã duyệt. Nhập 0 để tắt từng giới hạn.</p>
  <div class="form-row">${field('quota_user_tasks_daily','Lượt nhiệm vụ/tài khoản/ngày',s.quota_user_tasks_daily,'type="number" min="0" max="100" required')}
@@ -1942,12 +1942,13 @@ function updateCardPreview(form){
  if(!form)return;
  const value=Number(form.querySelector('[name="denomination_vnd"]:checked')?.value||0);
  const quantity=Math.max(1,Math.min(5,Number(form.querySelector('[name="quantity"]')?.value)||1));
- const rate=Number(form.dataset.rate||0),fee=Number(form.dataset.fee||0);
+ const rate=Number(form.dataset.rate||0),fee=value>=Number(form.dataset.freeFrom||Infinity)?0:Number(form.dataset.fee||0);
+ const expected=form.querySelector('[name="expected_fee_lua"]');if(expected)expected.value=String(fee);
  const base=value*rate*quantity,total=base+fee*quantity;
  for(const [id,text] of [
   ['card-face',fmt(value*quantity)+'đ'],
   ['card-base',fmt(base)+' Lúa'],
-  ['card-fee',fmt(fee*quantity)+' Lúa'],
+  ['card-fee',fee?fmt(fee*quantity)+' Lúa':'Miễn phí'],
   ['card-total',fmt(total)+' Lúa']
  ]){
   const el=form.querySelector('#'+id);
