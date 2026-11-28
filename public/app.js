@@ -1593,9 +1593,6 @@ async function adminSecurity(){
  <div class="fraud-today"><strong>⚠ Link hôm nay: ${fmt(d.link_alert_count||0)} lượt bị chặn</strong><span>${fmt(d.link_alert_accounts||0)} tài khoản • Đặt lại 00:00</span><button type="button" class="btn alt sm" data-action="fraud-open-link-alerts">Xem cảnh báo Link</button></div>
  <section class="card section fraud-account-list"><h3>🛡️ Rủi ro từng tài khoản</h3>
  <p class="note">Ưu tiên điểm cao. Mức nghiêm trọng cần Admin đối chiếu trước khi duyệt tiền; không tự kết luận gian lận.</p>
- <div class="fraud-filter-row">
-  ${[['all','Tất cả'],['serious','Nghiêm trọng'],['review','Cần kiểm tra'],['low','Mức thấp']].map(([v,label])=>`<button type="button" class="btn sm ${state.fraudFilter===v?'':'alt'}" data-action="fraud-filter" data-level="${v}">${label}</button>`).join('')}
- </div>
  <form class="fraud-search-form" data-form="fraud-search">
   <input type="search" name="keyword" value="${esc(state.fraudSearch)}" placeholder="Tìm tên hoặc email thành viên" aria-label="Tìm tài khoản" maxlength="120">
   <button class="btn sm" type="submit">Tìm</button>
