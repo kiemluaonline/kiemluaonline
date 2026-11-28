@@ -94,3 +94,22 @@
  .cards-fee-preview,.withdraw-fee-preview{padding:13px;border-radius:13px}
  .cards-fee-preview .cards-fee-total,.withdraw-fee-preview .withdraw-fee-total{font-size:13px}
 }
+
+
+/* Compact member card picker; native radios keep keyboard and screen reader support. */
+.cards-picker{min-width:0;border:0;padding:0;margin:2px 0 5px}
+.cards-picker legend{font-size:13px;font-weight:800;color:#37644b;padding:0 0 7px}
+.cards-choice-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.cards-choice{position:relative;min-width:0;display:block;cursor:pointer}
+.cards-choice input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.cards-choice span{display:flex;min-height:44px;align-items:center;justify-content:center;text-align:center;border:1px solid #cbded2;background:#fff;border-radius:10px;padding:6px 3px;font-size:12px;line-height:1.25;overflow-wrap:anywhere;color:#245940;transition:background .12s,border-color .12s}
+.cards-choice input:checked+span{background:#176b54;border-color:#176b54;color:white;font-weight:850}
+.cards-choice input:focus-visible+span{outline:2px solid #2d79ed;outline-offset:2px}
+.cards-choice input:disabled+span{opacity:.55;cursor:not-allowed}
+.cards-quantity{display:grid;grid-template-columns:46px minmax(0,1fr) 46px;gap:8px;align-items:center}
+.cards-quantity button,.cards-quantity input{width:100%;min-width:0;min-height:44px;border-radius:10px;border:1px solid #cbded2;background:#fff;color:#245940;text-align:center;font-weight:800;font-size:19px;padding:6px}
+.cards-quantity button:disabled{opacity:.45;cursor:not-allowed}
+.cards-quantity input{font-size:16px;appearance:textfield;-moz-appearance:textfield}
+.cards-quantity input::-webkit-inner-spin-button,.cards-quantity input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.cards-exchange-form .cards-quantity-note{margin:0 0 5px}
+@media(max-width:350px){.cards-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

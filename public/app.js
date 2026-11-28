@@ -1,6 +1,6 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit, previewShopPhoto } from './shop-ui.js?v=20261115-three-visual-guide-uploads-v1';
 import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261115-copy-order-id-guide-v1';
-import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261114-fees-v3';
+import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261128-compact-v4';
 import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-withdraw-max-v1';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
@@ -1940,12 +1940,14 @@ function updateWithdrawalPreview(form){
 }
 function updateCardPreview(form){
  if(!form)return;
- const value=Number(form.querySelector('[name="denomination_vnd"]')?.value||0);
+ const value=Number(form.querySelector('[name="denomination_vnd"]:checked')?.value||0);
+ const quantity=Math.max(1,Math.min(5,Number(form.querySelector('[name="quantity"]')?.value)||1));
  const rate=Number(form.dataset.rate||0),fee=Number(form.dataset.fee||0);
- const base=value*rate,total=base+fee;
+ const base=value*rate*quantity,total=base+fee*quantity;
  for(const [id,text] of [
+  ['card-face',fmt(value*quantity)+'đ'],
   ['card-base',fmt(base)+' Lúa'],
-  ['card-fee',fmt(fee)+' Lúa'],
+  ['card-fee',fmt(fee*quantity)+' Lúa'],
   ['card-total',fmt(total)+' Lúa']
  ]){
   const el=form.querySelector('#'+id);
@@ -2019,6 +2021,16 @@ app.addEventListener('click',async e=>{
   }
   if(act.startsWith('payout-account-')){
    if(await handlePayoutAccountAction(act,el,{api,toast,navigate:async()=>{state.savedManagerOpen=true;await navigate('withdrawals');}}))return;
+  }
+  if(act==='card-quantity'){
+   const form=el.closest('form[data-form="card-redeem"]'),input=form?.elements.quantity;
+   if(!input||input.disabled||el.disabled)return;
+   const delta=Number(el.dataset.delta);if(![-1,1].includes(delta))return;
+   const quantity=Math.max(1,Math.min(5,Number(input.value)+delta));
+   input.value=String(quantity);
+   form.querySelector('[data-delta="-1"]').disabled=quantity<=1;
+   form.querySelector('[data-delta="1"]').disabled=quantity>=5;
+   updateCardPreview(form);return;
   }
   if(act.startsWith('card-')){
    if(await handleCardAction(act,el,{api,toast,navigate}))return;

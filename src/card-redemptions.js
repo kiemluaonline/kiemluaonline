@@ -83,22 +83,29 @@ export async function cardRedemptionsAPI(req,env,H){
    const cost=denomination*rate;
    if(!safeFee||!Number.isSafeInteger(cost)||cost<=0||!Number.isSafeInteger(cost+fee)||cost+fee>1000000000)
      fail(409,'Tỷ giá chưa phù hợp để đổi mệnh giá thẻ này.');
-   const total=cost+fee;
-   const rid=id();
-   const results=await db.batch([
+   const quantity=b.quantity===undefined?1:intValue(b.quantity);
+   if(!Number.isSafeInteger(quantity)||quantity<1||quantity>5)fail(400,'Chỉ chọn từ 1 đến 5 thẻ mỗi lần.');
+   const total=cost+fee,grandTotal=total*quantity;
+   if(!Number.isSafeInteger(grandTotal)||grandTotal>1000000000)fail(400,'Tổng giá trị yêu cầu quá lớn.');
+   const ids=Array.from({length:quantity},()=>id()),rid=ids[0];
+   // The first insert checks the entire order balance. Every other insert depends on it.
+   // One D1 transactional batch; each card keeps its own existing approval/refund/code.
+   const inserts=ids.map((cardId,i)=>i===0?
      db.prepare(`INSERT INTO card_redemptions(id,user_id,carrier,denomination_vnd,amount_lua,rate_snapshot)
        SELECT ?,?,?,?,?,? WHERE
        (SELECT COALESCE(SUM(amount),0) FROM wallet_entries WHERE user_id=?)>=?`)
-       .bind(rid,me.id,carrier,denomination,cost,rate,me.id,total),
-     db.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
+       .bind(cardId,me.id,carrier,denomination,cost,rate,me.id,grandTotal):
+     db.prepare(`INSERT INTO card_redemptions(id,user_id,carrier,denomination_vnd,amount_lua,rate_snapshot)
+       SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM card_redemptions WHERE id=? AND user_id=?)`)
+       .bind(cardId,me.id,carrier,denomination,cost,rate,rid,me.id));
+   const holds=ids.map(cardId=>db.prepare(`INSERT INTO wallet_entries(id,user_id,amount,reason,reference_type,reference_id)
        SELECT ?,?,-?,'Giữ Lúa đổi thẻ (bao gồm phí)','card_redemption_hold',?
-       WHERE EXISTS(SELECT 1 FROM card_redemptions WHERE id=? AND user_id=?)
-       ON CONFLICT(user_id,reference_type,reference_id) DO NOTHING`)
-       .bind(id(),me.id,total,rid,rid,me.id)
-   ]);
-   if(!results[0].meta?.changes||!results[1].meta?.changes)
+       WHERE EXISTS(SELECT 1 FROM card_redemptions WHERE id=? AND user_id=?)`)
+       .bind(id(),me.id,total,cardId,cardId,me.id));
+   const results=await db.batch([...inserts,...holds]);
+   if(results.some(r=>!r.meta?.changes))
      fail(400,'Số dư Lúa không đủ cho thẻ cào và phí xử lý hoặc yêu cầu chưa được lưu.');
-   return json({ok:true,id:rid,amount_lua:cost,fee_lua:fee,total_lua:total,
+   return json({ok:true,id:rid,ids,quantity,amount_lua:cost*quantity,fee_lua:fee*quantity,total_lua:grandTotal,
      message:'Đã gửi yêu cầu đổi thẻ. Tổng Lúa gồm giá thẻ và phí đã được giữ tạm, chờ Admin duyệt.'},201);
  }
  if(!isAdmin)fail(405,'Phương thức không hỗ trợ.');
