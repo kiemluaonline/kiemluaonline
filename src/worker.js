@@ -21,7 +21,7 @@ const WITHDRAWAL_APPROVED_PREFIX = '[TL_WITHDRAWAL_APPROVED] ';
 const WITHDRAW_MIN_VND = 5000;
 const WITHDRAW_FREE_FROM_VND = 25000;
 const WITHDRAW_FEE_VND = 2000;
-const withdrawalFeeFor = (amountLua, luaPerVnd) => (amountLua/luaPerVnd < WITHDRAW_FREE_FROM_VND ? WITHDRAW_FEE_VND*luaPerVnd : 0);
+const withdrawalFeeFor = (amountLua, luaPerVnd, feeVnd=WITHDRAW_FEE_VND, freeFrom=WITHDRAW_FREE_FROM_VND) => (amountLua/luaPerVnd < freeFrom ? feeVnd*luaPerVnd : 0);
 const invalidBankAccountNote = 'Số tài khoản không đúng hoặc thông tin nhận tiền không hợp lệ. Vui lòng kiểm tra và tạo yêu cầu rút mới với thông tin chính xác.';
 function presentWithdrawal(w) {
   if (!w) return w;
@@ -35,7 +35,7 @@ function presentWithdrawal(w) {
 const DEFAULTS = {
   site_name: 'Trạm Có Lúa', signup_enabled: '1', checkin_reward: '0',
   referral_reward: '0', min_withdraw_lua: '1000', lua_per_vnd: '0',
-  withdrawals_enabled: '0', withdrawal_fee_lua: '0', card_fee_lua: '0', announcement: '',
+  withdrawals_enabled: '0', withdrawal_fee_lua: '0', withdrawal_fee_vnd: '2000', payout_free_from_vnd: '25000', card_fee_lua: '0', announcement: '',
   quota_user_tasks_daily: '25', quota_device_accounts_daily: '2', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
   quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1'
@@ -942,8 +942,8 @@ async function handler(req, env) {
       min_withdraw_lua: WITHDRAW_MIN_VND*int(settings.lua_per_vnd),
       lua_per_vnd: int(settings.lua_per_vnd),
       withdrawal_fee_lua: 0, // Chỉ để tương thích client cũ; phí thực tế tính theo số tiền rút.
-      withdrawal_min_vnd: WITHDRAW_MIN_VND, withdrawal_free_from_vnd: WITHDRAW_FREE_FROM_VND,
-      withdrawal_fee_vnd: WITHDRAW_FEE_VND });
+      withdrawal_min_vnd: WITHDRAW_MIN_VND, withdrawal_free_from_vnd: int(settings.payout_free_from_vnd),
+      withdrawal_fee_vnd: int(settings.withdrawal_fee_vnd) });
   }
   if (m === 'POST' && p === '/api/setup') {
     const b = await readBody(req), email = normEmail(b.email), password = b.password;
@@ -1722,7 +1722,7 @@ async function handler(req, env) {
     const vndAmount = amount/rate;
     if (vndAmount < WITHDRAW_MIN_VND)
       fail(400, `Rút tối thiểu ${WITHDRAW_MIN_VND.toLocaleString('vi-VN')}đ.`);
-    const fee = withdrawalFeeFor(amount,rate);
+    const fee = withdrawalFeeFor(amount,rate,int(settings.withdrawal_fee_vnd),int(settings.payout_free_from_vnd));
     if (!Number.isSafeInteger(fee) || !Number.isSafeInteger(amount+fee) || amount+fee>1000000000)
       fail(409,'Khoản rút và phí vượt giới hạn cho phép.');
     // Máy chủ tính phí theo VNĐ; phiên bản Safari cũ hoặc khách sửa HTML không được bỏ qua phí.
@@ -2271,8 +2271,9 @@ async function handler(req, env) {
         if (!(key in body)) continue;
         const value = str(body[key], key === 'announcement' ? 1000 : 100);
         if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
-        if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua'].includes(key)
+        if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua', 'withdrawal_fee_vnd', 'payout_free_from_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
+        if(key==='payout_free_from_vnd'&&Number(value)<5000)fail(400,'Ngưỡng miễn phí phải từ 5.000đ trở lên.');
         if(key==='quota_link_ip_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn IP.');
         if(key==='quota_link_device_exclusive'&&!['0','1'].includes(value))fail(400,'Chọn Bật hoặc Tắt giới hạn trình duyệt.');
         if (['quota_user_tasks_daily','quota_device_accounts_daily','quota_ip_accounts_daily','quota_link_tasks_ip_24h','quota_link_tasks_device_24h'].includes(key)
