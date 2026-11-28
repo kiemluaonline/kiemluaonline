@@ -2364,7 +2364,7 @@ if(act==='toggle-menu'){setMenuOpen(!app.querySelector('.layout.menu-open'));ret
       const answer=localizedPrompt('Để xác nhận xóa đúng '+count+' hồ sơ trong mục '+label+', nhập '+required+':','');
       if(answer!==required){toast('Đã hủy thao tác xóa.',true);return;}
     }
-    const result=await api('/api/admin/reviews/erase-processed','POST',{confirm:'DELETE_REVIEWED_EVIDENCE',expected_count:count,status,category,...(single?{id:el.dataset.id}:{})});
+    const result=await api('/api/admin/reviews/erase-scoped','POST',{confirm:'DELETE_REVIEWED_EVIDENCE',expected_count:count,status,category,...(single?{id:el.dataset.id}:{})});
     toast(result.message);await afterAction('admin-reviews');return;
   }
   if(act==='withdraw-admin'){
