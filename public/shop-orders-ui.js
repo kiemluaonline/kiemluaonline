@@ -82,7 +82,7 @@ export async function shopOrdersPage(ctx){
 }
 
 export async function adminShopOrdersPage(ctx){
- const {api,esc,heading,fmt,dt}=ctx;
+ const {api,esc,heading,fmt,dt,adminListControls}=ctx;
  const data=await api('/api/admin/shop/orders');
  const orders=data.orders||[];
  const pending=orders.filter(x=>x.status==='pending').length;
@@ -99,7 +99,8 @@ export async function adminShopOrdersPage(ctx){
    <section class="sorder-summary"><div class="sorder-summary-card"><span>⌛ Chờ xác minh</span><strong>${fmt(pending)}</strong></div><div class="sorder-summary-card"><span>🔎 Chờ giải quyết</span><strong>${fmt(waiting)}</strong></div><div class="sorder-summary-card sorder-summary-lua"><span>🌾 Đã giải quyết</span><strong>${fmt(orders.filter(x=>x.status==='resolved').length)}</strong></div></section>
    <div class="sorder-admin-warning"><strong>⚠️ Kiểm tra thủ công trên TikTok Shop</strong><p>ID do khách nhập chỉ là thông tin khai báo. Để <b>tạm duyệt</b>, hãy kiểm tra đúng ID đơn hàng và sản phẩm trong TikTok Shop. <b>Không bắt buộc hàng đã giao hoặc đã thanh toán ở bước này.</b> Chỉ chọn <b>Đã giải quyết & cộng Lúa</b> sau khi hàng được giao, đã thanh toán và hoa hồng Affiliate đã quyết toán hợp lệ. Đơn bị hủy/hoàn hoặc không đủ điều kiện phải từ chối.</p></div>
    <div class="sorder-section-heading"><h2>Đơn hàng cần xử lý</h2><span>${fmt(orders.length)} đơn đã ghi nhận</span></div>
-   ${orders.length?`<div class="sorder-admin-list">${orders.map(o=>{const meta=shopOrderMeta(o.status);return `<article class="sorder-admin-card"><div class="sorder-card-top"><div><span class="sorder-eyebrow">ĐƠN TIKTOK</span><strong>${esc(o.order_reference)}</strong></div><span class="sorder-status sorder-status-${meta.color}">${meta.symbol} ${meta.text}</span></div>
+   ${adminListControls?adminListControls('orders',orders,[['pending|provisional','Cần xử lý'],['pending','Chờ xác minh'],['provisional','Chờ giải quyết'],['resolved','Đã giải quyết'],['rejected','Từ chối'],['all','Tất cả']],'Tìm ID đơn, thành viên, sản phẩm…'):''}
+   ${orders.length?`<div class="sorder-admin-list">${orders.map(o=>{const meta=shopOrderMeta(o.status);return `<article class="sorder-admin-card" data-admin-list-item="orders" data-admin-status="${esc(o.status)}"><div class="sorder-card-top"><div><span class="sorder-eyebrow">ĐƠN TIKTOK</span><strong>${esc(o.order_reference)}</strong></div><span class="sorder-status sorder-status-${meta.color}">${meta.symbol} ${meta.text}</span></div>
      <p><b>${esc(o.name)}</b> · ${esc(o.email)}</p><p>🛍️ <b>${esc(o.product_title)}</b></p><p>📅 ${esc(dt(o.created_at))}</p>${o.customer_note?`<p>Ghi chú khách: ${esc(o.customer_note)}</p>`:''}
      ${o.status==='pending'?`<form class="sorder-admin-form" data-form="shop-order-provisional"><input type="hidden" name="id" value="${esc(o.id)}">
        <div class="sorder-preset-label">Kết quả kiểm tra ID đơn hàng (chỉ Admin xem)</div>
