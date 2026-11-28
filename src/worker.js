@@ -978,9 +978,10 @@ async function linkReturnUsage(env,userId,taskId){
    AS n`).bind(userId,taskId,userId,taskId).first();
  return Number(row?.n||0);
 }
-async function linkIPQuota(env,req,userId,task,settings,stage='unknown'){
+async function linkIPQuota(env,req,userId,task,settings,stage='unknown',reservedIP=null){
  if(task.category!=='link')return {enabled:0,owner:0,limit:0,ip:'',perTask:0};
- const ip=clientIP(req);
+ // Only a server-owned returned attempt can supply reservedIP; never trust request body.
+ const ip=reservedIP??clientIP(req);
  if(ip==='unknown'||ip==='local')fail(429,'Không xác minh được IP mạng cho nhiệm vụ link. Vui lòng thử lại.',{quota_scope:'link_missing_ip'});
  const limit=quotaNumber(settings,'quota_link_tasks_ip_24h');
  const exclusive=settings.quota_link_ip_exclusive!=='0';
@@ -1530,8 +1531,8 @@ async function handler(req, env) {
     const returnIP=clientIP(req);
     if(attempt.device_code!==await deviceCode(req,env))
       fail(409,'Hãy xác minh bằng trình duyệt đã mở nhiệm vụ.');
-    if(attempt.available_at<0&&attempt.ip!==returnIP)
-      fail(409,'Hãy dùng lại mạng tại thời điểm bắt đầu xác minh. Lượt cũ vẫn được giữ trong thời hạn.');
+    // Once the confirmation is open, the same account and browser may resume on a different IP.
+    // Keep attempt.ip pinned to the first verified return for all quota checks.
     if(attempt.available_at<0&&attempt.expires_at===0){
       if(body.abandon===true)return json({ok:true,status:'abandoned'});
       fail(409,'Bạn đã xác nhận bỏ lượt này. Lượt vẫn được ghi nhận, không nhận Lúa.',{confirmation_abandoned:true});
@@ -1585,7 +1586,7 @@ async function handler(req, env) {
           AND NOT EXISTS (SELECT 1 FROM task_attempts x WHERE x.user_id=? AND x.task_id=? AND x.id<>? AND x.consumed_by IS NULL AND x.available_at<0 AND x.expires_at<>0)`)
         .bind(-arrivedAt,LINK_CONFIRM_OPEN,returnIP,attempt.id,me.id,me.id,task.id,attempt.id).run();
       if(!mark.meta?.changes){
-        const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0 AND ip=? AND device_code=?').bind(attempt.id,me.id,returnIP,attempt.device_code).first();
+        const same=await env.DB.prepare('SELECT * FROM task_attempts WHERE id=? AND user_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0 AND device_code=?').bind(attempt.id,me.id,attempt.device_code).first();
         if(!same){
           const receipt=await savedReturn();
           if(receipt)return json(receipt);
@@ -1625,7 +1626,10 @@ async function handler(req, env) {
     }
     const settings=await getSettings(env);
     const quota=await taskQuota(env,req,me.id,settings,'link');
-    const link=await linkIPQuota(env,req,me.id,task,settings,'submit');
+    // Charge the original confirmation network even if Wi-Fi/4G changes during CAPTCHA.
+    // The actual new IP is recorded separately, not used to move or reset the reserved quota.
+    const confirmationIP=attempt.ip;
+    const link=await linkIPQuota(env,req,me.id,task,settings,'submit',confirmationIP);
     const browserLink=await linkBrowserQuota(env,req,me.id,task,settings,'submit');
     const completionId=id();
     const completionPeriod=link.perTask>1?'link24:'+completionId:period(task);
@@ -1659,7 +1663,7 @@ async function handler(req, env) {
         'INSERT OR IGNORE INTO task_completions (id,user_id,task_id,period_key,status,reward,evidence,ip,device_code) ' +
         "SELECT ?,?,?,?,'pending',?,?,?,? FROM task_attempts WHERE id=? AND user_id=? AND consumed_by=?"
       ).bind(completionId,me.id,task.id,completionPeriod,task.reward,evidence,
-        clientIP(req),await deviceCode(req,env),attempt.id,me.id,completionId)
+        confirmationIP,await deviceCode(req,env),attempt.id,me.id,completionId)
     ]);
     if (!batch[0].meta?.changes || !batch[1].meta?.changes){
       const existing=await savedReturn();
@@ -1667,6 +1671,7 @@ async function handler(req, env) {
       fail(409, 'Lượt thực hiện đã được ghi nhận hoặc đã hết hạn mức. Không cộng Lúa trùng.');
     }
     await recordTaskDevice(env, req, me.id, attempt.id, 'submit');
+    if(confirmationIP!==returnIP)await event(env,req,'link_confirmation_network_changed',me.id,'attempt:'+attempt.id).catch(()=>{});
     if(!recoveredLate&&sourceLink?.verification==='api_auto'&&sourceConfig.verification==='api_auto'&&autoRewardEligible({views,baseline:sourceLink.baseline,fastReturn:Boolean(fastReturn),confirmed:autoRewardEnabled(env,verifiedSource),unchanged:sourceConfig.id===sourceLink.id})){
       // Re-check current settings, task and user inside the atomic write; no client-supplied view.
       const approved=await env.DB.batch([
@@ -1694,8 +1699,8 @@ async function handler(req, env) {
     if(task.category==='link'){
       const unfinished=await env.DB.prepare('SELECT * FROM task_attempts WHERE user_id=? AND task_id=? AND consumed_by IS NULL AND available_at<0 AND expires_at<>0 ORDER BY available_at ASC,id DESC LIMIT 1').bind(me.id,task.id).first();
       if(unfinished){
-        if(unfinished.ip!==clientIP(req)||unfinished.device_code!==await deviceCode(req,env))
-          fail(409,'Bạn còn lượt chưa xác minh. Hãy dùng lại mạng và trình duyệt ban đầu hoặc liên hệ Admin. Lượt cũ vẫn được giữ.');
+        if(unfinished.device_code!==await deviceCode(req,env))
+          fail(409,'Bạn còn lượt chưa xác minh. Hãy dùng lại trình duyệt ban đầu hoặc liên hệ Admin. Lượt cũ vẫn được giữ.');
         const assigned=await getAttemptSource(env,unfinished.id);
         const query=new URLSearchParams({link_return:task.id,return_attempt:unfinished.id});
         if(assigned?.returnSession)query.set('link_session',assigned.returnSession);
