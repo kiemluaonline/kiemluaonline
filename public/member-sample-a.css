@@ -1,0 +1,151 @@
+/* Trạm Có Lúa — mẫu A, member-only visual layer.
+   Keep DOM, routes, notices, validation, task states and all data untouched.
+   Remove this stylesheet link to restore the previous member appearance. */
+.layout:not(.admin-workspace){
+ --member-ink:#244a38;--member-green:#1d6d50;--member-gold:#d6b65f;
+ --member-line:#dce5d8;--member-bg:#f3f5ef;--member-muted:#576f60;
+ color:var(--member-ink);background:var(--member-bg)
+}
+.layout:not(.admin-workspace) .main-area{background:#f3f5ef}
+.layout:not(.admin-workspace) .main-area::before{animation:none;background:radial-gradient(ellipse at 12% 0%,#dfeade80,transparent 70%),radial-gradient(ellipse at 95% 20%,#f4e7bd65,transparent 65%);opacity:.65}
+.layout:not(.admin-workspace) .topbar{background:#fff;border-color:#dce5d8;box-shadow:0 2px 7px #284d3610}
+.layout:not(.admin-workspace) .topbar::after{background:linear-gradient(90deg,#277c59,#86ab71,#dfc16e);opacity:.7}
+.layout:not(.admin-workspace) .menu-toggle,.layout:not(.admin-workspace) .header-icon-button{background:#f4f6ee;border-color:#dce5d5;color:#24543e}
+.layout:not(.admin-workspace) .balance-pill{background:#f8efd2;border-color:#e9dbab;color:#6d5522;animation:none;box-shadow:none}
+.layout:not(.admin-workspace) .topbar .header-avatar{background:#22674c;box-shadow:none}
+.layout:not(.admin-workspace) .sidebar{background:#174b38}
+.layout:not(.admin-workspace) .nav button.active{background:#f3eac9;color:#244e38;box-shadow:inset 3px 0 #d2ad54}
+.layout:not(.admin-workspace) .nav button:focus-visible,.layout:not(.admin-workspace) .btn:focus-visible,.layout:not(.admin-workspace) summary:focus-visible{outline:2px solid #997225;outline-offset:2px}
+.layout:not(.admin-workspace) .content .card:not(.task-payment){border-color:#dce5d8;border-radius:15px;box-shadow:0 3px 10px #264c3510}
+.layout:not(.admin-workspace) .content .card:not(.task-payment):hover{box-shadow:0 3px 10px #264c3510}
+.layout:not(.admin-workspace) .content .page-head h2{color:#234f39;letter-spacing:-.4px}
+.layout:not(.admin-workspace) .content .btn:not(.alt):not(.danger):not(.gold):not(.is-disabled):not(:disabled){background:#1d6d50;border-color:#1d6d50;color:#fff;box-shadow:none}
+.layout:not(.admin-workspace) .content .btn:not(.alt):not(.danger):not(.gold):not(.is-disabled):not(:disabled):hover{background:#17563f}
+.layout:not(.admin-workspace) .content .btn.alt:not(:disabled):not(.is-disabled){border-color:#cdddcf;color:#25583e;background:#fff}
+.layout:not(.admin-workspace) .content .btn.gold:not(:disabled){background:#e8cc80;color:#3d482d;border-color:#d8bb70}
+.layout:not(.admin-workspace) .content .field input,.layout:not(.admin-workspace) .content .field select,.layout:not(.admin-workspace) .content .field textarea{border-radius:9px;max-width:100%}
+.layout:not(.admin-workspace) .content .table-wrap{border-color:#dce5d8;border-radius:12px}
+.layout:not(.admin-workspace) .header-notification-panel{border-color:#dce5d8;border-radius:13px;box-shadow:0 10px 30px #173b2b24}
+.layout:not(.admin-workspace) .header-notification-title{background:#faf5e6;border-color:#eee2c2}
+.layout:not(.admin-workspace) .header-notification-title button{min-width:44px;min-height:44px}
+.layout:not(.admin-workspace) .header-notification-item{min-height:44px}
+.layout:not(.admin-workspace) .global-payment-wrap>.task-payment,.layout:not(.admin-workspace) .task-payment{background:#faf6e7;border-color:#e5d8ad;box-shadow:0 3px 10px #755a1810}
+.layout:not(.admin-workspace) .task-payment::before{background:none}
+.layout:not(.admin-workspace) .task-payment .paid-status-line strong{color:#765b20}
+.layout:not(.admin-workspace) .task-payment .paid-highlight{color:#246749}
+.layout:not(.admin-workspace) .task-payment .paid-disclaimer{color:#655e48}
+.layout:not(.admin-workspace) .task-payment .paid-slide-progress{background-color:#d4b25d}
+.layout:not(.admin-workspace) .shop-notice{border-radius:12px;box-shadow:none}
+.layout:not(.admin-workspace) .shop-notice-ready{border-color:#d6e2cb;background:#eef4e8;color:#28543d}
+/* Overview — retain every number, chart, description and recent task. */
+.layout:not(.admin-workspace) .member-overview{color:#244a38;gap:12px}
+.layout:not(.admin-workspace) :is(.member-overview-wallet,.member-overview-panel,.member-overview-stat){padding:16px;border-radius:14px;border-color:#dce5d8;box-shadow:0 3px 10px #264c3510}
+.layout:not(.admin-workspace) .member-overview-wallet{background:linear-gradient(115deg,#205c43,#2f7852);border-color:#276549;color:#fff}
+.layout:not(.admin-workspace) .member-overview-wallet>span,.layout:not(.admin-workspace) .member-overview-wallet p{color:#e2eddf}
+.layout:not(.admin-workspace) .member-overview-wallet h2{color:#f4dfa0;margin:10px 0;font-size:30px}
+.layout:not(.admin-workspace) .member-overview-wallet p{margin-bottom:12px}
+.layout:not(.admin-workspace) .member-overview-wallet .btn:not(.alt){background:#e8cc80;border-color:#e8cc80;color:#30462c}
+.layout:not(.admin-workspace) .member-overview-wallet .btn:not(.alt):hover{background:#f0d997}
+.layout:not(.admin-workspace) .member-overview-wallet .btn.alt{background:#fff1;color:#fff;border-color:#a5c3ad}
+.layout:not(.admin-workspace) .member-overview-wallet .btn.alt:hover{background:#fff2}
+.layout:not(.admin-workspace) .member-overview-goal h2{margin:8px 0;font-size:24px}
+.layout:not(.admin-workspace) .member-overview-goal>span{color:#846527}
+.layout:not(.admin-workspace) .member-overview-progress{background:#e8eddf;height:8px;margin:10px 0 6px}
+.layout:not(.admin-workspace) .member-overview-progress i{background:#cfb15c}
+.layout:not(.admin-workspace) .member-overview-stats{gap:9px}
+.layout:not(.admin-workspace) .member-overview-stat{padding:12px;align-items:flex-start}
+.layout:not(.admin-workspace) .member-overview-stat span,.layout:not(.admin-workspace) .member-overview-income-stats span{font-size:12px;color:#586e60}
+.layout:not(.admin-workspace) .member-overview-stat strong{font-size:25px;margin:6px 0 4px}
+.layout:not(.admin-workspace) .member-overview small{color:#5f7164;line-height:1.4;overflow-wrap:anywhere}
+.layout:not(.admin-workspace) .member-overview-stat.success{background:#f4f8ef;border-color:#dce8d5}
+.layout:not(.admin-workspace) .member-overview-stat.pending{background:#fcf8ed;border-color:#ebdfb9}
+.layout:not(.admin-workspace) .member-overview-stat.active{background:#fff;border-color:#dce5d8}
+.layout:not(.admin-workspace) .member-overview :is(.success,.active) strong,.layout:not(.admin-workspace) .member-overview strong:is(.success,.active){color:#286849}
+.layout:not(.admin-workspace) .member-overview .pending strong{color:#8a6927}
+.layout:not(.admin-workspace) .member-overview-stat i,.layout:not(.admin-workspace) .member-overview-income header i,.layout:not(.admin-workspace) .member-overview-recent-row>i{width:34px;height:34px;border-radius:10px;background:#eaf1e5;color:#356d4d;font-size:18px}
+.layout:not(.admin-workspace) .member-overview-stat.pending i{background:#f2e7c7;color:#846527}
+.layout:not(.admin-workspace) .member-overview-panel h3{font-size:17px}
+.layout:not(.admin-workspace) .member-overview-panel p{font-size:12px;color:#5f7164;margin:4px 0 9px}
+.layout:not(.admin-workspace) .member-overview-period{background:#f5ecd0;color:#806426;border-radius:9px;padding:4px 9px;margin:0 0 9px;font-size:11px}
+.layout:not(.admin-workspace) .member-overview-income-stats{gap:6px}
+.layout:not(.admin-workspace) .member-overview-income-stats>div{background:#f5f7f1;border-color:#e1e7da;border-radius:9px;padding:9px}
+.layout:not(.admin-workspace) .member-overview-income-stats strong{font-size:18px;margin:5px 0 4px}
+.layout:not(.admin-workspace) .member-overview-chart{margin-top:12px}
+.layout:not(.admin-workspace) .member-overview-bar-track{border-color:#dce5d8;background:repeating-linear-gradient(to top,transparent 0,transparent 33px,#e7ede3 34px,#e7ede3 35px)}
+.layout:not(.admin-workspace) .member-overview-bar-track i{background:#66966e}
+.layout:not(.admin-workspace) .member-overview-link{color:#286849;min-height:44px}
+.layout:not(.admin-workspace) .member-overview-recent-row{padding:10px 0;gap:9px;border-color:#e6ebe2}
+.layout:not(.admin-workspace) .member-overview-recent-row small{margin:4px 0}
+/* Sample A task cards: the original count, status, progress and buttons remain. */
+.layout:not(.admin-workspace) .content .task-stat{border-radius:12px;background:#fff}
+.layout:not(.admin-workspace) .content .task-stat:last-child{background:#faf4e1;border-color:#e8dab1}
+.layout:not(.admin-workspace) .content .task-security-compact.card{background:#fff;border-radius:13px;border-color:#d7e3d6;padding:12px 13px}
+.layout:not(.admin-workspace) .task-security-compact p.task-security-policy{background:#f0f5e9;border-color:#d6e3d1;border-left-color:#38805b;color:#345d43;font-size:12px;line-height:1.45}
+.layout:not(.admin-workspace) .task-security-details>summary{min-height:44px}
+.layout:not(.admin-workspace) .content .task-card-modern{background:#fff;border-color:#d7e3d4;box-shadow:0 3px 11px #214a3610;border-radius:15px}
+.layout:not(.admin-workspace) .content .task-card-modern::before{background:linear-gradient(90deg,#176b4a,#84ad74 55%,#dfbf65);height:4px}
+.layout:not(.admin-workspace) .content .task-card-modern::after{background:none}
+.layout:not(.admin-workspace) .content .task-card-modern-icon{background:#edf4e5;border-color:#dde8d3;border-radius:12px;box-shadow:none}
+.layout:not(.admin-workspace) .content .task-card-modern h3{color:#214c36}
+.layout:not(.admin-workspace) .content .task-card-modern-type{color:#52735d;letter-spacing:.045em}
+.layout:not(.admin-workspace) .content .task-card-modern-reward{background:#f6ebcb;color:#795d22;border-color:#ecdcac}
+.layout:not(.admin-workspace) .content .task-card-modern-timing{background:#f0f3ef;color:#53685a}
+.layout:not(.admin-workspace) .content .task-card-modern-count{background:#faf1d9;border-color:#ead8a5}
+.layout:not(.admin-workspace) .content .task-card-modern-count strong,.layout:not(.admin-workspace) .content .task-card-modern-count small{color:#815e25}
+.layout:not(.admin-workspace) .content .task-card-modern-action:not(.is-disabled):not(:disabled){background:#1d6d50;border-color:#1d6d50;color:#fff;box-shadow:none;min-height:46px}
+.layout:not(.admin-workspace) .content .task-card-modern-action:not(.is-disabled):not(:disabled):hover{background:#17563f}
+.layout:not(.admin-workspace) .content .task-card-modern-action.is-disabled{background:#e8ece5;border-color:#d8e0d5;color:#536254;box-shadow:none}
+.layout:not(.admin-workspace) .content .task-card-modern-track.is-unavailable>span{background-image:linear-gradient(90deg,#bd4f5a,#d86d76)}
+.layout:not(.admin-workspace) .content .task-card-modern-section-head>span{color:#786128}
+/* Existing shopping, order, payout, referral, benefits, history and profile cards. */
+.layout:not(.admin-workspace) .shop-hero{background:linear-gradient(115deg,#205c43,#357a56);border-radius:16px;box-shadow:0 4px 14px #204b3517}
+.layout:not(.admin-workspace) .shop-primary-link{background:#e8cc80;color:#30462c;box-shadow:none;border-radius:10px}
+.layout:not(.admin-workspace) .shop-main-bag{animation:none;box-shadow:8px 10px 0 #173e2e30}
+.layout:not(.admin-workspace) .shop-section{margin-top:24px}
+.layout:not(.admin-workspace) .shop-section-top{margin-bottom:12px}
+.layout:not(.admin-workspace) :is(.shop-product-card,.sorder-summary-card,.sorder-card,.cards-item){border-color:#dce5d8;border-radius:14px;box-shadow:0 3px 10px #264c3510}
+.layout:not(.admin-workspace) .sorder-intro,.layout:not(.admin-workspace) .cards-hero{background:#245e43;border-radius:14px;box-shadow:none}
+.layout:not(.admin-workspace) .sorder-summary-lua,.layout:not(.admin-workspace) .cards-balance{background:#faf3de;border-color:#e7d9b0}
+.layout:not(.admin-workspace) .sorder-award{background:#eef4e7;border-color:#d7e4cf}
+.layout:not(.admin-workspace) .withdraw-saved-picker{background:#f4f7ef;border-color:#dce5d8}
+.layout:not(.admin-workspace) .withdraw-history-item{background:#fff;border-color:#dce5d8;border-radius:13px}
+.layout:not(.admin-workspace) .withdraw-history-head strong{color:#286849}
+/* Member-only modal (the modal root is a sibling of the layout). Preserve scroll and button rules. */
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-cover{background:#132d22b8}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-modal{background:#fffdf7;color:#244a38;border:1px solid #d9e4d5;border-radius:17px;box-shadow:0 12px 40px #153a2a45}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-modal::before{background:linear-gradient(90deg,#26764f,#ddbf6c)}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-icon{background:#e7eee0;color:#265e40;box-shadow:none}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-modal .task-rules-header h3{color:#244a38}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-header p,.layout:not(.admin-workspace) ~ #modal-root .task-rules-meta dt{color:#53685a}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-meta{background:#f3f6ed}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-meta>div+div{border-color:#dce5d8}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-meta dd{color:#244a38}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-meta dd.task-rules-reward{color:#846527}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-heading,.layout:not(.admin-workspace) ~ #modal-root .task-rules-list li{color:#365a44}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-rule-icon{background:#eaf1e4;color:#32694b}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-note{background:#f8f0d9;color:#715923}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-actions{background:#fffdf7;border-color:#dce5d8}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-modal .task-rules-cancel{background:#fff;border-color:#cdddcf;color:#28543c}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-modal .task-rules-accept{background:#1d6d50;border-color:#1d6d50;color:#fff;box-shadow:none}
+.layout:not(.admin-workspace) ~ #modal-root .task-rules-modal .task-rules-accept:hover{background:#17563f}
+@media(max-width:730px){
+ .layout:not(.admin-workspace) .content{padding:12px 11px 30px}
+ .layout:not(.admin-workspace) .content .card:not(.task-payment){padding:13px}
+ .layout:not(.admin-workspace) .content .task-card-modern{padding:14px 12px 12px}
+ .layout:not(.admin-workspace) .content .field input,.layout:not(.admin-workspace) .content .field select,.layout:not(.admin-workspace) .content .field textarea{font-size:16px}
+ .layout:not(.admin-workspace) .member-overview-wallet,.layout:not(.admin-workspace) .member-overview-panel{padding:14px}
+ .layout:not(.admin-workspace) .member-overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .layout:not(.admin-workspace) .member-overview-stat{position:relative;display:block;padding:11px}
+ .layout:not(.admin-workspace) .member-overview-stat i{width:27px;height:27px;font-size:14px;position:absolute;top:9px;right:8px}
+ .layout:not(.admin-workspace) .member-overview-stat span{display:block;padding-right:28px;line-height:1.4}
+ .layout:not(.admin-workspace) .member-overview-income-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .layout:not(.admin-workspace) .member-overview-income-stats>div{padding:7px}
+ .layout:not(.admin-workspace) .member-overview-income-stats strong{font-size:15px}
+ .layout:not(.admin-workspace) .member-overview-income-stats span{font-size:11px}
+ .layout:not(.admin-workspace) .member-overview-income-stats small{font-size:10px}
+ .layout:not(.admin-workspace) .member-overview-bar-track{height:90px}
+}
+@media(max-width:340px){
+ .layout:not(.admin-workspace) .member-overview-stats{grid-template-columns:1fr}
+ .layout:not(.admin-workspace) .member-overview-income-stats{grid-template-columns:1fr}
+}
