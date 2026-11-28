@@ -1,6 +1,6 @@
 import { shopPage, adminShopPage, handleShopAction, handleShopSubmit, previewShopPhoto } from './shop-ui.js?v=20261115-three-visual-guide-uploads-v1';
-import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261115-copy-order-id-guide-v1';
-import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261128-free-fee-v6';
+import { shopOrdersPage, adminShopOrdersPage, handleShopOrderAction, handleShopOrderSubmit } from './shop-orders-ui.js?v=20261128-admin-status-v2';
+import { cardRedemptionsPage, adminCardRedemptionsPage, handleCardAction, handleCardSubmit } from './card-redemptions-ui.js?v=20261128-admin-status-v7';
 import { payoutAccountsPage, handlePayoutAccountAction, handlePayoutAccountSubmit } from './payout-accounts-ui.js?v=20261114-withdraw-max-v1';
 // Dịch thông báo trình duyệt mà không thay đổi dữ liệu Admin nhập.
 const localizedConfirm=message=>window.confirm((typeof window.TramI18n?.translateLabel==='function'?window.TramI18n.translateLabel(message):message));
@@ -1346,6 +1346,20 @@ async function profile(){
 }
 function prepareAdminPage(root,view){
  root.dataset.adminView=view;
+ // Move existing nodes, never rebuild or clone forms. Editing still opens the original form.
+ const fold=(node,title,open=false)=>{
+  if(!node)return;
+  const details=document.createElement('details');details.className='card admin-fold admin-panel-fold';details.open=open;
+  const summary=document.createElement('summary');summary.textContent=title;
+  node.before(details);details.append(summary,node);
+ };
+ if(view==='admin-shop'){
+  fold(root.querySelector('#shop-product-form'),state.shopEdit?'✎ Chỉnh sửa sản phẩm':'+ Thêm sản phẩm mới',!!state.shopEdit);
+  fold(root.querySelector('form[data-form="shop-contact"]'),'Kênh liên hệ Admin');
+  fold(root.querySelector('form[data-form="shop-showcase"]'),'Trang trưng bày TikTok Shop');
+  fold(root.querySelector('.shop-guide-admin'),'Ảnh hướng dẫn mua hàng');
+ }
+ if(view==='admin-cards')fold(root.querySelector('.cards-admin-settings'),'Cấu hình dịch vụ đổi thẻ');
  // Decorate only existing Admin tables. Preserve every form, button and data attribute.
  root.querySelectorAll('.table-wrap table').forEach(table=>{
   const heads=Array.from(table.tHead?.rows[0]?.cells||[],cell=>cell.textContent.trim());
