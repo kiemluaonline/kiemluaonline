@@ -1884,8 +1884,14 @@ async function handler(req, env) {
         "SELECT COUNT(*) n FROM risk_events WHERE date(created_at,'+7 hours')=date('now','+7 hours')"
       ];
       const r = await Promise.all(queries.map(q => env.DB.prepare(q).first()));
+      const [withdrawWork,shopWork,cardWork]=await Promise.all([
+        env.DB.prepare("SELECT COUNT(*) n FROM withdrawals WHERE status='pending'").first(),
+        env.DB.prepare("SELECT COUNT(*) n FROM shop_orders WHERE status IN ('pending','provisional')").first().catch(()=>null),
+        env.DB.prepare("SELECT COUNT(*) n FROM card_redemptions WHERE status IN ('pending','approved')").first().catch(()=>null)
+      ]);
       return json({ members: r[0].n, tasks: r[1].n, pending_evidence: r[2].n,
-        pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n });
+        pending_withdrawals: r[3].n, total_issued_lua: r[4].n, risk_events_today: r[5].n,
+        withdrawals_to_process:withdrawWork.n,shop_orders_to_process:shopWork?.n??null,cards_to_process:cardWork?.n??null });
     }
     if(m==='GET'&&p==='/api/admin/link-sources'){
       const rows=await env.DB.prepare("SELECT value FROM settings WHERE key LIKE 'link_source_config:%' ORDER BY key LIMIT 100").all();

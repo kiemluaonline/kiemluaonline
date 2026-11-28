@@ -93,7 +93,7 @@ export async function adminCardRedemptionsPage(ctx){
   </div>
   <div class="cards-warning" role="note">⚠️ Kiểm tra Chống gian lận và đối chiếu tài khoản trước khi phát thẻ, vì mã thẻ sau khi phát không thể thu hồi.</div>
   <div class="cards-section-head"><h3>Yêu cầu đổi thẻ từ thành viên</h3><span>${items.length} yêu cầu</span></div>
-  ${items.length?`<div class="cards-history">${items.map(i=>`<article class="card cards-admin-item">
+  ${items.length?`<div class="cards-history">${items.map(i=>`<article class="card cards-admin-item" data-admin-status="${esc(i.status)}">
    <div class="cards-item-top"><strong>${esc(i.carrier)} • ${money(i.denomination_vnd)}đ</strong><span class="cards-status cards-status-${esc(i.status)}">${cardStatus[i.status]||'Đang xử lý'}</span></div>
    <p><strong>${esc(i.name)}</strong> <span class="cards-light">(${esc(i.email)})</span></p>
    <div class="cards-meta"><span>Giá thẻ: ${money(i.amount_lua)} Lúa</span><span>Phí: ${money(i.fee_lua)} Lúa</span><span>Tổng giữ: ${money(Number(i.amount_lua)+Number(i.fee_lua||0))} Lúa</span><span>${esc(dt(i.created_at))}</span></div>
