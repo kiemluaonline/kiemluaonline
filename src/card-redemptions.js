@@ -1,6 +1,6 @@
 // Đổi Lúa lấy thẻ cào: chỉ Admin phát thẻ thực tế. Mã thẻ được mã hóa AES-GCM trong D1.
-export const CARD_CARRIERS=Object.freeze(['Viettel','VinaPhone','MobiFone']);
-export const CARD_DENOMINATIONS=Object.freeze([10000,20000,50000,100000,200000]);
+export const CARD_CARRIERS=Object.freeze(['Viettel','VinaPhone','MobiFone','Vietnamobile','Garena']);
+export const CARD_DENOMINATIONS=Object.freeze([10000,20000,50000,100000,200000,500000]);
 const validSecret=value=>/^[0-9a-f]{64}$/i.test(String(value||''));
 const intValue=v=>String(v??'').trim()!==''&&/^\d+$/.test(String(v))?Number(v):NaN;
 const bytesToHex=v=>[...v].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -45,6 +45,11 @@ export async function cardRedemptionsAPI(req,env,H){
  const rate=intValue(rateValue),fee=intValue(feeValue),secretReady=validSecret(env.CARD_VOUCHER_SECRET);
  const safeFee=Number.isSafeInteger(fee)&&fee>=0&&fee<=10000000;
  const enabled=switchValue==='1'&&secretReady&&Number.isSafeInteger(rate)&&rate>0;
+ // A code deploy may precede migration. Keep the old catalog usable until the D1 constraints are ready.
+ const schema=await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='card_redemptions'").first();
+ const expanded=Boolean(schema?.sql?.includes("'Vietnamobile'")&&schema.sql.includes("'Garena'")&&/\b500000\b/.test(schema.sql));
+ const carriers=expanded?CARD_CARRIERS:CARD_CARRIERS.slice(0,3);
+ const denominations=expanded?CARD_DENOMINATIONS:CARD_DENOMINATIONS.slice(0,5);
  if(!isAdmin&&m==='GET'){
    const [rows,balance]=await Promise.all([
      db.prepare(`SELECT r.id,r.carrier,r.denomination_vnd,r.amount_lua,r.rate_snapshot,r.status,
@@ -68,14 +73,14 @@ export async function cardRedemptionsAPI(req,env,H){
      items.push(safe);
    }
    return json({enabled,rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?fee:0,
-     denominations:CARD_DENOMINATIONS,carriers:CARD_CARRIERS,
+     denominations,carriers,catalog_expanded:expanded,
      balance:Number(balance?.balance||0),redemptions:items});
  }
  if(!isAdmin&&m==='POST'){
    if(!enabled)fail(403,'Admin chưa mở tính năng đổi thẻ cào hoặc chưa hoàn tất cấu hình.');
    const b=await readBody(req);
    const carrier=str(b.carrier,30),denomination=intValue(b.denomination_vnd);
-   if(!CARD_CARRIERS.includes(carrier)||!CARD_DENOMINATIONS.includes(denomination))
+   if(!carriers.includes(carrier)||!denominations.includes(denomination))
      fail(400,'Nhà mạng hoặc mệnh giá thẻ cào không hợp lệ.');
    // Khách phải nhìn thấy đúng số phí trước khi máy chủ giữ Lúa.
    if((fee>0 || b.expected_fee_lua!==undefined) && Number(b.expected_fee_lua)!==fee)
@@ -122,7 +127,7 @@ export async function cardRedemptionsAPI(req,env,H){
       r.created_at DESC LIMIT 200`).all();
    return json({enabled:switchValue==='1',secret_ready:secretReady,
      rate:Number.isSafeInteger(rate)&&rate>0?rate:0,fee_lua:safeFee?fee:0,redemptions:rows.results,
-     denominations:CARD_DENOMINATIONS,carriers:CARD_CARRIERS});
+     denominations,carriers,catalog_expanded:expanded});
  }
  if(p==='/api/admin/card-redemptions/settings'&&m==='POST'){
    const b=await readBody(req),target=str(b.enabled,5);
