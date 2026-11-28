@@ -11,10 +11,7 @@ export async function cardRedemptionsPage(ctx){
     <div class="cards-warning" role="status">⚠️ Chưa tải được chức năng đổi thẻ cào. Tính năng có thể đang chờ thiết lập hoặc kết nối máy chủ gặp sự cố. Vui lòng thử lại sau; ví Lúa của bạn không bị thay đổi bởi việc mở trang.</div></div>`;
  }
  const rate=Number(data.rate||0),fee=Number(data.fee_lua||0),items=data.redemptions||[];
- const options=(data.denominations||[]).map(v=>{
-   const lua=v*rate;
-   return `<option value="${v}">${money(v)}đ — ${rate?money(lua)+' Lúa':'Chưa có tỷ giá'}</option>`;
- }).join('');
+ const choices=(name,values,label)=>values.map((v,i)=>`<label class="cards-choice"><input type="radio" name="${name}" value="${esc(v)}" required ${i===0?'checked':''} ${data.enabled?'':'disabled'}><span>${esc(label(v))}</span></label>`).join('');
  return `<div class="cards-page">
   ${heading('🎁 Đổi Lúa lấy thẻ cào','Đổi Lúa thành thẻ cào điện thoại. Mã thẻ chỉ hiện cho tài khoản đã được phát thẻ.')}
   <div class="cards-hero"><div><span class="cards-hero-kicker">TRẠM CÓ LÚA • THẺ ĐIỆN THOẠI</span><h2>Đổi Lúa, nhận thẻ cào 🌾</h2>
@@ -24,17 +21,18 @@ export async function cardRedemptionsPage(ctx){
   <div class="cards-columns">
    <form class="card cards-exchange-form" data-form="card-redeem" data-fee="${fee}" data-rate="${rate}"><input type="hidden" name="expected_fee_lua" value="${fee}">
      <h3>Chọn thẻ cào muốn đổi</h3>
-     <label for="card-carrier">Nhà mạng</label><select id="card-carrier" name="carrier" required ${data.enabled?'':'disabled'}>
-       ${(data.carriers||[]).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}
-     </select>
-     <label for="card-value">Mệnh giá thẻ cào</label><select id="card-value" name="denomination_vnd" required ${data.enabled?'':'disabled'}>${options}</select>
+     <fieldset class="cards-picker"><legend>Nhà mạng</legend><div class="cards-choice-grid">${choices('carrier',data.carriers||[],v=>v)}</div></fieldset>
+     <fieldset class="cards-picker"><legend>Mệnh giá thẻ cào</legend><div class="cards-choice-grid">${choices('denomination_vnd',data.denominations||[],v=>money(v)+'đ')}</div></fieldset>
+     <label for="card-quantity">Số lượng</label><div class="cards-quantity"><button type="button" data-action="card-quantity" data-delta="-1" aria-label="Giảm số lượng" disabled>−</button><input id="card-quantity" name="quantity" type="number" min="1" max="5" step="1" value="1" readonly aria-label="Số lượng" ${data.enabled?'':'disabled'}><button type="button" data-action="card-quantity" data-delta="1" aria-label="Tăng số lượng" ${data.enabled?'':'disabled'}>+</button></div>
+     <p class="cards-note cards-quantity-note">Tối đa 5 thẻ mỗi lần. Mỗi thẻ là một yêu cầu riêng và có phí riêng.</p>
      <div class="cards-balance"><span>🌾 Số dư Lúa hiện có</span><strong>${money(data.balance)} Lúa</strong></div>
       <div class="cards-fee-preview" role="status">
        <strong>Chi tiết phí đổi thẻ</strong>
+       <div><span>Tổng mệnh giá:</span><b id="card-face">${money((data.denominations||[])[0]||0)}đ</b></div>
        <div><span>Lúa đổi theo mệnh giá:</span><b id="card-base">${money(((data.denominations||[])[0]||0)*rate)} Lúa</b></div>
        <div><span>Phí xử lý:</span><b id="card-fee">${money(fee)} Lúa</b></div>
        <div class="cards-fee-total"><span>Tổng Lúa sẽ giữ:</span><b id="card-total">${money(((data.denominations||[])[0]||0)*rate+fee)} Lúa</b></div>
-       <p class="cards-note">Phí cố định mỗi yêu cầu, được cộng thêm vào số Lúa đổi thẻ. Nếu Admin từ chối, toàn bộ số Lúa gồm cả phí được hoàn về ví.</p>
+       <p class="cards-note">Phí tính theo từng thẻ, được cộng thêm vào số Lúa đổi thẻ. Nếu Admin từ chối, toàn bộ số Lúa gồm cả phí được hoàn về ví.</p>
       </div>
      <p class="cards-note">Tỷ giá đổi hiện tại: ${rate?money(rate)+' Lúa = 1 VNĐ':'Chưa thiết lập'}. Số Lúa cần đổi được tính theo mệnh giá và tỷ giá hiện hành. Khi gửi yêu cầu, Lúa được giữ tạm để tránh đổi trùng.</p>
      <button class="btn cards-primary" type="submit" ${data.enabled?'':'disabled'}>🎁 Gửi yêu cầu đổi thẻ</button>
@@ -145,7 +143,7 @@ export async function handleCardSubmit(kind,b,ctx){
  let response;
  if(kind==='card-redeem'){
    if(!ask('Xác nhận đổi Lúa lấy thẻ cào? Lúa sẽ được giữ tạm và chờ Admin phát mã thẻ.'))return true;
-   response=await api('/api/card-redemptions','POST',{carrier:b.carrier,denomination_vnd:Number(b.denomination_vnd),expected_fee_lua:Number(b.expected_fee_lua)});
+   response=await api('/api/card-redemptions','POST',{carrier:b.carrier,denomination_vnd:Number(b.denomination_vnd),quantity:Number(b.quantity||1),expected_fee_lua:Number(b.expected_fee_lua)});
    toast(response.message);await navigate('cards');
  }else if(kind==='card-settings'){
    response=await api('/api/admin/card-redemptions/settings','POST',{enabled:b.enabled});
