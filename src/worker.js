@@ -788,15 +788,12 @@ async function linkIPUsage(env,ip,userId,taskId=null){
  return {total:Number(row?.total||0),other:Number(row?.other||0)};
 }
 
-function isBbmktsTask(task,source){
- return /bbmkts/i.test(String(task.title||''))||String(source?.id||'').toLowerCase()==='bbmkts';
-}
+function normalizeLinkTaskLimit(value){return Math.max(1,Math.min(20,int(value,1)));}
 async function linkTaskPerAccountLimit(env,task){
  if(task.category!=='link')return 1;
- if(isBbmktsTask(task,await getTaskSource(env,task.id)))return 1;
  const limit=await env.DB.prepare('SELECT value FROM settings WHERE key=?')
   .bind('link_task_limit:'+task.id).first();
- return Math.max(1,Math.min(20,int(limit?.value,1)));
+ return normalizeLinkTaskLimit(limit?.value);
 }
 // Đếm số LƯỢT QUAY VỀ theo từng nhiệm vụ trong ngày VN, không chỉ lượt được duyệt.
 // Những lượt đã gửi (kể cả bị từ chối) nằm ở task_completions.
@@ -1275,8 +1272,7 @@ async function handler(req, env) {
     const tasks=results.results.map(t=>{
       const appCode=str(overrides.results.find(r=>r.key==='app_referral_code:'+t.id)?.value,80);
       const displayCategory=t.category==='other'&&appCode?'app':t.category;
-      const taskSource=JSON.parse(overrides.results.find(r=>r.key===TASK_SOURCE_PREFIX+t.id)?.value||'{}');
-      const max=t.category==='link'&&!isBbmktsTask(t,taskSource)?limits.get('link_task_limit:'+t.id)||1:1;
+      const max=t.category==='link'?normalizeLinkTaskLimit(limits.get('link_task_limit:'+t.id)):1;
       const entry=done.get(t.id)||{n:0,pending:0};
       const used=t.category==='link'?(returned.get(t.id)||0):entry.n;
       const blocked=t.category==='link'?(used>=max?'link_task_limit':(browserDenied||(ipBlockedTasks.has(t.id)?'link_owner':denied))):null;
@@ -1849,7 +1845,7 @@ async function handler(req, env) {
         return {...t,app_confirmation_mode:settings.results.find(r=>r.key===APP_CONFIRM_PREFIX+t.id)?.value||'photo',link_source_id:source.id||'',link_source_creation:source.creation||'manual',link_source_verification:source.verification||'manual',
           bbmkts_creation:settings.results.find(r=>r.key==='bbmkts_task_creation:'+t.id)?.value||'manual',
           bbmkts_verification:settings.results.find(r=>r.key==='bbmkts_task_verification:'+t.id)?.value||'manual',category:t.category==='other'&&appCode?'app':t.category,
-          link_24h_limit:isBbmktsTask(t,source)?1:limits.get('link_task_limit:'+t.id)||1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
+          link_24h_limit:t.category==='link'?normalizeLinkTaskLimit(limits.get('link_task_limit:'+t.id)):1,app_referral_code:appCode,app_logo:settings.results.find(r=>r.key===APP_LOGO_PREFIX+t.id)?.value||'',
           submitted_today:Number(usage?.submitted_today||0),pending_today:Number(usage?.pending_today||0)};
       })});
     }

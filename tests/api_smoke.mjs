@@ -1602,9 +1602,22 @@ assert.equal((await call('/api/tasks/'+quotaReturnTask.data.id+'/start','POST',{
  returnMember.cookie,returnIP,returnDevice)).status,429,
  'Hai lần đến đích vẫn hết lượt dù một lần bị Admin từ chối');
 
+// Admin can edit the daily quota of a BBMKTS task just like any other link.
+{
+ const payload={title:'BBMKTS quota fixture',category:'link',url:'https://example.com/quota-fixture',reward:9,review_mode:'manual',repeat_policy:'daily',link_24h_limit:1,is_active:false};
+ const created=await call('/api/admin/tasks','POST',payload,admCookie);
+ assert.equal(created.status,201,JSON.stringify(created));
+ const taskId=created.data.id;
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',{...payload,link_24h_limit:3},admCookie)).status,200);
+ const listed=(await call('/api/admin/tasks','GET',undefined,admCookie)).data.tasks.find(t=>t.id===taskId);
+ assert.equal(listed.link_24h_limit,3);
+ assert.equal((await call('/api/admin/tasks/'+taskId,'PATCH',{...payload,link_24h_limit:2,is_active:true},admCookie)).status,200);
+ const memberTask=(await call('/api/tasks','GET',undefined,returnMember.cookie,returnIP,returnDevice)).data.tasks.find(t=>t.id===taskId);
+ assert.equal(memberTask.link_24h_limit,2);
+}
 // Expired confirmation uses the slot but cannot grant any Lúa.
 {
- const created=await call('/api/admin/tasks','POST',{title:'BBMKTS hết hạn xác minh',category:'link',url:'https://example.com/timeout',reward:9,review_mode:'manual',repeat_policy:'daily',link_24h_limit:2,is_active:true},admCookie);
+ const created=await call('/api/admin/tasks','POST',{title:'BBMKTS hết hạn xác minh',category:'link',url:'https://example.com/timeout',reward:9,review_mode:'manual',repeat_policy:'daily',link_24h_limit:1,is_active:true},admCookie);
  assert.equal(created.status,201,JSON.stringify(created));
  const taskId=created.data.id,path='/api/tasks/'+taskId+'/return';
  const start=await call('/api/tasks/'+taskId+'/start','POST',{},returnMember.cookie,returnIP,returnDevice);
