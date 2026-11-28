@@ -41,6 +41,7 @@ const DEFAULTS = {
   withdrawals_enabled: '0', withdrawal_fee_lua: '0', withdrawal_fee_vnd: '2000', payout_free_from_vnd: '25000', card_fee_lua: '0', announcement: '',
   withdrawal_rules: '✅ Yêu cầu hợp lệ và không vi phạm quy định sẽ được thanh toán.\n⚠️ Nếu xác minh có gian lận hoặc vi phạm quy định, yêu cầu sẽ bị từ chối thanh toán.',
   withdrawal_payment_time: '1–3 ngày làm việc',
+  telegram_group_enabled: '0', telegram_group_url: '',
   quota_user_tasks_daily: '0', quota_device_accounts_daily: '1', quota_ip_accounts_daily: '6',
   quota_link_tasks_ip_24h: '0', quota_link_ip_exclusive: '1',
   quota_link_tasks_device_24h: '0', quota_link_device_exclusive: '1', link_proxy_enabled: '0'
@@ -592,6 +593,15 @@ async function createSession(req, env, userId) {
   await env.DB.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)')
     .bind(await hash(token), userId, now() + SESSION_MS).run();
   return sessionCookie(req, token);
+}
+// Accept only Telegram public usernames or invite URLs; no redirects or credentials.
+function telegramGroupUrl(raw){
+ if(typeof raw!=='string'||raw.trim().length>300)return '';
+ const value=raw.trim();
+ return /^https:\/\/t\.me\/(?:\+[A-Za-z0-9_-]{5,200}|joinchat\/[A-Za-z0-9_-]{5,200}|[A-Za-z][A-Za-z0-9_]{3,31})\/?$/.test(value)?value.replace(/\/$/,''):'';
+}
+function telegramCommunity(settings){
+ return settings.telegram_group_enabled==='1'?telegramGroupUrl(settings.telegram_group_url):'';
 }
 async function getSettings(env) {
   const keys=Object.keys(DEFAULTS);
@@ -1496,7 +1506,7 @@ async function handler(req, env) {
     const me=await auth(req,env);
     const at=now(),today=vnDay(at),first=vnDay(at-6*DAY);
     const active="consumed_by IS NULL AND ((available_at<0 AND expires_at<>0) OR expires_at>?)";
-    const [counts,ongoing,earnings,recent]=await Promise.all([
+    const [counts,ongoing,earnings,recent,settings]=await Promise.all([
       env.DB.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) AS approved,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending FROM task_completions WHERE user_id=?").bind(me.id).first(),
       env.DB.prepare("SELECT COUNT(*) AS n FROM task_attempts WHERE user_id=? AND "+active).bind(me.id,at).first(),
       env.DB.prepare("SELECT date(created_at,'+7 hours') AS day,SUM(amount) AS lua FROM wallet_entries WHERE user_id=? AND amount>0 AND reference_type IN ('task','referral','checkin','shop_order') AND date(created_at,'+7 hours') BETWEEN ? AND ? GROUP BY day").bind(me.id,first,today).all(),
@@ -1504,11 +1514,11 @@ async function handler(req, env) {
         SELECT t.title,c.status,c.created_at,t.category FROM task_completions c JOIN tasks t ON t.id=c.task_id WHERE c.user_id=?
         UNION ALL
         SELECT t.title,'in_progress',a.created_at,t.category FROM task_attempts a JOIN tasks t ON t.id=a.task_id WHERE a.user_id=? AND ${active}
-      ) ORDER BY created_at DESC LIMIT 5`).bind(me.id,me.id,at).all()
+      ) ORDER BY created_at DESC LIMIT 5`).bind(me.id,me.id,at).all(),getSettings(env)
     ]);
     const byDay=new Map(earnings.results.map(r=>[r.day,Number(r.lua)||0]));
     const days=Array.from({length:7},(_,i)=>{const day=vnDay(at-(6-i)*DAY);return {day,lua:byDay.get(day)||0};});
-    return json({total:Number(counts.total)+Number(ongoing.n),approved:Number(counts.approved),pending:Number(counts.pending),in_progress:Number(ongoing.n),days,recent:recent.results});
+    return json({total:Number(counts.total)+Number(ongoing.n),approved:Number(counts.approved),pending:Number(counts.pending),in_progress:Number(ongoing.n),days,recent:recent.results,telegram_group_url:telegramCommunity(settings)});
   }
   if (m === 'GET' && p === '/api/task-dashboard') {
     const me=await auth(req,env),today=vnDay();
@@ -2652,14 +2662,23 @@ async function handler(req, env) {
     if (m === 'GET' && p === '/api/admin/settings') return json({ settings: await getSettings(env),proxy_key_configured:!!String(env.IPAPI_API_KEY||'').trim() });
     if (m === 'PUT' && p === '/api/admin/settings') {
       const body = await readBody(req), entries = [];
+      if(Object.hasOwn(body,'telegram_group_enabled')||Object.hasOwn(body,'telegram_group_url')){
+        const current=await getSettings(env);
+        const enabled=Object.hasOwn(body,'telegram_group_enabled')?String(body.telegram_group_enabled):current.telegram_group_enabled;
+        const raw=Object.hasOwn(body,'telegram_group_url')?body.telegram_group_url:current.telegram_group_url;
+        if(!['0','1'].includes(enabled))fail(400,'Chọn Bật hoặc Tắt nhóm Telegram.');
+        if(typeof raw!=='string'||(raw.trim()&&!telegramGroupUrl(raw)))fail(400,'Link Telegram không hợp lệ. Dùng liên kết mời https://t.me/+... hoặc https://t.me/tennhom.');
+        if(enabled==='1'&&!telegramGroupUrl(raw))fail(400,'Nhập liên kết mời nhóm Telegram trước khi bật.');
+        if(Object.hasOwn(body,'telegram_group_url'))body.telegram_group_url=telegramGroupUrl(raw);
+      }
       for (const key of Object.keys(DEFAULTS)) {
         if (!(key in body)) continue;
-        const maxLength=key==='withdrawal_rules'?2000:key==='withdrawal_payment_time'?120:key==='announcement'?1000:100;
+        const maxLength=key==='withdrawal_rules'?2000:key==='withdrawal_payment_time'?120:key==='announcement'?1000:key==='telegram_group_url'?300:100;
         if(['withdrawal_rules','withdrawal_payment_time'].includes(key)&&
           (typeof body[key]!=='string'||!body[key].trim()||body[key].trim().length>maxLength))
           fail(400,'Nhập nội dung quy định (tối đa 2000 ký tự) và thời gian thanh toán (tối đa 120 ký tự) hợp lệ.');
         let value = str(body[key], maxLength);
-        if (['signup_enabled', 'withdrawals_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
+        if (['signup_enabled', 'withdrawals_enabled','telegram_group_enabled'].includes(key) && !['0', '1'].includes(value)) fail(400, `${key}: chỉ 0 hoặc 1.`);
         if (['checkin_reward', 'referral_reward', 'min_withdraw_lua', 'lua_per_vnd', 'withdrawal_fee_lua', 'card_fee_lua', 'withdrawal_fee_vnd', 'payout_free_from_vnd'].includes(key)
             && (!/^\d+$/.test(value) || Number(value) > 10000000)) fail(400, `${key}: chỉ số từ 0 đến 10 triệu.`);
         if(key==='payout_free_from_vnd'&&Number(value)<5000)fail(400,'Ngưỡng miễn phí phải từ 5.000đ trở lên.');

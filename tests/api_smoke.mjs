@@ -1807,6 +1807,27 @@ console.log('PASS: exact return session retained until server receipt is display
 
 const linkFraudWorkerSource=readFileSync(new URL('../src/worker.js',import.meta.url),'utf8');
 {
+ const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function telegramGroupUrl('),linkFraudWorkerSource.indexOf('async function getSettings('));
+ const {telegramGroupUrl,telegramCommunity}=new Function(source+'\nreturn {telegramGroupUrl,telegramCommunity};')();
+ const invite='https://t.me/+fixture_12345';
+ assert.equal(telegramGroupUrl(invite),invite);
+ assert.equal(telegramGroupUrl('https://t.me/joinchat/fixture_12345'),'https://t.me/joinchat/fixture_12345');
+ assert.equal(telegramGroupUrl('https://t.me/tramcolua/'),'https://t.me/tramcolua');
+ for(const invalid of ['https://t.me.evil.test/+fixture_12345','https://t.me@evil.test/+fixture_12345','javascript:alert(1)','https://t.me/+fixture_12345?x=1'])assert.equal(telegramGroupUrl(invalid),'');
+ assert.equal(telegramCommunity({telegram_group_enabled:'0',telegram_group_url:invite}),'');
+ assert.equal(telegramCommunity({telegram_group_enabled:'1',telegram_group_url:invite}),invite);
+ assert.equal((await call('/api/admin/settings','PUT',{telegram_group_enabled:'1',telegram_group_url:invite},cookie)).status,403);
+ assert.equal((await call('/api/admin/settings','PUT',{telegram_group_enabled:'1',telegram_group_url:''},admCookie)).status,400);
+ assert.equal((await call('/api/admin/settings','PUT',{telegram_group_enabled:'1',telegram_group_url:invite},admCookie)).status,200);
+ assert.equal((await call('/api/member-overview','GET',undefined,cookie)).data.telegram_group_url,invite);
+ assert.equal((await call('/api/meta','GET')).data.telegram_group_url,undefined);
+ assert.equal((await call('/api/admin/settings','PUT',{telegram_group_enabled:'0'},admCookie)).status,200);
+ assert.equal((await call('/api/member-overview','GET',undefined,cookie)).data.telegram_group_url,'');
+ assert.equal((await call('/api/admin/settings','GET',undefined,admCookie)).data.settings.telegram_group_url,invite);
+ assert.equal((await call('/api/admin/settings','PUT',{telegram_group_enabled:'0',telegram_group_url:''},admCookie)).status,200);
+}
+
+{
  const source=linkFraudWorkerSource.slice(linkFraudWorkerSource.indexOf('function buildPriorityFraudGroups('),linkFraudWorkerSource.indexOf('async function loadPriorityFraudGroups('));
  const build=new Function(source+'\nreturn buildPriorityFraudGroups;')();
  const users=['a','b','c'].map(id=>({id,role:'member',status:'active'}));

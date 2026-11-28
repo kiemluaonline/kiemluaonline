@@ -933,6 +933,7 @@ async function overview(){
  ${orderAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">📦</span><div><strong>${orderAlerts.unread} đơn mua sắm vừa cập nhật!</strong><p>Kiểm tra trạng thái và lịch sử nhận Lúa trong Đơn hàng & Lúa.</p></div><button type="button" class="btn sm" data-go="shop-orders">Xem đơn →</button></div>`:''}
  ${shoppingAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">🎉</span><div><strong>Bạn có ${shoppingAlerts.unread} sản phẩm theo yêu cầu đã được tìm thấy!</strong><p>Nhấn để xem liên kết mua hàng trong gian hàng Trạm Có Lúa.</p></div><button type="button" class="btn sm" data-go="shop">Xem sản phẩm →</button></div>`:''}
 
+ ${stats.telegram_group_url&&/^https:\/\/t\.me\/(?:\+[A-Za-z0-9_-]{5,200}|joinchat\/[A-Za-z0-9_-]{5,200}|[A-Za-z][A-Za-z0-9_]{3,31})$/.test(stats.telegram_group_url)?`<section class="card section" style="margin:0 0 12px;padding:14px"><div style="display:flex;align-items:center;gap:12px"><span aria-hidden="true" style="display:grid;place-items:center;flex:0 0 44px;height:44px;border-radius:50%;background:#229ED9;color:#fff"><svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 3.4 18.3 20c-.2 1.1-.8 1.3-1.7.8l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.3L5.8 13.3.9 11.8c-1.1-.3-1.1-1.1.2-1.6L20.2 2.8c.9-.3 1.6.2 1.3.6Z"/></svg></span><div><strong>Cộng đồng Trạm Có Lúa</strong><p class="small muted" style="margin:4px 0">Trao đổi, nhận thông báo và hỗ trợ từ Admin.</p></div></div><a class="btn" style="display:flex;justify-content:center;background:#229ED9;color:#fff;border-color:#229ED9;margin-top:10px;min-height:46px;text-decoration:none" href="${esc(stats.telegram_group_url)}" target="_blank" rel="noopener noreferrer">Tham gia nhóm Telegram</a></section>`:''}
  ${memberOverviewMarkup(m,stats,state.meta)}`;
 }
 
@@ -1886,6 +1887,10 @@ async function adminSettings(){
  ${field('site_name','Tên website',s.site_name,'required')}
  <div class="field"><label for="announcement">Thông báo thành viên</label><textarea name="announcement" id="announcement">${esc(s.announcement)}</textarea></div>
  ${select('signup_enabled','Cho phép đăng ký',[['1','Bật'],['0','Tắt']],s.signup_enabled)}`)}
+ ${group('💬 Cộng đồng Telegram','Bật/tắt và quản lý liên kết mời nhóm',`
+ ${select('telegram_group_enabled','Hiển thị nút tham gia Telegram',[['0','Tắt'],['1','Bật']],s.telegram_group_enabled)}
+ ${field('telegram_group_url','Liên kết mời nhóm Telegram',s.telegram_group_url||'','type="url" maxlength="300" placeholder="https://t.me/+..."')}
+ <p class="note">Sao chép liên kết mời trong Telegram rồi dán vào đây. Khi bật và lưu, nút tham gia xuất hiện trên Tổng quan thành viên đã đăng nhập. Tắt sẽ ẩn nút nhưng vẫn giữ link.</p>`)}
  ${group('🎁 Phần thưởng và tỷ giá','Điểm danh, giới thiệu, quy đổi Lúa',`
  ${field('checkin_reward','Lúa thưởng điểm danh',s.checkin_reward,'type="number" min="0" max="10000000" required')}
  ${field('referral_reward','Lúa thưởng giới thiệu',s.referral_reward,'type="number" min="0" max="10000000" required')}
