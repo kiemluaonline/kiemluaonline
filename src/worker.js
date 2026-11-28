@@ -2084,7 +2084,22 @@ async function handler(req, env) {
       return json({ok:true,suspension_type:b.status==='suspended'?suspensionType:null});
     }
     if (m === 'GET' && p === '/api/admin/reviews') {
-      const rows = await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
+      // The original unfiltered endpoint is still used by Admin notifications.
+      const reviewStatus=u.searchParams.get('status'),reviewCategory=u.searchParams.get('category');
+      const scoped=reviewStatus!==null||reviewCategory!==null;
+      if(scoped&&(!['pending','approved','rejected'].includes(reviewStatus)||!['link','app','archive'].includes(reviewCategory)))fail(400,'Bộ lọc duyệt nhiệm vụ không hợp lệ.');
+      const pageRaw=u.searchParams.get('page')||'1',page=Number(pageRaw),pageSize=150;
+      if(scoped&&(!/^\d+$/.test(pageRaw)||!Number.isSafeInteger(page)||page<1||page>1000000))fail(400,'Trang không hợp lệ.');
+      const effectiveCategory="CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END";
+      const categoryWhere=reviewCategory==='archive'?`(${effectiveCategory}) NOT IN ('link','app')`:`(${effectiveCategory})=?`;
+      const categoryArgs=reviewCategory==='archive'?[]:[reviewCategory];
+      const statusCounts={pending:0,approved:0,rejected:0};
+      if(scoped){
+        const grouped=await env.DB.prepare(`SELECT c.status,COUNT(*) AS n FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id WHERE ${categoryWhere} GROUP BY c.status`).bind(...categoryArgs).all();
+        for(const row of grouped.results)if(Object.hasOwn(statusCounts,row.status))statusCounts[row.status]=Number(row.n)||0;
+      }
+      const safePage=scoped?Math.min(page,Math.max(1,Math.ceil(statusCounts[reviewStatus]/pageSize))):1;
+      const rowsQuery = await env.DB.prepare(`SELECT c.id,c.user_id,c.task_id,c.period_key,c.status,c.reward,
         CASE WHEN substr(c.evidence,1,13)='APP_PHOTO_V1|' THEN 1 ELSE 0 END AS has_photo,
         CASE WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN 1 ELSE 0 END AS evidence_removed,
         CASE WHEN c.evidence NOT IN ('','EVIDENCE_REMOVED_V1') THEN 1 ELSE 0 END AS has_evidence,
@@ -2093,14 +2108,16 @@ async function handler(req, env) {
           WHEN c.evidence='EVIDENCE_REMOVED_V1' THEN ''
           ELSE c.evidence END AS evidence,
         c.ip,c.device_code,c.created_at,c.reviewed_at,t.title,
-        CASE WHEN t.category='app' OR (t.category='other' AND EXISTS (SELECT 1 FROM settings ss WHERE ss.key='app_referral_code:'||t.id AND ss.value<>'')) THEN 'app' ELSE t.category END AS category,
+        ${effectiveCategory} AS category,
         u.name,u.email,
         a.id AS attempt_id,a.created_at AS started_at,
         COALESCE((SELECT e.ip FROM risk_events e WHERE e.user_id=a.user_id AND e.event_type='task_device_start' AND substr(e.detail,1,36)=a.id ORDER BY e.created_at ASC LIMIT 1),a.ip) AS started_ip,
         a.device_code AS started_device_code
         FROM task_completions c JOIN tasks t ON t.id=c.task_id JOIN users u ON u.id=c.user_id
         LEFT JOIN task_attempts a ON a.consumed_by=c.id AND a.user_id=c.user_id
-        ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, c.created_at DESC LIMIT 150`).all();
+        ${scoped?`WHERE ${categoryWhere} AND c.status=?`:''}
+        ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END, ${scoped&&reviewStatus!=='pending'?'COALESCE(c.reviewed_at,c.created_at)':'c.created_at'} DESC,c.id DESC LIMIT 150${scoped?' OFFSET ?':''}`);
+      const rows=await (scoped?rowsQuery.bind(...categoryArgs,reviewStatus,(safePage-1)*pageSize):rowsQuery).all();
       // Query only the attempts visible in this Admin page; older records without
       // User-Agent events remain 'Chưa ghi nhận' instead of being guessed.
       const attemptIds=[...new Set(rows.results.map(c=>c.attempt_id).filter(Boolean))];
@@ -2118,7 +2135,8 @@ async function handler(req, env) {
         .bind(PROOF_REMOVED_MARKER).first();
       return json({
         reviews: attachTaskDeviceAudit(rows.results,deviceEvents).map(c=>({...c,evidence:c.has_photo?decodeURIComponent(c.evidence):c.evidence})),
-        processed_evidence_count: Number(pendingErase.n) || 0
+        processed_evidence_count: Number(pendingErase.n) || 0,
+        ...(scoped?{status_counts:statusCounts,page:safePage,page_size:pageSize,total:statusCounts[reviewStatus]}:{})
       });
     }
     // Chỉ xóa tệp/ghi chú sau khi Admin ra quyết định. Giữ nguyên trạng thái,
