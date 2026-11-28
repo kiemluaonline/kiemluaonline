@@ -875,22 +875,40 @@ async function page(view){
  default:return empty('Trang chưa được cấu hình');
  }
 }
+function memberOverviewMarkup(m,stats,meta){
+ const balance=Math.max(0,Number(m.balance)||0),min=Number(meta.min_withdraw_lua)||0;
+ const missing=Math.max(0,min-balance),progress=min>0?Math.min(100,Math.floor(balance/min*100)):0;
+ const days=stats.days||[],total=days.reduce((n,d)=>n+Number(d.lua||0),0),peak=Math.max(1,...days.map(d=>Number(d.lua)||0));
+ const first=Number(days[0]?.lua||0),last=Number(days[days.length-1]?.lua||0);
+ const change=first>0?((last-first)/first*100):last===0?0:null;
+ const growth=change===null?'—':(change>0?'+':'')+change.toFixed(1)+'%';
+ const statusLabels={approved:'Đã hoàn thành',pending:'Đang chờ duyệt',rejected:'Bị từ chối',in_progress:'Đang thực hiện'};
+ const stat=(label,value,caption,symbol,tone='')=>`<article class="member-overview-stat ${tone}"><div><span>${esc(label)}</span><strong>${fmt(value)}</strong><small>${esc(caption)}</small></div><i aria-hidden="true">${symbol}</i></article>`;
+ return `<section class="member-overview">
+ <article class="member-overview-wallet"><span>▣ Số dư khả dụng</span><h2>${fmt(balance)} Lúa</h2><p>Sẵn sàng cho nhiệm vụ tiếp theo</p><div class="member-overview-buttons"><button type="button" class="btn" data-go="withdrawals">Rút tiền ↗</button><button type="button" class="btn alt" data-go="tasks">Xem nhiệm vụ →</button></div></article>
+ <article class="member-overview-panel member-overview-goal"><span>◎ Còn thiếu để rút</span><h2>${min?fmt(missing)+' Lúa':'—'}</h2>${min?`<div class="member-overview-progress" role="progressbar" aria-label="Tiến độ rút tiền" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><i style="width:${progress}%"></i></div><small>${fmt(balance)} Lúa / ${fmt(min)} Lúa (${progress}%)</small>`:'<small>Chưa thiết lập tỷ giá</small>'}</article>
+ <div class="member-overview-stats">
+ ${stat('Tổng đã thực hiện',stats.total,'Tổng số lượt đã gửi và đang thực hiện','◎')}
+ ${stat('Đã hoàn thành',stats.approved,'Nhiệm vụ đã được duyệt','✓','success')}
+ ${stat('Đang chờ duyệt',stats.pending,'Chờ Admin xác minh','◷','pending')}
+ ${stat('Đang thực hiện',stats.in_progress,'Phiên chưa hoàn tất còn hiệu lực','◷','active')}
+ </div>
+ <article class="member-overview-panel member-overview-income"><header><i aria-hidden="true">▣</i><div><h3>Thu nhập 7 ngày gần nhất</h3><p>Theo dõi số Lúa kiếm được mỗi ngày</p></div></header><span class="member-overview-period">7 ngày</span>
+ <div class="member-overview-income-stats"><div><span>Tổng thu nhập</span><strong>${fmt(total)} Lúa</strong><small>Trong 7 ngày</small></div><div><span>Trung bình / ngày</span><strong class="active">${fmt(Math.round(total/7))} Lúa</strong><small>Mức trung bình</small></div><div><span>Tăng trưởng</span><strong class="${change===null?'':change<0?'negative':'success'}">${growth}</strong><small>${change===null?'Không có thu nhập ngày đầu kỳ':'So với đầu kỳ'}</small></div></div>
+ <div class="member-overview-chart" aria-label="Thu nhập theo ngày, giờ Việt Nam">${days.map(d=>{const day=new Date(d.day+'T00:00:00Z');const labels=['CN','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];return `<div class="member-overview-day"><strong>${fmt(d.lua)} Lúa</strong><div class="member-overview-bar-track"><i style="height:${Math.max(0,Math.min(100,Number(d.lua||0)/peak*100))}%"></i></div><b>${labels[day.getUTCDay()]}</b><small>${esc(d.day.slice(8,10)+'-'+d.day.slice(5,7))}</small></div>`;}).join('')}</div></article>
+ <article class="member-overview-panel member-overview-recent"><h3>Nhiệm vụ gần đây</h3><p>5 nhiệm vụ gần nhất của bạn</p><button class="member-overview-link" type="button" data-go="history">Xem lịch sử ↗</button>
+ ${(stats.recent||[]).length?(stats.recent||[]).map(r=>`<div class="member-overview-recent-row"><i aria-hidden="true">${r.category==='link'?'🔗':'▤'}</i><div><strong>${esc(r.title)}</strong><small>${esc(statusLabels[r.status]||r.status)} · ${esc(dt(r.created_at))}</small><span class="member-overview-status ${esc(r.status)}">◷ ${esc(statusLabels[r.status]||r.status)}</span></div></div>`).join(''):'<p>Chưa có nhiệm vụ gần đây.</p>'}</article>
+ </section>`;
+}
 async function overview(){
  const m=state.me;
- const [tasks,shoppingAlerts,orderAlerts]=await Promise.all([api('/api/tasks'),api('/api/shop/alerts').catch(()=>({unread:0})),api('/api/shop/orders/alerts').catch(()=>({unread:0}))]);
- const available=tasks.tasks.filter(t=>!t.my_status).length;
- return `${heading('Xin chào, '+m.user.name+' 👋','Mỗi Lúa đều có nguồn gốc rõ ràng, được lưu vào lịch sử.')}
+ const [stats,shoppingAlerts,orderAlerts]=await Promise.all([api('/api/member-overview'),api('/api/shop/alerts').catch(()=>({unread:0})),api('/api/shop/orders/alerts').catch(()=>({unread:0}))]);
+ return `
  ${orderAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">📦</span><div><strong>${orderAlerts.unread} đơn mua sắm vừa cập nhật!</strong><p>Kiểm tra trạng thái và lịch sử nhận Lúa trong Đơn hàng & Lúa.</p></div><button type="button" class="btn sm" data-go="shop-orders">Xem đơn →</button></div>`:''}
  ${shoppingAlerts.unread?`<div class="shop-notice shop-notice-ready" role="status"><span class="shop-notice-emoji">🎉</span><div><strong>Bạn có ${shoppingAlerts.unread} sản phẩm theo yêu cầu đã được tìm thấy!</strong><p>Nhấn để xem liên kết mua hàng trong gian hàng Trạm Có Lúa.</p></div><button type="button" class="btn sm" data-go="shop">Xem sản phẩm →</button></div>`:''}
- <section class="card hero"><div><div class="small">VÍ TÍCH LŨY</div><h2>${fmt(m.balance)} Lúa hiện có</h2><p>Tham gia nhiệm vụ và theo dõi số dư của bạn. Phần thưởng chỉ phát sinh từ nhiệm vụ hợp lệ.</p><button class="btn gold" data-go="tasks">Xem nhiệm vụ →</button></div><div class="hero-icon brand-hero-logo"><img src="/logo.svg" width="104" height="104" alt="Biểu tượng Trạm Có Lúa"></div></section>
- <section class="grid four section"><div class="card"><div class="metric-label">Số dư hiện tại</div><div class="metric">${fmt(m.balance)}</div><div class="metric-caption">Lúa có thể sử dụng</div></div>
- <div class="card"><div class="metric-label">Tổng Lúa đã ghi nhận</div><div class="metric">${fmt(m.earned)}</div><div class="metric-caption">Bao gồm thưởng đã duyệt</div></div>
- <div class="card"><div class="metric-label">Nhiệm vụ chưa làm</div><div class="metric">${available}</div><div class="metric-caption">Đang mở thực tế</div></div>
- <div class="card"><div class="metric-label">Người được giới thiệu</div><div class="metric">${fmt(m.referral_count)}</div><div class="metric-caption">Tài khoản đã đăng ký</div></div></section>
- <section class="grid two section"><article class="card"><h3>📢 Thông báo hệ thống</h3><p>${esc(state.meta.announcement||'Chào mừng đến với nền tảng. Theo dõi thông báo từ quản trị viên tại đây.')}</p></article>
- <article class="card"><h3>🛡️ Kiểm tra chống gian lận</h3><div class="field-hint">IP đang truy cập</div><div class="field-output">${esc(m.ip)}</div><div class="field-hint" style="margin-top:10px">📱 Đã định danh thiết bị</div><div class="field-output">${esc(maskDeviceCode(m.device_code))}</div><p class="note">Mã do website lưu trên trình duyệt nếu được cho phép. Đây không phải IMEI và có thể bị xóa hoặc thay đổi.</p></article></section>`;
-}
 
+ ${memberOverviewMarkup(m,stats,state.meta)}`;
+}
 
 const isIPv4 = ip => {
  const parts=String(ip||'').split('.');
@@ -1675,6 +1693,7 @@ function showTaskRules(taskId){
  if(!root)throw new Error('Không tìm thấy cửa sổ thông báo.');
  state.pendingTaskRules=taskId;
  root.innerHTML=`<div class="modal-cover task-rules-cover"><section class="modal task-rules-modal" role="dialog" aria-modal="true" aria-labelledby="task-rules-title" aria-describedby="task-rules-subtitle">
+  <div class="task-rules-scroll" tabindex="0" aria-label="Quy tắc bắt buộc">
   <div class="task-rules-header">
    <span class="task-rules-icon" aria-hidden="true">🛡️</span>
    <div><h3 id="task-rules-title">Xác nhận nhiệm vụ</h3>
@@ -1692,6 +1711,7 @@ function showTaskRules(taskId){
    <li><span class="task-rules-rule-icon" aria-hidden="true">≋</span><span>Không hoàn thành cùng một nhiệm vụ trên website kiếm thưởng khác rồi quay lại Trạm Có Lúa để làm lại hoặc nhận Lúa. Muốn nhận Lúa, phải bắt đầu nhiệm vụ tại Trạm Có Lúa.</span></li>
   </ul>
   <p class="task-rules-note">${task.review_mode==='manual'?'Lượt quay về và phép tính không xác nhận doanh thu. Chỉ cộng Lúa sau khi Admin kiểm tra và duyệt nhiệm vụ hợp lệ theo điều kiện đối tác.':'Thưởng chỉ được ghi nhận khi nhiệm vụ vượt qua các bước xác minh của hệ thống và đáp ứng điều kiện áp dụng.'}</p>
+  </div>
   <div class="task-rules-actions">
    <button type="button" class="btn task-rules-cancel" data-action="cancel-task-rules">Hủy</button>
    <button type="button" class="btn task-rules-accept" data-action="confirm-task-rules">▷ Bắt đầu</button>
